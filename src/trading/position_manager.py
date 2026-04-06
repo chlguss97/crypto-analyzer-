@@ -79,6 +79,7 @@ class PositionManager:
         self.risk_cfg = self.config["risk"]
 
         self.positions: dict[str, Position] = {}  # symbol → Position
+        self.on_trade_closed = None  # 콜백: async def(mode, signals, pnl_pct)
 
     async def open_position(self, trade_request: dict) -> Position | None:
         """새 포지션 진입"""
@@ -318,6 +319,14 @@ class PositionManager:
             f"P&L: {pnl_pct:+.2f}% (${pnl_usdt:+.2f}) | "
             f"보유: {pos.hold_minutes}분 | 수수료: ${pos.total_fee:.2f}"
         )
+
+        # ML 학습 콜백
+        if self.on_trade_closed:
+            mode = "scalp" if pos.grade == "SCALP" else "swing"
+            try:
+                await self.on_trade_closed(mode, {}, pnl_pct)
+            except Exception:
+                pass
 
         return {"pnl_pct": pnl_pct, "pnl_usdt": pnl_usdt}
 
