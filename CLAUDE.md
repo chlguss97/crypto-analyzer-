@@ -31,7 +31,12 @@
 ## 현재 진행 상황
 - 명세서 작성 완료 (2026-04-03)
 - GitHub 연동 완료: https://github.com/chlguss97/crypto-analyzer-.git
-- Phase 1 시작 전
+- Phase 1 완료: 데이터 수집 + 14개 기법 엔진 (2026-04-06)
+- Phase 2 완료: 시그널 합산 + 등급 판정 + ML 엔진 (2026-04-06)
+- Phase 3 완료: 매매 엔진 + 동적 레버리지 + 리스크 관리 (2026-04-06)
+- Phase 4 완료: 백테스트 시뮬레이터 + 성과 리포트 (2026-04-06)
+- Phase 5 완료: 텔레그램 알림 + 대시보드 + 트레이드 로거 (2026-04-06)
+- 다음 단계: 데이터 수집 테스트 → 백테스트 → 테스트넷
 
 ## Git
 - 원격: https://github.com/chlguss97/crypto-analyzer-.git (private)

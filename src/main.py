@@ -34,6 +34,8 @@ from src.trading.leverage import LeverageCalculator
 from src.trading.risk_manager import RiskManager
 from src.trading.executor import OrderExecutor
 from src.trading.position_manager import PositionManager
+from src.monitoring.telegram_bot import TelegramNotifier
+from src.monitoring.trade_logger import TradeLogger
 
 # ── 로깅 설정 ──
 logging.basicConfig(
@@ -92,6 +94,10 @@ class CryptoAnalyzer:
         self.executor = OrderExecutor()
         self.position_manager = PositionManager(self.executor, self.db, self.redis)
 
+        # 모니터링
+        self.telegram = TelegramNotifier()
+        self.trade_logger = TradeLogger()
+
         # 최신 시그널 캐시
         self._last_fast = {}
         self._last_slow = {}
@@ -111,6 +117,9 @@ class CryptoAnalyzer:
 
         # ML 모델 로드 (있으면)
         self.ml_engine.load_model()
+
+        # 텔레그램 초기화
+        await self.telegram.initialize()
 
         # 매매 엔진 초기화
         await self.executor.initialize()
@@ -345,7 +354,20 @@ class CryptoAnalyzer:
         }
 
         pos = await self.position_manager.open_position(trade_request)
-        if not pos:
+        if pos:
+            # 텔레그램 알림
+            await self.telegram.notify_entry(
+                direction, grade, grade_result["score"],
+                pos.entry_price, pos.sl_price, pos.tp1_price, pos.tp2_price,
+                lev_result["leverage"], position_margin,
+            )
+            # 로그
+            self.trade_logger.log_entry(
+                direction, grade, grade_result["score"],
+                pos.entry_price, pos.sl_price, lev_result["leverage"],
+                position_margin, aggregated.get("signals_detail", {}),
+            )
+        else:
             logger.warning("포지션 오픈 실패")
 
     async def periodic_candle_update(self):
@@ -425,8 +447,9 @@ class CryptoAnalyzer:
         await self.initialize()
         self._running = True
 
-        logger.info("봇 시작 — 데이터 수집 + 시그널 분석 루프")
+        logger.info("봇 시작 — 데이터 수집 + 시그널 분석 + 자동매매")
         await self.redis.set("sys:bot_status", "running")
+        await self.telegram.notify_bot_status("running")
 
         tasks = [
             asyncio.create_task(self.periodic_candle_update()),
@@ -445,6 +468,7 @@ class CryptoAnalyzer:
             self._running = False
             self.ws_stream.stop()
             await self.redis.set("sys:bot_status", "stopped")
+            await self.telegram.notify_bot_status("stopped")
             await self.cleanup()
 
     async def cleanup(self):
