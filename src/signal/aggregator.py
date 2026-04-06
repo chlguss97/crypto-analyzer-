@@ -1,0 +1,171 @@
+import logging
+from typing import Optional
+
+logger = logging.getLogger(__name__)
+
+# 기법별 가중치
+WEIGHTS = {
+    "order_block": 3.0,
+    "market_structure": 2.5,
+    "bollinger": 2.0,
+    "funding_rate": 2.0,
+    "open_interest": 2.0,
+    "rsi": 1.5,
+    "volume": 1.5,
+    "fvg": 1.5,
+    "cvd": 1.5,
+    "liquidation": 1.5,
+    "ema": 1.0,
+    "long_short_ratio": 1.0,
+    "vwap": 1.0,
+    "ml_prediction": 2.5,
+}
+
+# 컨플루언스 보너스 조건
+CONFLUENCE_BONUSES = [
+    {
+        "name": "Golden Zone (OB + FVG)",
+        "conditions": lambda s: (
+            s.get("order_block", {}).get("strength", 0) > 0.5
+            and s.get("fvg", {}).get("overlaps_ob", False)
+        ),
+        "bonus": 2.0,
+    },
+    {
+        "name": "OB + VWAP 겹침",
+        "conditions": lambda s: (
+            s.get("order_block", {}).get("strength", 0) > 0.5
+            and s.get("vwap", {}).get("touch_recent", False)
+            and _zones_overlap(s)
+        ),
+        "bonus": 1.5,
+    },
+    {
+        "name": "BB 스퀴즈 + 거래량 스파이크",
+        "conditions": lambda s: (
+            s.get("bollinger", {}).get("is_squeeze", False)
+            and s.get("volume", {}).get("spike_ratio", 0) > 2.0
+        ),
+        "bonus": 1.5,
+    },
+    {
+        "name": "RSI 극단 + BB 극단",
+        "conditions": lambda s: s.get("rsi", {}).get("bb_rsi_combo", False),
+        "bonus": 1.0,
+    },
+    {
+        "name": "OI 급증 + BB 스퀴즈",
+        "conditions": lambda s: (
+            s.get("open_interest", {}).get("oi_spike", False)
+            and s.get("bollinger", {}).get("is_squeeze", False)
+        ),
+        "bonus": 1.0,
+    },
+]
+
+MAX_POSSIBLE_SCORE = sum(WEIGHTS.values())  # ~25.5
+
+
+def _zones_overlap(signals: dict) -> bool:
+    """OB 영역과 VWAP이 겹치는지 체크"""
+    ob = signals.get("order_block", {})
+    vwap = signals.get("vwap", {})
+    ob_zone = ob.get("ob_zone")
+    vwap_price = vwap.get("session_vwap", 0)
+    if ob_zone and vwap_price:
+        return ob_zone[0] <= vwap_price <= ob_zone[1]
+    return False
+
+
+class SignalAggregator:
+    """시그널 가중 합산 + 컨플루언스 보너스"""
+
+    def aggregate(
+        self,
+        fast_signals: dict,
+        slow_signals: dict,
+        ml_prediction: Optional[dict] = None,
+    ) -> dict:
+        """
+        모든 시그널을 합산하여 최종 점수 + 방향 산출.
+
+        Returns:
+            {
+                'score': float,           # 정규화 점수 (0~10)
+                'raw_score': float,       # 원시 가중합
+                'direction': str,         # 'long' | 'short' | 'neutral'
+                'confluence_bonus': float,
+                'confluence_details': list,
+                'signals_detail': dict,
+                'long_score': float,
+                'short_score': float,
+            }
+        """
+        # 전체 시그널 합치기
+        all_signals = {**fast_signals, **slow_signals}
+        if ml_prediction:
+            all_signals["ml_prediction"] = ml_prediction
+
+        # 방향별 가중 점수 합산
+        long_score = 0.0
+        short_score = 0.0
+
+        for sig_type, signal in all_signals.items():
+            weight = WEIGHTS.get(sig_type, 0)
+            if weight == 0:
+                continue
+
+            direction = signal.get("direction", "neutral")
+            strength = signal.get("strength", 0)
+
+            weighted = weight * strength
+
+            if direction == "long":
+                long_score += weighted
+            elif direction == "short":
+                short_score += weighted
+
+        # 컨플루언스 보너스
+        confluence_bonus = 0.0
+        confluence_details = []
+
+        for bonus_def in CONFLUENCE_BONUSES:
+            try:
+                if bonus_def["conditions"](all_signals):
+                    confluence_bonus += bonus_def["bonus"]
+                    confluence_details.append(bonus_def["name"])
+            except Exception:
+                pass
+
+        # 최종 방향 결정
+        if long_score > short_score:
+            direction = "long"
+            raw_score = long_score + confluence_bonus
+        elif short_score > long_score:
+            direction = "short"
+            raw_score = short_score + confluence_bonus
+        else:
+            direction = "neutral"
+            raw_score = 0
+
+        # 정규화 (0~10)
+        score = raw_score / MAX_POSSIBLE_SCORE * 10
+        score = min(10.0, max(0.0, score))
+
+        result = {
+            "score": round(score, 2),
+            "raw_score": round(raw_score, 2),
+            "direction": direction,
+            "confluence_bonus": round(confluence_bonus, 1),
+            "confluence_details": confluence_details,
+            "signals_detail": all_signals,
+            "long_score": round(long_score, 2),
+            "short_score": round(short_score, 2),
+        }
+
+        logger.info(
+            f"합산 결과: {direction.upper()} | 점수: {score:.1f}/10 | "
+            f"L:{long_score:.1f} S:{short_score:.1f} | 보너스: {confluence_bonus:.1f}"
+        )
+
+        return result

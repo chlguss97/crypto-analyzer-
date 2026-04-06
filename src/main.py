@@ -27,6 +27,9 @@ from src.engine.slow.liquidation import LiquidationIndicator
 from src.engine.slow.long_short_ratio import LongShortRatioIndicator
 from src.engine.slow.cvd import CVDIndicator
 from src.engine.base import BaseIndicator
+from src.signal.aggregator import SignalAggregator
+from src.signal.grader import SignalGrader
+from src.signal.ml_model import MLEngine
 
 # ── 로깅 설정 ──
 logging.basicConfig(
@@ -74,6 +77,15 @@ class CryptoAnalyzer:
             CVDIndicator(),
         ]
 
+        # 시그널 합산 + 등급 + ML
+        self.aggregator = SignalAggregator()
+        self.grader = SignalGrader()
+        self.ml_engine = MLEngine()
+
+        # 최신 시그널 캐시
+        self._last_fast = {}
+        self._last_slow = {}
+
         self._running = False
 
     async def initialize(self):
@@ -86,6 +98,9 @@ class CryptoAnalyzer:
         await self.redis.connect()
         await self.candle_collector.init_exchange()
         await self.oi_funding.init_exchange()
+
+        # ML 모델 로드 (있으면)
+        self.ml_engine.load_model()
 
         # 캔들 백필
         logger.info("캔들 데이터 백필 시작...")
@@ -123,6 +138,7 @@ class CryptoAnalyzer:
             except Exception as e:
                 logger.error(f"Fast Path 에러 [{engine.__class__.__name__}]: {e}")
 
+        self._last_fast = results
         logger.info(f"Fast Path 완료: {len(results)}개 시그널")
         return results
 
@@ -174,8 +190,63 @@ class CryptoAnalyzer:
             except Exception as e:
                 logger.error(f"Slow Path 에러 [{engine.__class__.__name__}]: {e}")
 
+        self._last_slow = results
         logger.info(f"Slow Path 완료: {len(results)}개 시그널")
         return results
+
+    async def evaluate_signal(self):
+        """시그널 합산 → 등급 판정 (Fast + Slow 결합)"""
+        if not self._last_fast:
+            return None
+
+        # ML 예측
+        all_signals = {**self._last_fast, **self._last_slow}
+        ml_result = self.ml_engine.predict(all_signals)
+
+        # 합산
+        aggregated = self.aggregator.aggregate(
+            self._last_fast, self._last_slow, ml_result
+        )
+
+        # 리스크 상태 구성 (Phase 3에서 실제 데이터 연결)
+        risk_state = {
+            "daily_pnl_pct": 0,
+            "current_drawdown_pct": 0,
+            "open_positions": 0,
+            "same_direction_count": 0,
+            "streak": 0,
+            "cooldown_active": False,
+            "funding_blackout": False,
+            "has_same_symbol": False,
+        }
+
+        # 펀딩비 블랙아웃 체크
+        fn_min = await self.redis.get("rt:funding_next_min:BTC-USDT-SWAP")
+        if fn_min and int(fn_min) <= 15:
+            risk_state["funding_blackout"] = True
+
+        # 등급 판정
+        grade_result = self.grader.grade(aggregated, risk_state)
+
+        # Redis에 최종 결과 저장
+        await self.redis.set(
+            f"sig:aggregated:{self.symbol}",
+            {
+                "aggregated": aggregated,
+                "grade": grade_result,
+            },
+            ttl=900 * 2,
+        )
+
+        if grade_result["tradeable"]:
+            logger.info(
+                f"★ 매매 시그널: {grade_result['grade']} "
+                f"{grade_result['direction'].upper()} | "
+                f"점수: {grade_result['score']:.1f} | "
+                f"레버리지: ~{grade_result['max_leverage']}x"
+            )
+
+        return grade_result
 
     async def periodic_candle_update(self):
         """주기적 캔들 갱신 (1분마다)"""
@@ -230,6 +301,9 @@ class CryptoAnalyzer:
                                 if v.get("strength", 0) > 0
                             )
                         )
+                        # 시그널 합산 + 등급 판정
+                        grade = await self.evaluate_signal()
+                        # Phase 3에서 grade 기반 자동매매 실행 연결
             except Exception as e:
                 logger.error(f"Fast Path 주기 실행 에러: {e}")
             await asyncio.sleep(60)
