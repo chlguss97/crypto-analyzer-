@@ -1,0 +1,155 @@
+import logging
+import time
+from src.data.storage import RedisClient
+from src.utils.helpers import load_config
+
+logger = logging.getLogger(__name__)
+
+
+class RiskManager:
+    """리스크 관리: 일일 한도, 드로다운, 연패 쿨다운"""
+
+    def __init__(self, redis_client: RedisClient):
+        self.redis = redis_client
+        self.config = load_config()
+        self.risk_cfg = self.config["risk"]
+        self.cooldown_cfg = self.config["cooldown"]
+
+        # 메모리 폴백 (Redis 장애 시)
+        self._state = {
+            "daily_pnl_pct": 0.0,
+            "peak_balance": 0.0,
+            "current_balance": 0.0,
+            "streak": 0,
+            "cooldown_until": 0,
+            "trade_count_today": 0,
+        }
+
+    async def initialize(self, balance: float):
+        """초기 잔고로 상태 초기화"""
+        self._state["peak_balance"] = balance
+        self._state["current_balance"] = balance
+
+        # Redis에서 기존 상태 복원
+        streak = await self.redis.get("risk:streak")
+        if streak:
+            self._state["streak"] = int(streak)
+        daily_pnl = await self.redis.get("risk:daily_pnl")
+        if daily_pnl:
+            self._state["daily_pnl_pct"] = float(daily_pnl)
+        cooldown = await self.redis.get("risk:cooldown_until")
+        if cooldown:
+            self._state["cooldown_until"] = int(cooldown)
+
+        logger.info(
+            f"리스크 매니저 초기화: 잔고 ${balance:.2f} | "
+            f"연패 {self._state['streak']} | 일일 P&L {self._state['daily_pnl_pct']:.2f}%"
+        )
+
+    async def get_risk_state(self, open_positions: list = None) -> dict:
+        """현재 리스크 상태 조회"""
+        if open_positions is None:
+            open_positions = []
+
+        now = int(time.time())
+        cooldown_active = now < self._state["cooldown_until"]
+
+        # 드로다운 계산
+        peak = self._state["peak_balance"]
+        current = self._state["current_balance"]
+        drawdown_pct = ((peak - current) / peak * 100) if peak > 0 else 0
+
+        # 같은 방향 포지션 수
+        long_count = sum(1 for p in open_positions if p.get("direction") == "long")
+        short_count = sum(1 for p in open_positions if p.get("direction") == "short")
+
+        return {
+            "daily_pnl_pct": self._state["daily_pnl_pct"],
+            "current_drawdown_pct": drawdown_pct,
+            "open_positions": len(open_positions),
+            "same_direction_count": max(long_count, short_count),
+            "streak": self._state["streak"],
+            "cooldown_active": cooldown_active,
+            "funding_blackout": False,  # 외부에서 설정
+            "has_same_symbol": False,   # 외부에서 설정
+            "trade_count_today": self._state["trade_count_today"],
+            "balance": self._state["current_balance"],
+            "peak_balance": self._state["peak_balance"],
+        }
+
+    async def record_trade_result(self, pnl_pct: float, pnl_usdt: float):
+        """매매 결과 기록 → 연패/쿨다운/일일 P&L 갱신"""
+        # 일일 P&L
+        self._state["daily_pnl_pct"] += pnl_pct
+        self._state["trade_count_today"] += 1
+
+        # 잔고 갱신
+        self._state["current_balance"] += pnl_usdt
+        if self._state["current_balance"] > self._state["peak_balance"]:
+            self._state["peak_balance"] = self._state["current_balance"]
+
+        # 연패 추적
+        if pnl_pct < 0:
+            self._state["streak"] += 1
+            logger.warning(f"손실 기록: {pnl_pct:+.2f}% | 연패: {self._state['streak']}")
+
+            # 쿨다운 설정
+            now = int(time.time())
+            if self._state["streak"] >= 5:
+                cooldown_sec = self.cooldown_cfg["streak_5_min"] * 60
+                self._state["cooldown_until"] = now + cooldown_sec
+                logger.warning(f"5연패 → {self.cooldown_cfg['streak_5_min']}분 쿨다운")
+            elif self._state["streak"] >= 3:
+                cooldown_sec = self.cooldown_cfg["streak_3_min"] * 60
+                self._state["cooldown_until"] = now + cooldown_sec
+                logger.warning(f"3연패 → {self.cooldown_cfg['streak_3_min']}분 쿨다운")
+        else:
+            self._state["streak"] = 0
+            logger.info(f"수익 기록: {pnl_pct:+.2f}% | 연패 리셋")
+
+        # Redis 동기화
+        await self.redis.set("risk:streak", str(self._state["streak"]))
+        await self.redis.set("risk:daily_pnl", str(round(self._state["daily_pnl_pct"], 4)))
+        await self.redis.set("risk:cooldown_until", str(self._state["cooldown_until"]))
+
+        # 일일 손실 한도 체크
+        if self._state["daily_pnl_pct"] <= -self.risk_cfg["max_daily_loss"] * 100:
+            logger.error(
+                f"일일 손실 한도 도달: {self._state['daily_pnl_pct']:.2f}% → 당일 매매 중단"
+            )
+
+        # 최대 드로다운 체크
+        peak = self._state["peak_balance"]
+        current = self._state["current_balance"]
+        drawdown = (peak - current) / peak if peak > 0 else 0
+        if drawdown >= self.risk_cfg["max_drawdown"]:
+            logger.error(
+                f"최대 드로다운 도달: {drawdown*100:.1f}% → 전체 매매 중단"
+            )
+
+    async def reset_daily(self):
+        """일일 카운터 리셋 (매일 00:00 UTC)"""
+        self._state["daily_pnl_pct"] = 0.0
+        self._state["trade_count_today"] = 0
+        await self.redis.set("risk:daily_pnl", "0")
+        await self.redis.set("risk:trade_count_today", "0")
+        logger.info("일일 리스크 카운터 리셋")
+
+    def is_trading_allowed(self) -> tuple[bool, str]:
+        """매매 가능 여부 판단"""
+        # 일일 한도
+        if self._state["daily_pnl_pct"] <= -self.risk_cfg["max_daily_loss"] * 100:
+            return False, "일일 손실 한도"
+
+        # 드로다운
+        peak = self._state["peak_balance"]
+        current = self._state["current_balance"]
+        if peak > 0 and (peak - current) / peak >= self.risk_cfg["max_drawdown"]:
+            return False, "최대 드로다운"
+
+        # 쿨다운
+        if int(time.time()) < self._state["cooldown_until"]:
+            remaining = self._state["cooldown_until"] - int(time.time())
+            return False, f"쿨다운 중 ({remaining//60}분 남음)"
+
+        return True, "OK"
