@@ -26,8 +26,8 @@ from src.engine.slow.liquidation import LiquidationIndicator
 from src.engine.slow.long_short_ratio import LongShortRatioIndicator
 from src.engine.slow.cvd import CVDIndicator
 from src.engine.base import BaseIndicator
-from src.signal.aggregator import SignalAggregator
-from src.signal.grader import SignalGrader
+from src.signal_engine.aggregator import SignalAggregator
+from src.signal_engine.grader import SignalGrader
 from src.trading.leverage import LeverageCalculator
 from src.utils.helpers import load_config
 

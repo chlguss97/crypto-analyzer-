@@ -23,6 +23,11 @@ config.secret.*
 
 # Data
 data/*.db
+data/*.pkl
+data/logs/
+data/reports/
 
 # Docker
 docker-compose.override.yml
+*.jpg
+.claude/

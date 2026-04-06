@@ -27,9 +27,11 @@ class OIFundingCollector:
                     "secret": get_env("OKX_SECRET_KEY", ""),
                     "password": get_env("OKX_PASSPHRASE", ""),
                     "enableRateLimit": True,
+                    "aiohttp_trust_env": True,
                     "options": {"defaultType": "swap"},
                 }
             )
+            self.exchange.aiohttp_resolver = "default"
             await self.exchange.load_markets()
             logger.info("OI/Funding 수집기 초기화 완료")
         except Exception as e:

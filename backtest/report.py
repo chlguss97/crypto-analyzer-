@@ -21,7 +21,7 @@ class BacktestReport:
         """콘솔 요약 출력"""
         r = self.results
         if "error" in r:
-            print(f"\n❌ {r['error']}")
+            print(f"\n[X] {r['error']}")
             return
 
         print("\n" + "=" * 60)

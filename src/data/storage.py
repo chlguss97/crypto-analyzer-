@@ -191,6 +191,20 @@ class Database:
         await self._db.commit()
 
 
+def _json_default(obj):
+    """numpy/bool 등 JSON 직렬화 헬퍼"""
+    import numpy as np
+    if isinstance(obj, (np.integer,)):
+        return int(obj)
+    if isinstance(obj, (np.floating,)):
+        return float(obj)
+    if isinstance(obj, (np.bool_,)):
+        return bool(obj)
+    if isinstance(obj, np.ndarray):
+        return obj.tolist()
+    return str(obj)
+
+
 # ── Redis ───────────────────────────────────────────────
 
 class RedisClient:
@@ -228,7 +242,7 @@ class RedisClient:
         if not self._client:
             return
         if isinstance(value, (dict, list)):
-            value = json.dumps(value)
+            value = json.dumps(value, default=_json_default)
         if ttl:
             await self._client.setex(key, ttl, value)
         else:

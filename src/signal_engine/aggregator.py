@@ -63,7 +63,9 @@ CONFLUENCE_BONUSES = [
     },
 ]
 
-MAX_POSSIBLE_SCORE = sum(WEIGHTS.values())  # ~25.5
+# 정규화 기준: 한 방향 시그널의 현실적 최대값
+# 모든 기법이 한 방향으로 강도 1.0은 비현실적 → 실전 최대 ~12점
+REALISTIC_MAX_SCORE = 12.0
 
 
 def _zones_overlap(signals: dict) -> bool:
@@ -149,7 +151,7 @@ class SignalAggregator:
             raw_score = 0
 
         # 정규화 (0~10)
-        score = raw_score / MAX_POSSIBLE_SCORE * 10
+        score = raw_score / REALISTIC_MAX_SCORE * 10
         score = min(10.0, max(0.0, score))
 
         result = {

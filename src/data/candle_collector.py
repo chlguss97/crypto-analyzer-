@@ -40,9 +40,12 @@ class CandleCollector:
                     "secret": secret,
                     "password": passphrase,
                     "enableRateLimit": True,
+                    "aiohttp_trust_env": True,
                     "options": {"defaultType": "swap"},
                 }
             )
+            # aiodns DNS 문제 방지
+            self.exchange.aiohttp_resolver = "default"
 
             # API 키 없으면 퍼블릭 모드 (데이터 수집만 가능)
             if not api_key:

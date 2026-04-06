@@ -28,9 +28,11 @@ class OrderExecutor:
                 "secret": get_env("OKX_SECRET_KEY", ""),
                 "password": get_env("OKX_PASSPHRASE", ""),
                 "enableRateLimit": True,
+                "aiohttp_trust_env": True,
                 "options": {"defaultType": "swap"},
             }
         )
+        self.exchange.aiohttp_resolver = "default"
         await self.exchange.load_markets()
 
         # 마진 모드 설정 (isolated)
