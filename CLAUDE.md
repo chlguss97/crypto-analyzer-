@@ -5,18 +5,35 @@
 - 14개 매매 기법 기반 시그널 합산 → 등급별 자동 진입/청산
 - 설계서: `명세서.md` 참고
 
+## 핵심 설계 결정 (논의 완료)
+- 매매 스타일: 1~4시간 단타 (보유 30분~최대 6시간)
+- 타임프레임: 15m(실행) / 1H(확인) / 4H(필터)
+- 레버리지: 10~30배 동적 (등급 + ATR 변동성 + 연패 상태 연동)
+- 1회 리스크: 계좌의 0.5% 고정 (레버리지 무관)
+- SL: ATR(15m) × 1.2 → 노이즈 위에 설정, 포지션 크기로 리스크 조절
+- 시그널 처리: Fast Path(실시간) + Slow Path(1~5분 주기) 2단계
+- 시간 청산: 1시간/2시간/4시간/6시간 단계별
+- 수수료 필터: 최소 기대수익 0.15% 이상만 진입
+- 일일 목표: 원금의 5% (레버리지 활용)
+
 ## 기술스택
 - Python 3.11 / ccxt / scikit-learn / FastAPI
 - DB: SQLite(캔들) + Redis(실시간)
 - 알림: Telegram
 
 ## 개발 로드맵
-- Phase 1: 데이터 수집 + 기법 엔진
-- Phase 2: ML + 시그널 합산
-- Phase 3: 매매 엔진 + 리스크
-- Phase 4: 백테스트
-- Phase 5: 모니터링 + 실전
+- Phase 1: 데이터 수집 + 기법 엔진 (14개, Fast/Slow 분리)
+- Phase 2: ML + 시그널 합산 + 컨플루언스 보너스
+- Phase 3: 매매 엔진 + 동적 레버리지 + 리스크 관리
+- Phase 4: 백테스트 (콤보 셋업별 검증)
+- Phase 5: 모니터링 + 테스트넷 → 실전
 
 ## 현재 진행 상황
 - 명세서 작성 완료 (2026-04-03)
+- GitHub 연동 완료: https://github.com/chlguss97/crypto-analyzer-.git
 - Phase 1 시작 전
+
+## Git
+- 원격: https://github.com/chlguss97/crypto-analyzer-.git (private)
+- 다른 PC에서 작업 시: git clone 후 이어서 진행
+- 동기화: git add . && git commit -m "메시지" && git push / git pull

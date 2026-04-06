@@ -1,0 +1,51 @@
+exchange:
+  name: "okx"
+  symbol: "BTC/USDT:USDT"
+  margin_mode: "isolated"
+
+timeframes:
+  execution: "15m"
+  confirmation: "1h"
+  filter: "4h"
+
+risk:
+  risk_per_trade: 0.005
+  leverage_range: [10, 30]
+  sl_atr_multiplier: 1.2
+  sl_min_pct: 0.003
+  sl_max_pct: 0.015
+  min_expected_profit: 0.0015
+  max_positions: 3
+  max_same_direction: 2
+  max_daily_loss: 0.05
+  max_drawdown: 0.15
+  max_hold_hours: 6
+
+trailing:
+  breakeven_trigger: 0.008
+  tp1_trigger: 0.015
+  tp1_close_pct: 0.5
+  tp2_trigger: 0.025
+  tp2_close_pct: 0.3
+  tp3_atr_multiplier: 0.8
+
+cooldown:
+  streak_3_min: 30
+  streak_5_min: 120
+
+fees:
+  taker: 0.0005
+  maker: 0.0002
+
+telegram:
+  enabled: true
+
+redis:
+  host: "localhost"
+  port: 6379
+  db: 0
+
+data:
+  candle_backfill_days: 30
+  slow_path_interval_sec: 180
+  health_check_interval_sec: 60

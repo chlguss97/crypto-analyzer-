@@ -20,3 +20,9 @@ Thumbs.db
 *.pem
 credentials.json
 config.secret.*
+
+# Data
+data/*.db
+
+# Docker
+docker-compose.override.yml

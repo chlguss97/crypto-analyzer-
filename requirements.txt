@@ -1,0 +1,33 @@
+# Core
+ccxt==4.4.50
+pandas==2.2.3
+numpy==1.26.4
+
+# Async
+aiohttp==3.11.12
+websockets==14.2
+
+# ML
+scikit-learn==1.6.1
+joblib==1.4.2
+
+# Web / API
+fastapi==0.115.8
+uvicorn==0.34.0
+
+# Database
+aiosqlite==0.20.0
+redis==5.2.1
+
+# Scheduling
+apscheduler==3.10.4
+
+# Telegram
+python-telegram-bot==21.10
+
+# Config
+pyyaml==6.0.2
+python-dotenv==1.0.1
+
+# TA (Technical Analysis)
+ta==0.11.0
