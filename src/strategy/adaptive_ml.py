@@ -46,7 +46,7 @@ class AdaptiveML:
         # 임계값
         self.entry_threshold = 5.5 if mode == "swing" else 4.5
         self.min_trades_to_train = 30
-        self.retrain_interval = 20
+        self.retrain_interval = 100  # 100거래마다 재학습 (모델 안정화)
 
         self.trade_count = 0
         self.recent_results = deque(maxlen=200)

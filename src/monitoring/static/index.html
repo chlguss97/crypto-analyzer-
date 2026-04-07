@@ -1014,9 +1014,12 @@ async function updateSignals() {
 }
 
 async function updateTrades() {
-  const data = await api('/api/trades?days=7');
-  if (!data || !data.trades || data.trades.length === 0) return;
+  const data = await api('/api/trades?days=7&mode=real');
   const tbody = document.getElementById('tradesBody');
+  if (!data || !data.trades || data.trades.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:28px;">No real trades yet</td></tr>';
+    return;
+  }
   tbody.innerHTML = data.trades.slice(0, 15).map(t => {
     const time = t.entry_time ? new Date(t.entry_time).toLocaleString('ko', {month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : '--';
     const dir = t.direction || '?';
