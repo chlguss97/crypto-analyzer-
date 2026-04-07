@@ -362,10 +362,10 @@ class CryptoAnalyzer:
 
         # ── 진입 확인 대기 로직 ──
         # 1차: 시그널 발생 → 대기 상태로 저장
-        # 2차 (15초 후): 가격이 같은 방향이면 진입 확정
+        # 2차 (5초 후): 가격이 같은 방향이면 진입 확정
         if self._scalp_pending_signal:
             pending = self._scalp_pending_signal
-            # 방향 확인: 15초 전 시그널 방향과 현재 가격 비교
+            # 방향 확인: 5초 전 시그널 방향과 현재 가격 비교
             confirmed = False
             if pending["direction"] == "long" and current_price > self._scalp_pending_price:
                 confirmed = True
@@ -631,16 +631,17 @@ class CryptoAnalyzer:
     # ── 주기적 루프들 ──
 
     async def periodic_candle_update(self):
-        """캔들 갱신 (30초마다, 모든 TF)"""
+        """캔들 갱신 (10초마다, 모든 TF) — 스캘핑 빠른 반응"""
         while self._running:
             try:
+                # 1m/5m은 자주, 큰 TF는 덜 자주
                 for tf in ["1m", "5m", "15m", "1h"]:
                     candles = await self.candle_collector.fetch_candles(tf, limit=5)
                     if candles:
                         await self.db.insert_candles(self.symbol, tf, candles)
             except Exception as e:
                 logger.error(f"캔들 갱신 에러: {e}")
-            await asyncio.sleep(30)
+            await asyncio.sleep(10)
 
     async def periodic_signal_eval(self):
         """Swing 시그널 평가 + 매매 (60초마다)"""
@@ -653,14 +654,14 @@ class CryptoAnalyzer:
             await asyncio.sleep(60)
 
     async def periodic_scalp_eval(self):
-        """스캘핑 시그널 평가 (15초마다) — 빠른 진입/탈출"""
+        """스캘핑 시그널 평가 (5초마다) — 초고속 반응"""
         await asyncio.sleep(20)
         while self._running:
             try:
                 await self._evaluate_scalp()
             except Exception as e:
                 logger.error(f"Scalp 평가 에러: {e}")
-            await asyncio.sleep(15)
+            await asyncio.sleep(5)
 
     async def periodic_position_check(self):
         """포지션 체크 (15초마다) — 실거래 + 가상매매"""
