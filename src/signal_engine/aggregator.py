@@ -7,6 +7,7 @@ logger = logging.getLogger(__name__)
 WEIGHTS = {
     "order_block": 3.0,
     "market_structure": 2.5,
+    "fractal": 2.0,
     "bollinger": 2.0,
     "funding_rate": 2.0,
     "open_interest": 2.0,
@@ -58,6 +59,22 @@ CONFLUENCE_BONUSES = [
         "conditions": lambda s: (
             s.get("open_interest", {}).get("oi_spike", False)
             and s.get("bollinger", {}).get("is_squeeze", False)
+        ),
+        "bonus": 1.0,
+    },
+    {
+        "name": "프랙탈 돌파 + Market Structure",
+        "conditions": lambda s: (
+            s.get("fractal", {}).get("breakout", "none") != "none"
+            and s.get("market_structure", {}).get("aligned", False)
+        ),
+        "bonus": 1.5,
+    },
+    {
+        "name": "프랙탈 클러스터 + OB",
+        "conditions": lambda s: (
+            s.get("fractal", {}).get("cluster_zone") is not None
+            and s.get("order_block", {}).get("strength", 0) > 0.5
         ),
         "bonus": 1.0,
     },

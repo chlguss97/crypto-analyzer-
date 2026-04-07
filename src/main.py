@@ -19,6 +19,7 @@ from src.engine.fast.bollinger import BollingerIndicator
 from src.engine.fast.vwap import VWAPIndicator
 from src.engine.fast.market_structure import MarketStructureIndicator
 from src.engine.fast.atr import ATRIndicator
+from src.engine.fast.fractal import FractalIndicator
 from src.engine.slow.order_block import OrderBlockIndicator
 from src.engine.slow.fvg import FVGIndicator
 from src.engine.slow.volume_pattern import VolumePatternIndicator
@@ -38,6 +39,9 @@ from src.trading.executor import OrderExecutor
 from src.trading.position_manager import PositionManager
 from src.monitoring.telegram_bot import TelegramNotifier
 from src.monitoring.trade_logger import TradeLogger
+from src.strategy.paper_trader import PaperTrader
+from src.strategy.historical_learner import HistoricalLearner
+from src.engine.regime_detector import MarketRegimeDetector
 
 logging.basicConfig(
     level=logging.INFO,
@@ -66,6 +70,7 @@ class CryptoAnalyzer:
         self.fast_engines = [
             EMAIndicator(), RSIIndicator(), BollingerIndicator(),
             VWAPIndicator(), MarketStructureIndicator(), ATRIndicator(),
+            FractalIndicator(),
         ]
         self.slow_engines = [
             OrderBlockIndicator(), FVGIndicator(), VolumePatternIndicator(),
@@ -91,6 +96,18 @@ class CryptoAnalyzer:
         # 모니터링
         self.telegram = TelegramNotifier()
         self.trade_logger = TradeLogger()
+
+        # 마켓 레짐 감지
+        self.regime_detector = MarketRegimeDetector()
+        self._current_regime = None
+
+        # 가상매매 엔진 (ML 학습용)
+        self.paper_trader = PaperTrader(self.db, self.redis, self.ml_swing, self.ml_scalp, self.regime_detector)
+
+        # 역사 백필 학습 엔진 (candle_collector 연결 → 90일 수집 가능)
+        self.hist_learner = HistoricalLearner(
+            self.db, self.ml_swing, self.ml_scalp, self.candle_collector
+        )
 
         # 캐시
         self._last_fast = {}
@@ -132,6 +149,10 @@ class CryptoAnalyzer:
         for tf in ["5m", "1m"]:
             await self.candle_collector.backfill(tf, days=7)
         logger.info("캔들 백필 완료")
+
+        # 시작 시 역사 백필 학습 (비동기 — 봇 시작 안 막음)
+        logger.info("역사 백필 ML 학습 예약...")
+        asyncio.create_task(self._initial_history_learn())
 
     # ── Swing 시그널 ──
 
@@ -179,14 +200,25 @@ class CryptoAnalyzer:
         self._last_fast = fast
         self._last_slow = slow
 
+        # 레짐 감지
+        regime_result = self.regime_detector.detect(df)
+        self._current_regime = regime_result
+        await self.redis.set("sys:regime", regime_result["regime"], ttl=300)
+        await self.redis.set("sys:regime_detail", regime_result, ttl=300)
+
         # 합산
         aggregated = self.aggregator.aggregate(fast, slow)
         all_signals = {**fast, **slow}
 
-        # ML 조정
+        # ML 조정 (레짐 정보 포함)
+        ml_meta = {
+            "atr_pct": fast.get("atr", {}).get("atr_pct", 0.3),
+            "hour": datetime.now(timezone.utc).hour,
+            "regime": regime_result["regime"],
+        }
         ml_enabled = (await self.redis.get("sys:ml_enabled") or "on") == "on"
         if ml_enabled:
-            adjusted = self.ml_swing.get_adjusted_score(aggregated["score"], all_signals)
+            adjusted = self.ml_swing.get_adjusted_score(aggregated["score"], all_signals, ml_meta)
         else:
             adjusted = aggregated["score"]
 
@@ -241,24 +273,38 @@ class CryptoAnalyzer:
             risk_state["funding_blackout"] = True
         risk_state["has_same_symbol"] = self.symbol in self.position_manager.positions
 
-        # Swing 시그널
+        # Swing 시그널 (항상 계산 — 가상매매 전수 학습용)
         swing_result = None
-        if active_model in ("swing", "both"):
-            swing_agg = await self.run_swing_signal()
-            if swing_agg:
-                swing_grade = self.grader.grade(swing_agg, risk_state)
-                swing_result = {"aggregated": swing_agg, "grade": swing_grade, "mode": "swing"}
-                await self.redis.set(f"sig:aggregated:{self.symbol}",
-                                     {"aggregated": swing_agg, "grade": swing_grade}, ttl=1800)
+        swing_agg = await self.run_swing_signal()
+        if swing_agg:
+            swing_grade = self.grader.grade(swing_agg, risk_state)
+            swing_result = {"aggregated": swing_agg, "grade": swing_grade, "mode": "swing"}
+            await self.redis.set(f"sig:aggregated:{self.symbol}",
+                                 {"aggregated": swing_agg, "grade": swing_grade}, ttl=1800)
 
-        # Scalp 시그널
+        # Scalp 시그널 (항상 계산)
         scalp_result = None
-        if active_model in ("scalp", "both"):
-            scalp_sig = await self.run_scalp_signal()
-            if scalp_sig and scalp_sig["score"] >= self.ml_scalp.entry_threshold:
-                scalp_result = {"signal": scalp_sig, "mode": "scalp"}
+        scalp_sig = await self.run_scalp_signal()
+        if scalp_sig and scalp_sig["score"] >= self.ml_scalp.entry_threshold:
+            scalp_result = {"signal": scalp_sig, "mode": "scalp"}
 
-        # 자동매매 실행
+        # ── 가상매매 전수 학습 (항상 실행 — 점수 무관, ML 학습용) ──
+        price_str = await self.redis.get("rt:price:BTC-USDT-SWAP")
+        current_price = float(price_str) if price_str else 0
+
+        if current_price > 0:
+            # Swing: tradeable 여부 관계없이 모든 시그널 학습
+            if swing_agg:
+                agg = swing_agg.copy()
+                agg["atr_pct"] = self._last_fast.get("atr", {}).get("atr_pct", 0.3)
+                agg["signals_detail"] = {**self._last_fast, **self._last_slow}
+                await self.paper_trader.try_entry(agg, "swing", current_price)
+
+            # Scalp: threshold 관계없이 모든 시그널 학습
+            if scalp_sig:
+                await self.paper_trader.try_entry(scalp_sig, "scalp", current_price)
+
+        # ── 자동매매 (실거래) ──
         if not autotrading:
             return
 
@@ -267,12 +313,12 @@ class CryptoAnalyzer:
         if not allowed:
             return
 
-        # Swing 진입
-        if swing_result and swing_result["grade"]["tradeable"]:
+        # Swing 진입 (active_model 체크)
+        if swing_result and swing_result["grade"]["tradeable"] and active_model in ("swing", "both"):
             await self._execute_swing(swing_result["grade"], swing_result["aggregated"], risk_state)
 
         # Scalp 진입 (Swing 포지션 없을 때만)
-        if scalp_result and not risk_state["has_same_symbol"]:
+        if scalp_result and not risk_state["has_same_symbol"] and active_model in ("scalp", "both"):
             await self._execute_scalp(scalp_result["signal"], risk_state)
 
     async def _execute_swing(self, grade_result, aggregated, risk_state):
@@ -383,9 +429,68 @@ class CryptoAnalyzer:
     # ── ML 학습 기록 ──
 
     async def record_ml_trade(self, mode: str, signals: dict, pnl_pct: float):
-        """매매 결과 → ML 학습"""
+        """실거래 결과 → ML 학습 (레짐 정보 포함)"""
         ml = self.ml_swing if mode == "swing" else self.ml_scalp
-        ml.record_trade(signals, {}, pnl_pct)
+        regime = self._current_regime["regime"] if self._current_regime else "ranging"
+        meta = {"atr_pct": self._last_fast.get("atr", {}).get("atr_pct", 0.3),
+                "hour": datetime.now(timezone.utc).hour,
+                "regime": regime}
+        ml.record_trade(signals, meta, pnl_pct)
+        logger.info(f"[실거래→ML] {mode} PnL {pnl_pct:+.2f}% 레짐:{regime} 학습 완료")
+
+    # ── 역사 학습 ──
+
+    async def _initial_history_learn(self):
+        """봇 시작 시 과거 데이터 학습 (백그라운드)"""
+        await asyncio.sleep(30)  # 캔들 수집 완료 대기
+        try:
+            logger.info("[HIST] 초기 역사 백필 학습 시작 (Swing)...")
+            await self.hist_learner.run_backfill("15m", lookback=2000, step=5)
+
+            logger.info("[HIST] 초기 역사 백필 학습 시작 (Scalp)...")
+            await self.hist_learner.run_scalp_backfill(lookback=2000, step=5)
+
+            self.ml_swing.save()
+            self.ml_scalp.save()
+            logger.info("[HIST] 초기 학습 완료 (Swing + Scalp)")
+        except Exception as e:
+            logger.error(f"[HIST] 초기 학습 에러: {e}")
+
+    async def periodic_study_scheduler(self):
+        """
+        하루 3회 학습 스케줄러
+        - UTC 02:00 (한국 11:00) → 일일 대량 학습 (90일 수집 + 파라미터 다양화 + 레짐 집중)
+        - UTC 10:00 (한국 19:00) → 세션 경량 학습
+        - UTC 18:00 (한국 03:00) → 세션 경량 학습
+        """
+        _last_run = {}
+        while self._running:
+            try:
+                now = datetime.now(timezone.utc)
+                hour = now.hour
+                today = now.strftime("%Y-%m-%d")
+
+                # UTC 02:00 — 일일 대량 학습
+                if hour == 2 and _last_run.get("daily") != today:
+                    logger.info("[SCHED] 일일 대량 학습 시작 (UTC 02:00)")
+                    await self.hist_learner.run_daily_study()
+                    _last_run["daily"] = today
+
+                # UTC 10:00 — 세션 경량 학습
+                elif hour == 10 and _last_run.get("session1") != today:
+                    logger.info("[SCHED] 세션 경량 학습 1 시작 (UTC 10:00)")
+                    await self.hist_learner.run_session_study()
+                    _last_run["session1"] = today
+
+                # UTC 18:00 — 세션 경량 학습
+                elif hour == 18 and _last_run.get("session2") != today:
+                    logger.info("[SCHED] 세션 경량 학습 2 시작 (UTC 18:00)")
+                    await self.hist_learner.run_session_study()
+                    _last_run["session2"] = today
+
+            except Exception as e:
+                logger.error(f"[SCHED] 학습 스케줄러 에러: {e}")
+            await asyncio.sleep(60)
 
     # ── 주기적 루프들 ──
 
@@ -412,13 +517,20 @@ class CryptoAnalyzer:
             await asyncio.sleep(60)
 
     async def periodic_position_check(self):
-        """포지션 체크 (15초마다)"""
+        """포지션 체크 (15초마다) — 실거래 + 가상매매"""
         while self._running:
             try:
-                if self.position_manager.positions:
-                    price_str = await self.redis.get("rt:price:BTC-USDT-SWAP")
-                    if price_str:
-                        await self.position_manager.check_positions(float(price_str))
+                price_str = await self.redis.get("rt:price:BTC-USDT-SWAP")
+                if price_str:
+                    price = float(price_str)
+
+                    # 실거래 포지션 체크
+                    if self.position_manager.positions:
+                        await self.position_manager.check_positions(price)
+
+                    # 가상매매 포지션 체크
+                    if self.paper_trader.positions:
+                        await self.paper_trader.check_positions(price)
 
                 # 킬스위치 체크
                 bot_status = await self.redis.get("sys:bot_status")
@@ -471,6 +583,18 @@ class CryptoAnalyzer:
             await self.redis.set("sys:last_heartbeat", str(int(_time.time())))
             await asyncio.sleep(60)
 
+    # ── 대시보드 서버 ──
+
+    async def start_dashboard(self):
+        """uvicorn 대시보드를 asyncio task로 실행"""
+        import uvicorn
+        from src.monitoring.dashboard import app
+
+        config = uvicorn.Config(app, host="0.0.0.0", port=8000, log_level="warning")
+        server = uvicorn.Server(config)
+        logger.info("대시보드 시작: http://localhost:8000")
+        await server.serve()
+
     # ── 메인 ──
 
     async def run(self):
@@ -478,7 +602,8 @@ class CryptoAnalyzer:
         self._running = True
         self._current_day = datetime.now(timezone.utc).day
 
-        logger.info("봇 시작 — Swing + Scalp 듀얼 모델 + AdaptiveML")
+        logger.info("봇 시작 — Swing + Scalp 듀얼 모델 + AdaptiveML + PaperTrading")
+        logger.info("대시보드: http://localhost:8000")
         await self.redis.set("sys:bot_status", "running")
         await self.redis.set("sys:autotrading", "off")  # 초기 OFF (웹에서 켜기)
         await self.redis.set("sys:ml_enabled", "on")
@@ -491,8 +616,10 @@ class CryptoAnalyzer:
             asyncio.create_task(self.periodic_position_check()),
             asyncio.create_task(self.periodic_oi_funding()),
             asyncio.create_task(self.periodic_daily_reset()),
+            asyncio.create_task(self.periodic_study_scheduler()),
             asyncio.create_task(self.periodic_heartbeat()),
             asyncio.create_task(self.ws_stream.start()),
+            asyncio.create_task(self.start_dashboard()),
         ]
 
         try:

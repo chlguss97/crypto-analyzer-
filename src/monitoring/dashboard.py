@@ -119,6 +119,7 @@ async def _signal_loop():
     from src.engine.fast.vwap import VWAPIndicator
     from src.engine.fast.market_structure import MarketStructureIndicator
     from src.engine.fast.atr import ATRIndicator
+    from src.engine.fast.fractal import FractalIndicator
     from src.engine.slow.order_block import OrderBlockIndicator
     from src.engine.slow.fvg import FVGIndicator
     from src.engine.slow.volume_pattern import VolumePatternIndicator
@@ -134,6 +135,7 @@ async def _signal_loop():
     fast_engines = [
         EMAIndicator(), RSIIndicator(), BollingerIndicator(),
         VWAPIndicator(), MarketStructureIndicator(), ATRIndicator(),
+        FractalIndicator(),
     ]
     slow_engines = [
         OrderBlockIndicator(), FVGIndicator(), VolumePatternIndicator(),
@@ -328,23 +330,37 @@ async def get_signals():
 
 
 @app.get("/api/trades")
-async def get_trades(days: int = 7):
-    """최근 매매 내역"""
+async def get_trades(days: int = 7, mode: str = "all"):
+    """최근 매매 내역 (mode: all, paper, real)"""
     import time
     since = int((time.time() - days * 86400) * 1000)
 
-    cursor = await db._db.execute(
-        """SELECT * FROM trades
-           WHERE entry_time >= ?
-           ORDER BY entry_time DESC""",
-        (since,),
-    )
+    if mode == "paper":
+        cursor = await db._db.execute(
+            """SELECT * FROM trades
+               WHERE entry_time >= ? AND grade LIKE 'PAPER_%'
+               ORDER BY entry_time DESC""",
+            (since,),
+        )
+    elif mode == "real":
+        cursor = await db._db.execute(
+            """SELECT * FROM trades
+               WHERE entry_time >= ? AND grade NOT LIKE 'PAPER_%'
+               ORDER BY entry_time DESC""",
+            (since,),
+        )
+    else:
+        cursor = await db._db.execute(
+            """SELECT * FROM trades
+               WHERE entry_time >= ?
+               ORDER BY entry_time DESC""",
+            (since,),
+        )
     rows = await cursor.fetchall()
 
     trades = []
     for row in rows:
         trade = dict(row)
-        # signals_snapshot은 큰 데이터이므로 요약만
         if trade.get("signals_snapshot"):
             trade["signals_snapshot"] = "(생략)"
         trades.append(trade)
@@ -382,6 +398,50 @@ async def get_daily_summary():
     )
     rows = await cursor.fetchall()
     return {"summaries": [dict(r) for r in rows]}
+
+
+@app.get("/api/paper/stats")
+async def get_paper_stats():
+    """가상매매 통계"""
+    cursor = await db._db.execute(
+        """SELECT
+            COUNT(*) as total,
+            SUM(CASE WHEN pnl_pct > 0 THEN 1 ELSE 0 END) as wins,
+            SUM(CASE WHEN pnl_pct <= 0 THEN 1 ELSE 0 END) as losses,
+            COALESCE(SUM(pnl_usdt), 0) as total_pnl,
+            COALESCE(AVG(pnl_pct), 0) as avg_pnl_pct
+        FROM trades
+        WHERE grade LIKE 'PAPER_%' AND exit_time IS NOT NULL"""
+    )
+    row = dict(await cursor.fetchone())
+
+    # 최근 20건
+    cursor2 = await db._db.execute(
+        """SELECT id, direction, grade, score, entry_price, exit_price,
+                  entry_time, exit_time, exit_reason, pnl_pct, pnl_usdt, leverage
+           FROM trades
+           WHERE grade LIKE 'PAPER_%' AND exit_time IS NOT NULL
+           ORDER BY exit_time DESC LIMIT 20"""
+    )
+    recent = [dict(r) for r in await cursor2.fetchall()]
+
+    # 진행 중 가상 포지션 수
+    cursor3 = await db._db.execute(
+        """SELECT COUNT(*) FROM trades
+           WHERE grade LIKE 'PAPER_%' AND exit_time IS NULL"""
+    )
+    active = (await cursor3.fetchone())[0]
+
+    return {
+        "total": row["total"],
+        "wins": row["wins"] or 0,
+        "losses": row["losses"] or 0,
+        "win_rate": (row["wins"] or 0) / max(row["total"], 1) * 100,
+        "total_pnl": round(row["total_pnl"], 2),
+        "avg_pnl_pct": round(row["avg_pnl_pct"], 4),
+        "active_positions": active,
+        "recent_trades": recent,
+    }
 
 
 @app.get("/api/equity-curve")
@@ -602,19 +662,50 @@ async def toggle_autotrading():
 
 # ── 모델/ML 엔드포인트 ──
 
+# ML 인스턴스 캐시 (매 요청마다 load 방지)
+_ml_cache = {"swing": None, "scalp": None, "loaded_at": 0}
+
+
+def _get_ml_instances():
+    """ML 인스턴스 캐시 (60초마다 리로드)"""
+    import time as t
+    now = t.time()
+    if now - _ml_cache["loaded_at"] > 60 or _ml_cache["swing"] is None:
+        from src.strategy.adaptive_ml import AdaptiveML
+        sw = AdaptiveML(mode="swing")
+        sc = AdaptiveML(mode="scalp")
+        sw.load()
+        sc.load()
+        _ml_cache["swing"] = sw
+        _ml_cache["scalp"] = sc
+        _ml_cache["loaded_at"] = now
+    return _ml_cache["swing"], _ml_cache["scalp"]
+
+
+@app.get("/api/regime")
+async def get_regime():
+    """현재 마켓 레짐 조회"""
+    regime_detail = await redis.get_json("sys:regime_detail")
+    regime = await redis.get("sys:regime") or "ranging"
+
+    if not regime_detail:
+        regime_detail = {"regime": regime, "confidence": 0, "scores": {}}
+
+    return regime_detail
+
+
 @app.get("/api/ml/status")
 async def ml_status():
     """ML 모델 상태 조회"""
-    from src.strategy.adaptive_ml import AdaptiveML
-    swing = AdaptiveML(mode="swing")
-    scalp = AdaptiveML(mode="scalp")
-    swing.load()
-    scalp.load()
+    swing, scalp = _get_ml_instances()
+    regime = await redis.get("sys:regime") or "ranging"
+
     return {
         "swing": swing.get_stats(),
         "scalp": scalp.get_stats(),
         "active_model": await redis.get("sys:active_model") or "both",
         "ml_enabled": (await redis.get("sys:ml_enabled") or "on") == "on",
+        "current_regime": regime,
     }
 
 
@@ -643,11 +734,8 @@ async def select_model(req: ModelSelectRequest):
 @app.post("/api/ml/retrain")
 async def retrain_ml():
     """ML 수동 재학습 트리거"""
-    from src.strategy.adaptive_ml import AdaptiveML
-    swing = AdaptiveML(mode="swing")
-    scalp = AdaptiveML(mode="scalp")
-    swing.load()
-    scalp.load()
+    swing, scalp = _get_ml_instances()
+    _ml_cache["loaded_at"] = 0  # 강제 리로드
 
     result = {}
     if len(swing.X_buffer) >= swing.min_trades_to_train:
@@ -663,3 +751,61 @@ async def retrain_ml():
         result["scalp"] = f"Not enough data ({len(scalp.X_buffer)}/{scalp.min_trades_to_train})"
 
     return result
+
+
+@app.post("/api/ml/history-learn")
+async def trigger_history_learn():
+    """수동 역사 백필 학습 트리거"""
+    swing, scalp = _get_ml_instances()
+    _ml_cache["loaded_at"] = 0
+
+    from src.strategy.historical_learner import HistoricalLearner
+    learner = HistoricalLearner(db, swing, scalp)
+    stats = await learner.run_backfill("15m", lookback=2000, step=5)
+
+    return {
+        "total_learned": stats["total"],
+        "wins": stats["wins"],
+        "losses": stats["losses"],
+        "win_rate": stats["wins"] / max(stats["total"], 1) * 100,
+        "swing_buffer": len(swing.X_buffer),
+        "scalp_buffer": len(scalp.X_buffer),
+    }
+
+
+@app.get("/api/ml/history")
+async def ml_history():
+    """ML 학습 결과 내역"""
+    swing, scalp = _get_ml_instances()
+
+    def parse_result(r):
+        if isinstance(r, dict):
+            return r.get("pnl_pct", 0), r.get("timestamp", 0)
+        return r, 0
+
+    swing_trades = []
+    for i, r in enumerate(list(swing.recent_results)):
+        pnl, ts = parse_result(r)
+        swing_trades.append({
+            "id": i + 1, "mode": "swing",
+            "pnl_pct": round(pnl, 3),
+            "result": "WIN" if pnl > 0 else "LOSS",
+            "timestamp": ts,
+        })
+
+    scalp_trades = []
+    for i, r in enumerate(list(scalp.recent_results)):
+        pnl, ts = parse_result(r)
+        scalp_trades.append({
+            "id": i + 1, "mode": "scalp",
+            "pnl_pct": round(pnl, 3),
+            "result": "WIN" if pnl > 0 else "LOSS",
+            "timestamp": ts,
+        })
+
+    return {
+        "swing_trades": swing_trades[-50:],  # 최근 50개
+        "scalp_trades": scalp_trades[-50:],
+        "swing_total": len(swing_trades),
+        "scalp_total": len(scalp_trades),
+    }

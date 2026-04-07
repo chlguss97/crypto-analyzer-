@@ -28,12 +28,12 @@ class FundingRateIndicator(BaseIndicator):
         # 24시간 평균 펀딩비
         if funding_history:
             recent = funding_history[-3:]  # 8시간 × 3 = 24시간
-            avg_rate_24h = sum(r.get("funding_rate", 0) for r in recent) / len(recent) \
-                if recent else 0
+            rates = [r.get("funding_rate") or 0 for r in recent]
+            avg_rate_24h = sum(rates) / len(rates) if rates else 0
 
         # 추세
         if len(funding_history) >= 2:
-            prev = funding_history[-2].get("funding_rate", 0) if len(funding_history) >= 2 else 0
+            prev = (funding_history[-2].get("funding_rate") or 0) if len(funding_history) >= 2 else 0
             if current_rate > prev:
                 trend = "increasing"
             elif current_rate < prev:

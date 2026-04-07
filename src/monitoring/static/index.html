@@ -609,63 +609,224 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
   <!-- ══ Machine Learning Tab ══ -->
   <div class="tab-content" id="tab-ml">
 
-    <!-- ML Control -->
-    <div class="grid" style="grid-template-columns: 1fr 1fr 1fr;">
-
-      <div class="card">
-        <div class="card-header"><span class="card-title">ML Engine</span></div>
-        <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px;">
-          <span style="font-size:14px;font-weight:600;">Machine Learning</span>
+    <!-- ML Status Bar -->
+    <div class="card" style="margin-bottom:14px;padding:16px 22px;">
+      <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div id="mlPulse" style="width:10px;height:10px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);animation:pulse 2s infinite;"></div>
+          <span style="font-size:14px;font-weight:600;">ML Engine</span>
           <label class="toggle-switch">
             <input type="checkbox" id="mlToggle" onchange="toggleML()" checked>
             <span class="toggle-slider"></span>
           </label>
           <span class="auto-status" id="mlStatus" style="color:var(--green)">ON</span>
         </div>
-        <div class="metric"><span class="metric-label">Active Model</span><span class="metric-value" id="mlActiveModel">BOTH</span></div>
-        <div class="btn-group" style="margin-top:14px;">
-          <button class="btn btn-resume" onclick="retrainML()">Retrain Now</button>
+        <div style="width:1px;height:24px;background:var(--border);"></div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="font-size:12px;color:var(--text-muted);font-weight:600;">Model:</span>
+          <span class="metric-value" id="mlActiveModel" style="font-size:14px;">BOTH</span>
         </div>
-        <div id="mlRetrainMsg" style="margin-top:8px;font-size:11px;color:var(--text-muted);"></div>
+        <div style="width:1px;height:24px;background:var(--border);"></div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="font-size:12px;color:var(--text-muted);font-weight:600;">Swing:</span>
+          <span id="mlSwingLive" style="font-size:12px;font-weight:600;color:var(--text-muted);">--</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="font-size:12px;color:var(--text-muted);font-weight:600;">Scalp:</span>
+          <span id="mlScalpLive" style="font-size:12px;font-weight:600;color:var(--text-muted);">--</span>
+        </div>
+        <div style="flex:1"></div>
+        <button class="btn btn-resume" onclick="retrainML()" style="padding:6px 14px;font-size:11px;">Retrain Now</button>
+        <div id="mlRetrainMsg" style="font-size:11px;color:var(--text-muted);"></div>
       </div>
+    </div>
+    <style>@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}</style>
+
+    <!-- Market Regime -->
+    <div class="card" style="margin-bottom:24px;">
+      <div class="card-header"><span class="card-title">Market Regime</span></div>
+      <div class="grid" style="grid-template-columns: 1fr 2fr 2fr;">
+        <div style="text-align:center;">
+          <div class="big-num" id="regimeName" style="font-size:22px;">--</div>
+          <span class="big-sub" id="regimeDesc">detecting...</span>
+          <div style="margin-top:8px;">
+            <span style="font-size:11px;color:var(--text-muted);">Confidence:</span>
+            <span class="metric-value" id="regimeConf" style="font-size:13px;">--</span>
+          </div>
+        </div>
+        <div>
+          <div class="metric"><span class="metric-label">ADX</span><span class="metric-value" id="regimeADX">--</span></div>
+          <div class="metric"><span class="metric-label">+DI / -DI</span><span class="metric-value" id="regimeDI">--</span></div>
+          <div class="metric"><span class="metric-label">BB Width %ile</span><span class="metric-value" id="regimeBB">--</span></div>
+          <div class="metric"><span class="metric-label">ATR%</span><span class="metric-value" id="regimeATR">--</span></div>
+          <div class="metric"><span class="metric-label">EMA Alignment</span><span class="metric-value" id="regimeEMA">--</span></div>
+        </div>
+        <div>
+          <div style="font-size:11px;font-weight:600;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;">Regime Scores</div>
+          <div id="regimeScores"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Swing Regime Performance -->
+    <div class="card" style="margin-bottom:24px;">
+      <div class="card-header"><span class="card-title">Swing — Regime Models</span></div>
+      <div class="grid" style="grid-template-columns: repeat(4, 1fr); gap: 12px;">
+        <div style="text-align:center;padding:12px;border-radius:8px;background:var(--bg-surface);">
+          <div style="font-size:11px;font-weight:700;color:var(--green);margin-bottom:6px;">TRENDING UP</div>
+          <div id="swRegUp" style="font-size:11px;color:var(--text-secondary);">--</div>
+        </div>
+        <div style="text-align:center;padding:12px;border-radius:8px;background:var(--bg-surface);">
+          <div style="font-size:11px;font-weight:700;color:var(--red);margin-bottom:6px;">TRENDING DOWN</div>
+          <div id="swRegDown" style="font-size:11px;color:var(--text-secondary);">--</div>
+        </div>
+        <div style="text-align:center;padding:12px;border-radius:8px;background:var(--bg-surface);">
+          <div style="font-size:11px;font-weight:700;color:var(--yellow);margin-bottom:6px;">RANGING</div>
+          <div id="swRegRange" style="font-size:11px;color:var(--text-secondary);">--</div>
+        </div>
+        <div style="text-align:center;padding:12px;border-radius:8px;background:var(--bg-surface);">
+          <div style="font-size:11px;font-weight:700;color:var(--accent);margin-bottom:6px;">VOLATILE</div>
+          <div id="swRegVol" style="font-size:11px;color:var(--text-secondary);">--</div>
+        </div>
+      </div>
+      <div style="margin-top:12px;">
+        <div class="metric"><span class="metric-label">Train Accuracy</span><span class="metric-value" id="swTrainAcc">--</span></div>
+        <div class="metric"><span class="metric-label">OOS Accuracy (Walk-Forward)</span><span class="metric-value" id="swOOSAcc">--</span></div>
+        <div class="metric"><span class="metric-label">Ensemble Models</span><span class="metric-value" id="swEnsemble">--</span></div>
+      </div>
+    </div>
+
+    <!-- Scalp Regime Performance -->
+    <div class="card" style="margin-bottom:24px;">
+      <div class="card-header"><span class="card-title">Scalp — Regime Models</span></div>
+      <div class="grid" style="grid-template-columns: repeat(4, 1fr); gap: 12px;">
+        <div style="text-align:center;padding:12px;border-radius:8px;background:var(--bg-surface);">
+          <div style="font-size:11px;font-weight:700;color:var(--green);margin-bottom:6px;">TRENDING UP</div>
+          <div id="scRegUp" style="font-size:11px;color:var(--text-secondary);">--</div>
+        </div>
+        <div style="text-align:center;padding:12px;border-radius:8px;background:var(--bg-surface);">
+          <div style="font-size:11px;font-weight:700;color:var(--red);margin-bottom:6px;">TRENDING DOWN</div>
+          <div id="scRegDown" style="font-size:11px;color:var(--text-secondary);">--</div>
+        </div>
+        <div style="text-align:center;padding:12px;border-radius:8px;background:var(--bg-surface);">
+          <div style="font-size:11px;font-weight:700;color:var(--yellow);margin-bottom:6px;">RANGING</div>
+          <div id="scRegRange" style="font-size:11px;color:var(--text-secondary);">--</div>
+        </div>
+        <div style="text-align:center;padding:12px;border-radius:8px;background:var(--bg-surface);">
+          <div style="font-size:11px;font-weight:700;color:var(--accent);margin-bottom:6px;">VOLATILE</div>
+          <div id="scRegVol" style="font-size:11px;color:var(--text-secondary);">--</div>
+        </div>
+      </div>
+      <div style="margin-top:12px;">
+        <div class="metric"><span class="metric-label">Train Accuracy</span><span class="metric-value" id="scTrainAcc">--</span></div>
+        <div class="metric"><span class="metric-label">OOS Accuracy (Walk-Forward)</span><span class="metric-value" id="scOOSAcc">--</span></div>
+        <div class="metric"><span class="metric-label">Ensemble Models</span><span class="metric-value" id="scEnsemble">--</span></div>
+      </div>
+    </div>
+
+    <!-- ML Models -->
+    <div class="grid" style="grid-template-columns: 1fr 1fr;">
 
       <div class="card">
         <div class="card-header"><span class="card-title">Swing Model</span></div>
-        <div class="big-num" id="mlSwingTrades" style="font-size:28px;">--</div>
-        <div class="big-sub">Total Trades Learned</div>
+        <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:4px;">
+          <div class="big-num" id="mlSwingTrades" style="font-size:32px;">--</div>
+          <span class="big-sub">trades learned</span>
+        </div>
         <div style="margin-top:14px;">
           <div class="metric"><span class="metric-label">Status</span><span class="metric-value" id="mlSwingStatus">--</span></div>
           <div class="metric"><span class="metric-label">Entry Threshold</span><span class="metric-value" id="mlSwingThreshold">--</span></div>
-          <div class="metric"><span class="metric-label">Recent WR</span><span class="metric-value" id="mlSwingWR">--</span></div>
-          <div class="metric"><span class="metric-label">Buffer Size</span><span class="metric-value" id="mlSwingBuffer">--</span></div>
+          <div class="metric"><span class="metric-label">Recent Win Rate</span><span class="metric-value" id="mlSwingWR">--</span></div>
+          <div class="metric"><span class="metric-label">Data Buffer</span><span class="metric-value" id="mlSwingBuffer">--</span></div>
+        </div>
+        <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);">
+          <span class="card-title">Weights</span>
+          <div id="mlSwingWeights" style="margin-top:10px;"></div>
         </div>
       </div>
 
       <div class="card">
         <div class="card-header"><span class="card-title">Scalp Model</span></div>
-        <div class="big-num" id="mlScalpTrades" style="font-size:28px;">--</div>
-        <div class="big-sub">Total Trades Learned</div>
+        <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:4px;">
+          <div class="big-num" id="mlScalpTrades" style="font-size:32px;">--</div>
+          <span class="big-sub">trades learned</span>
+        </div>
         <div style="margin-top:14px;">
           <div class="metric"><span class="metric-label">Status</span><span class="metric-value" id="mlScalpStatus">--</span></div>
           <div class="metric"><span class="metric-label">Entry Threshold</span><span class="metric-value" id="mlScalpThreshold">--</span></div>
-          <div class="metric"><span class="metric-label">Recent WR</span><span class="metric-value" id="mlScalpWR">--</span></div>
-          <div class="metric"><span class="metric-label">Buffer Size</span><span class="metric-value" id="mlScalpBuffer">--</span></div>
+          <div class="metric"><span class="metric-label">Recent Win Rate</span><span class="metric-value" id="mlScalpWR">--</span></div>
+          <div class="metric"><span class="metric-label">Data Buffer</span><span class="metric-value" id="mlScalpBuffer">--</span></div>
+        </div>
+        <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);">
+          <span class="card-title">Weights</span>
+          <div id="mlScalpWeights" style="margin-top:10px;"></div>
         </div>
       </div>
 
     </div>
 
-    <!-- Weights -->
+    <!-- Paper Trading Stats -->
+    <div class="card" style="margin-bottom:24px;">
+      <div class="card-header"><span class="card-title">Paper Trading (ML Learning)</span></div>
+      <div class="grid" style="grid-template-columns: repeat(5, 1fr); gap: 16px; margin-bottom: 16px;">
+        <div style="text-align:center;">
+          <div class="big-num" id="paperTotal" style="font-size:28px;">0</div>
+          <span class="big-sub">Total</span>
+        </div>
+        <div style="text-align:center;">
+          <div class="big-num" id="paperWins" style="font-size:28px;color:var(--green);">0</div>
+          <span class="big-sub">Wins</span>
+        </div>
+        <div style="text-align:center;">
+          <div class="big-num" id="paperLosses" style="font-size:28px;color:var(--red);">0</div>
+          <span class="big-sub">Losses</span>
+        </div>
+        <div style="text-align:center;">
+          <div class="big-num" id="paperWR" style="font-size:28px;">0%</div>
+          <span class="big-sub">Win Rate</span>
+        </div>
+        <div style="text-align:center;">
+          <div class="big-num" id="paperPnL" style="font-size:28px;">$0</div>
+          <span class="big-sub">Total P&L</span>
+        </div>
+      </div>
+      <div style="overflow-x:auto;max-height:350px;overflow-y:auto;">
+        <table class="trade-table">
+          <thead>
+            <tr><th>Time</th><th>Mode</th><th>Direction</th><th>Entry</th><th>Exit</th><th>P&L %</th><th>P&L $</th><th>Reason</th></tr>
+          </thead>
+          <tbody id="paperTradesBody">
+            <tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:28px;">No paper trades yet — waiting for signals...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ML Trade History -->
     <div class="grid" style="grid-template-columns: 1fr 1fr;">
 
       <div class="card">
-        <div class="card-header"><span class="card-title">Swing Weights (Auto-Adjusted)</span></div>
-        <div id="mlSwingWeights"></div>
+        <div class="card-header"><span class="card-title">Swing Trade History (ML)</span></div>
+        <div style="overflow-x:auto;max-height:300px;overflow-y:auto;">
+          <table class="trade-table">
+            <thead><tr><th>#</th><th>Time</th><th>Result</th><th>P&L %</th><th>Cumulative</th></tr></thead>
+            <tbody id="mlSwingHistory">
+              <tr><td colspan="4" style="text-align:center;color:var(--text-muted);padding:20px;">No data</td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <div class="card">
-        <div class="card-header"><span class="card-title">Scalp Weights (Auto-Adjusted)</span></div>
-        <div id="mlScalpWeights"></div>
+        <div class="card-header"><span class="card-title">Scalp Trade History (ML)</span></div>
+        <div style="overflow-x:auto;max-height:300px;overflow-y:auto;">
+          <table class="trade-table">
+            <thead><tr><th>#</th><th>Time</th><th>Result</th><th>P&L %</th><th>Cumulative</th></tr></thead>
+            <tbody id="mlScalpHistory">
+              <tr><td colspan="4" style="text-align:center;color:var(--text-muted);padding:20px;">No data</td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
 
     </div>
@@ -1131,6 +1292,68 @@ async function updateMLStatus() {
   document.getElementById('mlScalpBuffer').textContent = sc.buffer_size||0;
   renderWeights('mlSwingWeights', sw.weights||{});
   renderWeights('mlScalpWeights', sc.weights||{});
+
+  // Live status text
+  document.getElementById('mlSwingLive').textContent = sw.trained ? `TRAINED (WR ${sw.recent_win_rate||0}%)` : 'LEARNING...';
+  document.getElementById('mlSwingLive').style.color = sw.trained ? 'var(--green)' : 'var(--yellow)';
+  document.getElementById('mlScalpLive').textContent = sc.trained ? `TRAINED (WR ${sc.recent_win_rate||0}%)` : 'LEARNING...';
+  document.getElementById('mlScalpLive').style.color = sc.trained ? 'var(--green)' : 'var(--yellow)';
+
+  // Pulse color
+  const pulse = document.getElementById('mlPulse');
+  if (on) { pulse.style.background = 'var(--green)'; pulse.style.boxShadow = '0 0 8px var(--green)'; }
+  else { pulse.style.background = 'var(--text-muted)'; pulse.style.boxShadow = 'none'; pulse.style.animation = 'none'; }
+
+  // Swing regime performance
+  renderRegimePerf('sw', sw);
+  document.getElementById('swTrainAcc').textContent = ((sw.train_accuracy||0)*100).toFixed(1)+'%';
+  const swOosEl = document.getElementById('swOOSAcc');
+  const swOos = (sw.oos_accuracy||0)*100;
+  swOosEl.textContent = swOos.toFixed(1)+'%';
+  swOosEl.className = 'metric-value '+(swOos>=50?'positive':swOos>=35?'neutral':'negative');
+  document.getElementById('swEnsemble').textContent = `${sw.ensemble_count||0} models across ${(sw.regime_models||[]).length} regimes`;
+
+  // Scalp regime performance
+  renderRegimePerf('sc', sc);
+  document.getElementById('scTrainAcc').textContent = ((sc.train_accuracy||0)*100).toFixed(1)+'%';
+  const scOosEl = document.getElementById('scOOSAcc');
+  const scOos = (sc.oos_accuracy||0)*100;
+  scOosEl.textContent = scOos.toFixed(1)+'%';
+  scOosEl.className = 'metric-value '+(scOos>=50?'positive':scOos>=35?'neutral':'negative');
+  document.getElementById('scEnsemble').textContent = `${sc.ensemble_count||0} models across ${(sc.regime_models||[]).length} regimes`;
+
+  // Trade history
+  await updateMLHistory();
+}
+
+async function updateMLHistory() {
+  const data = await api('/api/ml/history');
+  if (!data) return;
+
+  renderMLTable('mlSwingHistory', data.swing_trades || []);
+  renderMLTable('mlScalpHistory', data.scalp_trades || []);
+}
+
+function renderMLTable(elId, trades) {
+  const el = document.getElementById(elId);
+  if (!trades.length) {
+    el.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:20px;">No data yet</td></tr>';
+    return;
+  }
+  let cum = 0;
+  el.innerHTML = trades.map(t => {
+    cum += t.pnl_pct;
+    const cls = t.pnl_pct > 0 ? 'positive' : 'negative';
+    const rc = cum >= 0 ? 'positive' : 'negative';
+    const time = t.timestamp ? new Date(t.timestamp).toLocaleString('ko', {month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'}) : '--';
+    return `<tr>
+      <td style="color:var(--text-muted)">${t.id}</td>
+      <td style="color:var(--text-secondary);font-size:10.5px;">${time}</td>
+      <td><span style="font-weight:700;color:${t.result==='WIN'?'var(--green)':'var(--red)'}">${t.result}</span></td>
+      <td class="${cls}" style="font-weight:600">${t.pnl_pct>=0?'+':''}${t.pnl_pct.toFixed(2)}%</td>
+      <td class="${rc}" style="font-weight:600">${cum>=0?'+':''}${cum.toFixed(2)}%</td>
+    </tr>`;
+  }).join('');
 }
 
 function renderWeights(elId, weights) {
@@ -1150,15 +1373,127 @@ function renderWeights(elId, weights) {
   }).join('');
 }
 
+// ── Market Regime ──
+const REGIME_COLORS = {
+  'trending_up': 'var(--green)', 'trending_down': 'var(--red)',
+  'ranging': 'var(--yellow)', 'volatile': 'var(--accent)'
+};
+const REGIME_LABELS = {
+  'trending_up': 'TRENDING UP', 'trending_down': 'TRENDING DOWN',
+  'ranging': 'RANGING', 'volatile': 'VOLATILE'
+};
+async function updateRegime() {
+  const data = await api('/api/regime');
+  if (!data || !data.regime) return;
+
+  const el = document.getElementById('regimeName');
+  el.textContent = REGIME_LABELS[data.regime] || data.regime;
+  el.style.color = REGIME_COLORS[data.regime] || 'var(--text-primary)';
+
+  const strat = data.strategy || {};
+  document.getElementById('regimeDesc').textContent = strat.description || '';
+  document.getElementById('regimeConf').textContent = ((data.confidence||0)*100).toFixed(0)+'%';
+  document.getElementById('regimeADX').textContent = data.adx||'--';
+  document.getElementById('regimeDI').textContent = `+${(data.plus_di||0).toFixed(1)} / -${(data.minus_di||0).toFixed(1)}`;
+  document.getElementById('regimeBB').textContent = (data.bb_width_pctile||0).toFixed(0)+'%';
+  document.getElementById('regimeATR').textContent = (data.atr_pct||0).toFixed(3)+'%';
+  document.getElementById('regimeEMA').textContent = (data.ema_alignment||'--').toUpperCase();
+
+  // Regime scores bars
+  const scores = data.scores || {};
+  const maxScore = Math.max(...Object.values(scores), 1);
+  const scoresEl = document.getElementById('regimeScores');
+  scoresEl.innerHTML = Object.entries(scores).map(([k,v]) => {
+    const pct = Math.min(100, v/maxScore*100);
+    const c = REGIME_COLORS[k] || 'var(--text-muted)';
+    const label = REGIME_LABELS[k] || k;
+    return `<div style="display:flex;align-items:center;gap:6px;margin-bottom:5px;">
+      <span style="width:90px;font-size:10px;color:var(--text-secondary);">${label}</span>
+      <div style="flex:1;height:5px;background:var(--border);border-radius:3px;overflow:hidden;">
+        <div style="width:${pct}%;height:100%;background:${c};border-radius:3px;"></div>
+      </div>
+      <span style="width:28px;text-align:right;font-size:10px;font-family:'JetBrains Mono',monospace;">${v.toFixed(1)}</span>
+    </div>`;
+  }).join('');
+}
+
+function renderRegimePerf(prefix, stats) {
+  if (!stats || !stats.regime_stats) return;
+  const rs = stats.regime_stats;
+  const ids = {
+    'trending_up': prefix+'RegUp', 'trending_down': prefix+'RegDown',
+    'ranging': prefix+'RegRange', 'volatile': prefix+'RegVol'
+  };
+  for (const [regime, elId] of Object.entries(ids)) {
+    const s = rs[regime];
+    if (!s) continue;
+    const el = document.getElementById(elId);
+    if (!el) continue;
+    const wr = s.win_rate||0;
+    const wrColor = wr>=50?'var(--green)':wr>=35?'var(--yellow)':'var(--red)';
+    el.innerHTML = `
+      <div>Trades: <b>${s.trades}</b></div>
+      <div>WR: <b style="color:${wrColor}">${wr.toFixed(1)}%</b></div>
+      <div>OOS: <b>${(s.oos_accuracy*100).toFixed(1)}%</b></div>
+      <div>Buffer: <b>${s.buffer_size||0}</b></div>
+      <div>Model: ${s.has_model?'<span style="color:var(--green)">YES</span>':'<span style="color:var(--text-muted)">NO</span>'}</div>
+    `;
+  }
+}
+
+// ── Paper Trading Stats ──
+async function updatePaperStats() {
+  const data = await api('/api/paper/stats');
+  if (!data) return;
+  document.getElementById('paperTotal').textContent = data.total||0;
+  document.getElementById('paperWins').textContent = data.wins||0;
+  document.getElementById('paperLosses').textContent = data.losses||0;
+  document.getElementById('paperWR').textContent = (data.win_rate||0).toFixed(1)+'%';
+  const pnl = data.total_pnl||0;
+  const pnlEl = document.getElementById('paperPnL');
+  pnlEl.textContent = (pnl>=0?'+':'')+pnl.toFixed(2);
+  pnlEl.style.color = pnl>=0?'var(--green)':'var(--red)';
+
+  const tbody = document.getElementById('paperTradesBody');
+  const trades = data.recent_trades||[];
+  if (!trades.length) {
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:28px;">No paper trades yet — waiting for signals...</td></tr>';
+    return;
+  }
+  tbody.innerHTML = trades.map(t => {
+    const time = new Date(t.entry_time).toLocaleString('ko',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+    const mode = (t.grade||'').replace('PAPER_','');
+    const dirColor = t.direction==='long'?'var(--green)':'var(--red)';
+    const pnlPct = t.pnl_pct||0;
+    const pnlUsd = t.pnl_usdt||0;
+    const pnlColor = pnlPct>=0?'var(--green)':'var(--red)';
+    const reason = (t.exit_reason||'').replace('paper_','');
+    return `<tr>
+      <td style="color:var(--text-secondary);font-size:11px;">${time}</td>
+      <td style="font-weight:600;font-size:11px;">${mode}</td>
+      <td style="color:${dirColor};font-weight:700;">${(t.direction||'').toUpperCase()}</td>
+      <td>$${fmt(t.entry_price,0)}</td>
+      <td>${t.exit_price?'$'+fmt(t.exit_price,0):'--'}</td>
+      <td style="color:${pnlColor};font-weight:600;">${pnlPct>=0?'+':''}${pnlPct.toFixed(2)}%</td>
+      <td style="color:${pnlColor};font-weight:600;">$${pnlUsd>=0?'+':''}${pnlUsd.toFixed(2)}</td>
+      <td style="color:var(--text-muted);font-size:11px;">${reason}</td>
+    </tr>`;
+  }).join('');
+}
+
 // ── Refresh ──
 async function refreshAll() {
   await Promise.all([updateStatus(), updateMarket(), updatePosition(), updateSignals(), updateTrades(), updateLivePositions(), updateTicker()]);
 }
 refreshAll();
 updateMLStatus();
+updatePaperStats();
+updateRegime();
 setInterval(refreshAll, 5000);
 setInterval(updateTicker, 2000);
 setInterval(updateMLStatus, 10000);
+setInterval(updatePaperStats, 10000);
+setInterval(updateRegime, 15000);
 
 </script>
 </body>

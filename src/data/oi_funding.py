@@ -66,9 +66,9 @@ class OIFundingCollector:
             data = response.get("data", [])
             if data:
                 return {
-                    "current_rate": float(data[0].get("fundingRate", 0)),
-                    "next_rate": float(data[0].get("nextFundingRate", 0)),
-                    "funding_time": int(data[0].get("fundingTime", 0)),
+                    "current_rate": float(data[0].get("fundingRate") or 0),
+                    "next_rate": float(data[0].get("nextFundingRate") or 0),
+                    "funding_time": int(data[0].get("fundingTime") or 0),
                 }
         except Exception as e:
             logger.error(f"펀딩비 조회 실패: {e}")

@@ -15,7 +15,7 @@ class Position:
     def __init__(self, trade_id: int, symbol: str, direction: str,
                  entry_price: float, size: float, leverage: int,
                  sl_price: float, tp1_price: float, tp2_price: float,
-                 grade: str, score: float):
+                 grade: str, score: float, signals_snapshot: dict = None):
         self.trade_id = trade_id
         self.symbol = symbol
         self.direction = direction
@@ -33,6 +33,7 @@ class Position:
         self.tier = 0                     # 트레일링 단계
         self.total_fee = 0.0
         self.funding_cost = 0.0
+        self.signals_snapshot = signals_snapshot or {}
 
     @property
     def hold_minutes(self) -> int:
@@ -134,6 +135,7 @@ class PositionManager:
             tp2_price=trade_request["tp2_price"],
             grade=trade_request["grade"],
             score=trade_request["score"],
+            signals_snapshot=trade_request.get("signals_snapshot", {}),
         )
         pos.total_fee = float(fee)
         self.positions[symbol] = pos
@@ -320,13 +322,13 @@ class PositionManager:
             f"보유: {pos.hold_minutes}분 | 수수료: ${pos.total_fee:.2f}"
         )
 
-        # ML 학습 콜백
+        # ML 학습 콜백 (실거래 시그널 데이터 포함)
         if self.on_trade_closed:
             mode = "scalp" if pos.grade == "SCALP" else "swing"
             try:
-                await self.on_trade_closed(mode, {}, pnl_pct)
-            except Exception:
-                pass
+                await self.on_trade_closed(mode, pos.signals_snapshot, pnl_pct)
+            except Exception as e:
+                logger.error(f"ML 콜백 에러: {e}")
 
         return {"pnl_pct": pnl_pct, "pnl_usdt": pnl_usdt}
 

@@ -262,7 +262,9 @@ class RedisClient:
     async def hset(self, key: str, mapping: dict):
         if not self._client:
             return
-        await self._client.hset(key, mapping=mapping)
+        # Redis 3.x 호환: hset(mapping=) 대신 개별 hset 사용
+        for field, value in mapping.items():
+            await self._client.hset(key, field, value)
 
     async def hgetall(self, key: str) -> dict:
         if not self._client:
