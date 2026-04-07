@@ -323,6 +323,7 @@ class HistoricalLearner:
                 sl_dist = result.get("sl_distance", entry_price * 0.002)
                 tp_dist = result.get("tp_distance", sl_dist * 2)
                 leverage = 25
+                is_explosive = result.get("explosive_mode", False)
 
                 if direction == "long":
                     sl = entry_price - sl_dist
@@ -505,6 +506,112 @@ class HistoricalLearner:
 
             logger.info(f"[HIST] {regime} 집중 학습: {learned}건")
 
+    async def _explosive_focused_learn(self, symbol: str = "BTC/USDT:USDT"):
+        """급변동 구간 집중 학습 — ATR 급등 구간을 찾아서 Scalp ML 강화"""
+        from src.strategy.scalp_engine import ScalpEngine
+
+        logger.info("[HIST] 급변동 구간 집중 학습 시작...")
+
+        candles_5m = await self.db.get_candles(symbol, "5m", limit=5000)
+        candles_1m = await self.db.get_candles(symbol, "1m", limit=10000)
+
+        if not candles_5m or len(candles_5m) < 200 or not candles_1m or len(candles_1m) < 200:
+            logger.info("[HIST] 급변동 학습: 캔들 부족")
+            return
+
+        df_5m = BaseIndicator.to_dataframe(candles_5m)
+        df_1m = BaseIndicator.to_dataframe(candles_1m)
+
+        # ATR 급등 구간 찾기 (5m 기준)
+        high = df_5m["high"].values
+        low = df_5m["low"].values
+        close = df_5m["close"].values
+        tr = np.maximum(high[1:] - low[1:],
+                        np.maximum(np.abs(high[1:] - close[:-1]),
+                                   np.abs(low[1:] - close[:-1])))
+
+        explosive_indices = []
+        for i in range(20, len(tr)):
+            recent = np.mean(tr[i-3:i])
+            avg = np.mean(tr[i-20:i])
+            if avg > 0 and recent / avg >= 2.0:
+                explosive_indices.append(i + 1)  # df index (tr은 1부터)
+
+        if not explosive_indices:
+            logger.info("[HIST] 급변동 구간 없음")
+            return
+
+        logger.info(f"[HIST] 급변동 구간 {len(explosive_indices)}개 발견")
+
+        scalp_engine = ScalpEngine()
+        learned = 0
+        max_hold = 6
+
+        for idx in explosive_indices:
+            if idx + max_hold >= len(df_5m) or idx < 60:
+                continue
+
+            try:
+                df_5m_slice = df_5m.iloc[:idx + 1].copy().reset_index(drop=True)
+                entry_price = float(df_5m_slice["close"].iloc[-1])
+                ts = float(df_5m_slice["timestamp"].iloc[-1])
+                entry_hour = datetime.fromtimestamp(ts / 1000, tz=timezone.utc).hour
+
+                mask = df_1m["timestamp"] <= ts
+                df_1m_slice = df_1m[mask].tail(100).copy().reset_index(drop=True)
+                if len(df_1m_slice) < 25:
+                    continue
+
+                result = await scalp_engine.analyze(df_1m_slice, df_5m_slice, None)
+                direction = result.get("direction", "neutral")
+                if direction == "neutral":
+                    continue
+
+                future = df_5m.iloc[idx + 1:idx + 1 + max_hold]
+                if len(future) < 2:
+                    continue
+
+                sl_dist = result.get("sl_distance", entry_price * 0.002)
+                tp_dist = result.get("tp_distance", sl_dist * 2)
+
+                exit_price = None
+                for bar_idx in range(len(future)):
+                    h = float(future["high"].iloc[bar_idx])
+                    l = float(future["low"].iloc[bar_idx])
+                    if direction == "long":
+                        if l <= entry_price - sl_dist:
+                            exit_price = entry_price - sl_dist; break
+                        if h >= entry_price + tp_dist:
+                            exit_price = entry_price + tp_dist; break
+                    else:
+                        if h >= entry_price + sl_dist:
+                            exit_price = entry_price + sl_dist; break
+                        if l <= entry_price - tp_dist:
+                            exit_price = entry_price - tp_dist; break
+
+                if exit_price is None:
+                    exit_price = float(future["close"].iloc[-1])
+
+                if direction == "long":
+                    raw_pnl = (exit_price - entry_price) / entry_price * 100 * 25
+                else:
+                    raw_pnl = (entry_price - exit_price) / entry_price * 100 * 25
+                net_pnl = raw_pnl - self.FEE_RATE * 2 * 25 * 100
+
+                regime = self.regime_detector.detect(df_5m_slice)
+                meta = {"atr_pct": result.get("atr_pct", 0.3), "hour": entry_hour,
+                        "regime": regime["regime"]}
+                self.ml_scalp.record_trade(result.get("signals", {}), meta, net_pnl)
+                learned += 1
+
+            except Exception:
+                continue
+
+            if learned % 30 == 0 and learned > 0:
+                await asyncio.sleep(0.1)
+
+        logger.info(f"[HIST] 급변동 집중 학습 완료: {learned}건 (Scalp)")
+
     async def run_daily_study(self, symbol: str = "BTC/USDT:USDT"):
         """
         일일 학습 v2 — 90일 캔들 수집 + 파라미터 다양화 + 레짐 집중 + 성능 자동 조정
@@ -532,7 +639,10 @@ class HistoricalLearner:
         # 4) 부족한 레짐 집중 학습
         await self._regime_focused_learn()
 
-        # 5) 성능 자동 조정 — OOS가 낮으면 step 줄여서 추가 학습
+        # 5) 급변동 구간 집중 학습 (Scalp 강화)
+        await self._explosive_focused_learn()
+
+        # 6) 성능 자동 조정 — OOS가 낮으면 step 줄여서 추가 학습
         swing_oos = self.ml_swing.oos_accuracy
         scalp_oos = self.ml_scalp.oos_accuracy
 

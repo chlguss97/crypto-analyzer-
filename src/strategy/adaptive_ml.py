@@ -74,8 +74,10 @@ class AdaptiveML:
             }
         else:
             return {
-                "bb_breakout": 3.0, "ema_cross": 2.5, "rsi_reversal": 2.0,
-                "volume_spike": 2.0, "momentum": 1.5,
+                "vol_explosion": 3.5, "range_breakout": 3.5,
+                "bb_breakout": 3.0, "ema_cross": 2.5, "rapid_momentum": 2.5,
+                "rsi_reversal": 2.0, "volume_spike": 2.0, "candle_pattern": 2.0,
+                "momentum": 1.5,
             }
 
     # ── 강화 피처 엔지니어링 ──
