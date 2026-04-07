@@ -20,8 +20,12 @@ class RSIIndicator(BaseIndicator):
         loss = (-delta).where(delta < 0, 0.0)
         avg_gain = gain.ewm(alpha=1 / period, min_periods=period, adjust=False).mean()
         avg_loss = loss.ewm(alpha=1 / period, min_periods=period, adjust=False).mean()
-        rs = avg_gain / avg_loss.replace(0, np.inf)
-        return 100 - (100 / (1 + rs))
+        # 0으로 나누기 방지 + inf 처리
+        rs = avg_gain / avg_loss.replace(0, np.nan)
+        rsi = 100 - (100 / (1 + rs))
+        # avg_loss가 0이면 RSI는 100 (강한 상승)
+        rsi = rsi.fillna(100).clip(0, 100)
+        return rsi
 
     def _find_swing_points(self, series: pd.Series, strength: int = 5) -> list[tuple]:
         """스윙 고점/저점 찾기 → (index, value, 'high'|'low')"""

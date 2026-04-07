@@ -182,9 +182,10 @@ class MetaLearner:
         adjustments = {}
         max_imp = max(feature_importance.values()) if feature_importance else 0
 
+        if max_imp <= 0:
+            return {}
+
         for key, imp in feature_importance.items():
-            if max_imp == 0:
-                continue
             ratio = imp / max_imp
             old_weight = ml.weights.get(key, 0)
 

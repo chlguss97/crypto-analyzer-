@@ -248,7 +248,12 @@ class HistoricalLearner:
                     sl = entry_price
 
         if exit_price is None:
+            if len(future) == 0:
+                return None
             exit_price = float(future["close"].iloc[-1])
+
+        if entry_price <= 0 or exit_price <= 0:
+            return None
 
         if direction == "long":
             raw_pnl = (exit_price - entry_price) / entry_price * 100 * leverage
@@ -353,7 +358,12 @@ class HistoricalLearner:
                             break
 
                 if exit_price is None:
+                    if len(future) == 0:
+                        continue
                     exit_price = float(future["close"].iloc[-1])
+
+                if entry_price <= 0 or exit_price <= 0:
+                    continue
 
                 if direction == "long":
                     raw_pnl = (exit_price - entry_price) / entry_price * 100 * leverage

@@ -111,7 +111,7 @@ class Database:
     async def get_candles(
         self, symbol: str, timeframe: str, limit: int = 500, since: int = None
     ) -> list[dict]:
-        """캔들 조회 (최신순 → 오래된순 정렬 반환)"""
+        """캔들 조회 (항상 시간순 ASC 정렬 반환)"""
         if since:
             cursor = await self._db.execute(
                 """SELECT timestamp, open, high, low, close, volume
@@ -120,7 +120,10 @@ class Database:
                    ORDER BY timestamp ASC LIMIT ?""",
                 (symbol, timeframe, since, limit),
             )
+            rows = await cursor.fetchall()
+            return [dict(r) for r in rows]
         else:
+            # 최신 N개를 가져온 후 시간순으로 뒤집어 반환
             cursor = await self._db.execute(
                 """SELECT timestamp, open, high, low, close, volume
                    FROM candles
@@ -130,8 +133,6 @@ class Database:
             )
             rows = await cursor.fetchall()
             return [dict(r) for r in reversed(rows)]
-        rows = await cursor.fetchall()
-        return [dict(r) for r in rows]
 
     async def get_latest_candle_time(self, symbol: str, timeframe: str) -> int | None:
         """가장 최근 캔들 timestamp 조회"""

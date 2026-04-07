@@ -6,6 +6,19 @@
 
 ## 2026-04-07
 
+### 전체 코드베이스 버그 점검 및 수정 (★★★ + ★★ 11건)
+- **main.py:504**: 스캘핑 TP2가 TP1과 동일했던 치명적 버그 → TP1×1.6 거리로 수정
+- **position_manager.py**: entry_price 0 나누기 방어 + None 체크 추가
+- **historical_learner.py**: exit_price None + 빈 future 캔들 방어
+- **meta_learner.py**: max_imp 0 나누기 방어
+- **storage.py**: get_candles 정렬 일관성 (항상 ASC 반환)
+- **grader.py:110**: A+ 하향 시 GRADES[2] 중복 → A+→A, A→B+ 정상화
+- **paper_trader.py**: _regime_history IndexError 방어
+- **auto_backtest.py**: i+2 슬라이싱 범위 오버플로 방어
+- **aggregator.py**: ob_zone NaN 비교 처리 (math.isnan)
+- **rsi.py**: avg_loss=0 inf 처리 + clip(0, 100)
+- **position_manager.py**: 동시성 안전 (positions dict 체크)
+
 ### ScalpEngine v4 — 전체 점검 후 14개 버그/로직 수정
 - **버그 픽스**:
   - OB 인덱싱 (음수→양수, 정확한 탐지)

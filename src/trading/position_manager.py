@@ -154,7 +154,11 @@ class PositionManager:
 
     async def check_positions(self, current_price: float):
         """활성 포지션 체크 (15초마다 호출)"""
+        if not current_price or current_price <= 0:
+            return
         for symbol, pos in list(self.positions.items()):
+            if not pos.entry_price or pos.entry_price <= 0:
+                continue
             pnl = pos.pnl_pct(current_price)
 
             # 1. 시간 청산 체크
@@ -287,6 +291,13 @@ class PositionManager:
         if pos.remaining_size <= 0:
             return
 
+        # entry_price 무결성 체크
+        if not pos.entry_price or pos.entry_price <= 0:
+            logger.error(f"포지션 청산 실패: entry_price 무효 ({pos.entry_price})")
+            if pos.symbol in self.positions:
+                del self.positions[pos.symbol]
+            return
+
         order = await self.executor.close_position(
             pos.direction, pos.remaining_size, reason
         )
@@ -297,9 +308,9 @@ class PositionManager:
             fee = order.get("fee", {}).get("cost", 0) or 0
             pos.total_fee += float(fee)
 
-        # P&L 계산
-        pnl_pct = pos.pnl_pct(exit_price) if exit_price else 0
-        pnl_usdt = pos.size * pos.entry_price * pnl_pct / 100
+        # P&L 계산 (entry_price 0 방어)
+        pnl_pct = pos.pnl_pct(exit_price) if exit_price > 0 else 0
+        pnl_usdt = (pos.size * pos.entry_price * pnl_pct / 100) if pos.entry_price > 0 else 0
 
         # DB 업데이트
         await self.db.update_trade_exit(pos.trade_id, {
@@ -314,7 +325,8 @@ class PositionManager:
 
         # Redis 정리
         await self.redis.delete(f"pos:active:{pos.symbol}")
-        del self.positions[pos.symbol]
+        if pos.symbol in self.positions:
+            del self.positions[pos.symbol]
 
         logger.info(
             f"포지션 종료 ({reason}): {pos.direction.upper()} {pos.symbol} | "

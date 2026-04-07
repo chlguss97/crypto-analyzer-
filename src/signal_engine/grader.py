@@ -106,8 +106,8 @@ class SignalGrader:
                 and k not in ("order_block", "bollinger", "market_structure", "atr")
             )
             if not ((has_ob or has_bb) and has_structure and supporting >= 3):
-                # 조건 미달 → 한 단계 하향
-                matched_grade = GRADES[2] if grade_name == "A+" else GRADES[2]  # B+
+                # 조건 미달 → 한 단계 하향 (A+ → A, A → B+)
+                matched_grade = GRADES[1] if grade_name == "A+" else GRADES[2]
                 grade_name = matched_grade["grade"]
 
         # 연패 시 레버리지 감소

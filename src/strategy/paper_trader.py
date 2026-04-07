@@ -361,8 +361,10 @@ class PaperTrader:
 
         ml = self.ml_swing if pos.mode == "swing" else self.ml_scalp
         regime = "ranging"
-        if self.regime_detector and self.regime_detector._regime_history:
-            regime = self.regime_detector._regime_history[-1]
+        if self.regime_detector and getattr(self.regime_detector, "_regime_history", None):
+            history = self.regime_detector._regime_history
+            if len(history) > 0:
+                regime = history[-1]
         meta = {"atr_pct": 0.3, "hour": datetime.now(timezone.utc).hour, "regime": regime}
         ml.record_trade(pos.signals_snapshot, meta, net_pnl_pct)
 

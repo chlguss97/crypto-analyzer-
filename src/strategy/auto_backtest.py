@@ -82,7 +82,10 @@ class AutoBacktest:
 
             # 포지션 청산 체크
             if position:
-                exit_price = self._check_exit(position, df_5m.iloc[i:i+2])
+                end_idx = min(i + 2, len(df_5m))
+                if end_idx <= i:
+                    continue
+                exit_price = self._check_exit(position, df_5m.iloc[i:end_idx])
                 if exit_price is not None:
                     pnl_pct = self._calc_pnl(position, exit_price)
                     trades.append({

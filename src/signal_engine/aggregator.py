@@ -87,13 +87,22 @@ REALISTIC_MAX_SCORE = 12.0
 
 def _zones_overlap(signals: dict) -> bool:
     """OB 영역과 VWAP이 겹치는지 체크"""
+    import math
     ob = signals.get("order_block", {})
     vwap = signals.get("vwap", {})
     ob_zone = ob.get("ob_zone")
     vwap_price = vwap.get("session_vwap", 0)
-    if ob_zone and vwap_price:
-        return ob_zone[0] <= vwap_price <= ob_zone[1]
-    return False
+    if not ob_zone or not vwap_price or len(ob_zone) < 2:
+        return False
+    try:
+        zone_low = float(ob_zone[0])
+        zone_high = float(ob_zone[1])
+        vp = float(vwap_price)
+        if math.isnan(zone_low) or math.isnan(zone_high) or math.isnan(vp):
+            return False
+        return zone_low <= vp <= zone_high
+    except (TypeError, ValueError):
+        return False
 
 
 class SignalAggregator:

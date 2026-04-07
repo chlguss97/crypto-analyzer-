@@ -487,21 +487,24 @@ class CryptoAnalyzer:
         leverage = 25
         margin = balance * 0.008 / (sl_dist / price)
 
+        tp_dist = scalp_sig["tp_distance"]
         if direction == "long":
             sl = price - sl_dist
+            tp1 = price + tp_dist
+            tp2 = price + tp_dist * 1.6  # TP2는 TP1의 1.6배 거리
         else:
             sl = price + sl_dist
+            tp1 = price - tp_dist
+            tp2 = price - tp_dist * 1.6
 
-        tp1 = price + scalp_sig["tp_distance"] if direction == "long" else price - scalp_sig["tp_distance"]
-
-        logger.info(f"[SCALP] {direction.upper()} @ ${price:.0f} SL ${sl:.0f}")
+        logger.info(f"[SCALP] {direction.upper()} @ ${price:.0f} SL ${sl:.0f} TP1 ${tp1:.0f} TP2 ${tp2:.0f}")
 
         trade_req = {
             "symbol": self.symbol, "direction": direction,
             "grade": "SCALP", "score": scalp_sig["score"],
             "size": round(margin * leverage / price, 6),
             "leverage": leverage, "entry_price": None,
-            "sl_price": round(sl, 1), "tp1_price": round(tp1, 1), "tp2_price": round(tp1, 1),
+            "sl_price": round(sl, 1), "tp1_price": round(tp1, 1), "tp2_price": round(tp2, 1),
             "signals_snapshot": scalp_sig.get("signals", {}),
         }
         pos = await self.position_manager.open_position(trade_req)
