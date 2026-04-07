@@ -8,6 +8,7 @@ MetaLearner — ML 모델 자가 업그레이드 시스템
 """
 import logging
 import time
+from collections import deque
 import numpy as np
 from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
@@ -339,7 +340,6 @@ class MetaLearner:
         # 3) 오래된 버퍼 일부 제거 (과적합 방지)
         if "Overfitting" in str(health["issues"]):
             keep = int(len(ml.X_buffer) * 0.7)
-            from collections import deque
             ml.X_buffer = deque(list(ml.X_buffer)[-keep:], maxlen=ml.X_buffer.maxlen)
             ml.y_buffer = deque(list(ml.y_buffer)[-keep:], maxlen=ml.y_buffer.maxlen)
             logger.info(f"[META] 버퍼 30% 제거 (과적합 대응)")

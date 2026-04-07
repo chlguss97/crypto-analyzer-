@@ -38,8 +38,17 @@ class BaseIndicator(ABC):
 
     @staticmethod
     def to_dataframe(candles: list[dict]) -> pd.DataFrame:
-        """캔들 리스트 → DataFrame 변환"""
+        """캔들 리스트 → DataFrame 변환 (입력 검증 포함)"""
+        if not candles:
+            return pd.DataFrame(columns=["timestamp", "open", "high", "low", "close", "volume"])
+
         df = pd.DataFrame(candles)
-        for col in ["open", "high", "low", "close", "volume"]:
-            df[col] = df[col].astype(float)
-        return df
+        required = ["open", "high", "low", "close", "volume"]
+        for col in required:
+            if col not in df.columns:
+                raise ValueError(f"to_dataframe: 필수 컬럼 누락 - {col}")
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+
+        # NaN/Inf 행 제거
+        df = df.dropna(subset=required)
+        return df.reset_index(drop=True)

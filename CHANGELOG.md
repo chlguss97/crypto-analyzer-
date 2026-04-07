@@ -6,6 +6,18 @@
 
 ## 2026-04-07
 
+### 전체 코드베이스 버그 점검 ★ 항목 (10건)
+- **bollinger.py**: NaN 비교 방어 (`pd.isna` 체크) + 데이터 부족 시 안전 반환
+- **executor.py**: API 키 로그 노출 방지 (예외 메시지 마스킹)
+- **candle_collector.py**: 무한 루프 방어 (max_iterations + new_current 체크)
+- **adaptive_ml.py**: 조용한 실패 → debug 로그 추가 (GBM/RF/LR 학습 실패 추적 가능)
+- **paper_trader.py**: shadows 동시 수정 안전 (인덱스 → 객체 기반 제거)
+- **base.py**: `to_dataframe` 입력 검증 + NaN 행 제거 + 빈 캔들 방어
+- **meta_learner.py**: deque import 함수 밖으로 이동 (성능)
+- **main.py**: 스케줄러 예외 `exc_info=True` 추가 (디버깅 용이)
+- **grader.py**: 입력 검증 강화 (이미 .get() 안전)
+- **rsi.py**: inf 처리 (이미 수정됨)
+
 ### 전체 코드베이스 버그 점검 및 수정 (★★★ + ★★ 11건)
 - **main.py:504**: 스캘핑 TP2가 TP1과 동일했던 치명적 버그 → TP1×1.6 거리로 수정
 - **position_manager.py**: entry_price 0 나누기 방어 + None 체크 추가

@@ -19,15 +19,21 @@ class BollingerIndicator(BaseIndicator):
         period = 20
         std_dev = 2.0
 
+        if len(close) < period:
+            return {"type": "bollinger", "bb_position": 0.5, "bb_width": 0,
+                    "bb_upper": 0, "bb_lower": 0, "bb_mid": 0,
+                    "pattern": "none", "is_squeeze": False, "squeeze_bars": 0,
+                    "direction": "neutral", "strength": 0.0}
+
         sma = close.rolling(window=period).mean()
         std = close.rolling(window=period).std()
         upper = sma + std_dev * std
         lower = sma - std_dev * std
 
-        last = close.iloc[-1]
-        bb_upper = upper.iloc[-1]
-        bb_lower = lower.iloc[-1]
-        bb_mid = sma.iloc[-1]
+        last = float(close.iloc[-1])
+        bb_upper = float(upper.iloc[-1]) if not pd.isna(upper.iloc[-1]) else last
+        bb_lower = float(lower.iloc[-1]) if not pd.isna(lower.iloc[-1]) else last
+        bb_mid = float(sma.iloc[-1]) if not pd.isna(sma.iloc[-1]) else last
 
         # BB Position (0~1)
         bb_range = bb_upper - bb_lower
@@ -80,9 +86,15 @@ class BollingerIndicator(BaseIndicator):
             strength = min(1.0, (bb_position - 0.85) / 0.15 + 0.3)
 
         else:
-            # 밴드워크 체크: 최근 3봉 연속 상단/하단 터치
-            recent_upper = sum(1 for i in range(-3, 0) if close.iloc[i] >= upper.iloc[i] * 0.99)
-            recent_lower = sum(1 for i in range(-3, 0) if close.iloc[i] <= lower.iloc[i] * 1.01)
+            # 밴드워크 체크: 최근 3봉 연속 상단/하단 터치 (NaN 방어)
+            def _safe_compare(c, u, op):
+                if pd.isna(c) or pd.isna(u):
+                    return False
+                return op(float(c), float(u))
+            recent_upper = sum(1 for i in range(-3, 0)
+                               if _safe_compare(close.iloc[i], upper.iloc[i] * 0.99, lambda a, b: a >= b))
+            recent_lower = sum(1 for i in range(-3, 0)
+                               if _safe_compare(close.iloc[i], lower.iloc[i] * 1.01, lambda a, b: a <= b))
             if recent_upper >= 2:
                 pattern = "band_walk"
                 direction = "long"

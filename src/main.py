@@ -612,7 +612,7 @@ class CryptoAnalyzer:
                     _last_run["session2"] = today
 
             except Exception as e:
-                logger.error(f"[SCHED] 학습 스케줄러 에러: {e}")
+                logger.error(f"[SCHED] 학습 스케줄러 에러: {e}", exc_info=True)
             await asyncio.sleep(60)
 
     # ── 주기적 루프들 ──

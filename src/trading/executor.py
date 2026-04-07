@@ -22,18 +22,31 @@ class OrderExecutor:
 
     async def initialize(self):
         """거래소 연결"""
+        api_key = get_env("OKX_API_KEY", "")
+        secret = get_env("OKX_SECRET_KEY", "")
+        passphrase = get_env("OKX_PASSPHRASE", "")
+
+        if not api_key:
+            logger.warning("OKX API 키 미설정 → 퍼블릭 모드 (실거래 불가)")
+
         self.exchange = ccxt.okx(
             {
-                "apiKey": get_env("OKX_API_KEY", ""),
-                "secret": get_env("OKX_SECRET_KEY", ""),
-                "password": get_env("OKX_PASSPHRASE", ""),
+                "apiKey": api_key,
+                "secret": secret,
+                "password": passphrase,
                 "enableRateLimit": True,
                 "aiohttp_trust_env": True,
                 "options": {"defaultType": "swap"},
             }
         )
         self.exchange.aiohttp_resolver = "default"
-        await self.exchange.load_markets()
+        try:
+            await self.exchange.load_markets()
+        except Exception as e:
+            # 예외 메시지에 키가 포함될 수 있으므로 마스킹
+            err_str = str(e).replace(api_key, "***").replace(secret, "***").replace(passphrase, "***")
+            logger.error(f"거래소 연결 실패: {err_str}")
+            raise
 
         # 마진 모드 설정 (isolated)
         try:

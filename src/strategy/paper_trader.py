@@ -222,8 +222,11 @@ class PaperTrader:
 
     async def check_shadows(self, current_price: float):
         """shadow 추적 업데이트 + 30분 후 결과 평가"""
-        expired = []
-        for i, s in enumerate(self.shadows):
+        # 안전: 현재 shadows의 스냅샷으로 작업
+        snapshot = list(self.shadows)
+        expired_objs = []
+
+        for s in snapshot:
             # 가격 갱신
             if s.direction == "long":
                 s.best_price = max(s.best_price, current_price)
@@ -234,12 +237,13 @@ class PaperTrader:
 
             # 30분 경과 → 결과 평가
             if s.hold_minutes() >= 30:
-                expired.append(i)
+                expired_objs.append(s)
                 await self._evaluate_shadow(s, current_price)
 
-        # 만료된 shadow 제거 (역순)
-        for i in reversed(expired):
-            self.shadows.pop(i)
+        # 객체 기반 제거 (인덱스 변경 안전)
+        for s in expired_objs:
+            if s in self.shadows:
+                self.shadows.remove(s)
 
     async def _evaluate_shadow(self, s: ShadowTrack, current_price: float):
         """미진입 시그널 결과 평가 → ML에 역학습"""

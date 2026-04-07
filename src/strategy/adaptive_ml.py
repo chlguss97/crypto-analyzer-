@@ -369,8 +369,8 @@ class AdaptiveML:
                     )
                     g.fit(X_rt_s, y_rt)
                     ensemble["gbm"] = g
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"[{self.mode}] {regime} GBM 학습 실패: {e}")
 
                 # RandomForest
                 try:
@@ -379,16 +379,16 @@ class AdaptiveML:
                     )
                     rf.fit(X_rt_s, y_rt)
                     ensemble["rf"] = rf
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"[{self.mode}] {regime} RF 학습 실패: {e}")
 
                 # LogisticRegression
                 try:
                     lr = LogisticRegression(max_iter=500, random_state=42, multi_class="multinomial")
                     lr.fit(X_rt_s, y_rt)
                     ensemble["lr"] = lr
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"[{self.mode}] {regime} LR 학습 실패: {e}")
 
                 if ensemble:
                     self.models[regime] = ensemble

@@ -101,15 +101,23 @@ class CandleCollector:
 
         total_inserted = 0
         current = since
+        max_iterations = days * 24 * 4  # 안전 한도
+        iteration = 0
 
-        while current < now:
+        while current < now and iteration < max_iterations:
             candles = await self.fetch_candles(timeframe, since=current, limit=300)
             if not candles:
                 break
 
             await self.db.insert_candles(self.symbol, timeframe, candles)
             total_inserted += len(candles)
-            current = candles[-1]["timestamp"] + tf_ms
+
+            # 진행 안 되면 무한 루프 방지
+            new_current = candles[-1]["timestamp"] + tf_ms
+            if new_current <= current:
+                break
+            current = new_current
+            iteration += 1
 
             # Rate limit 존중
             await asyncio.sleep(0.2)
