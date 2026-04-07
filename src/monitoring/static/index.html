@@ -523,6 +523,46 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
   </div>
 
 
+  <!-- Scalping Status -->
+  <div class="card" style="margin-bottom:24px;">
+    <div class="card-header">
+      <span class="card-title">Scalping Mode</span>
+      <span id="scalpSessionBadge" style="font-size:11px;padding:3px 8px;border-radius:4px;background:var(--bg-surface);color:var(--text-muted);font-weight:600;">--</span>
+    </div>
+    <div class="grid" style="grid-template-columns: repeat(6, 1fr); gap: 12px; margin-bottom:12px;">
+      <div style="text-align:center;">
+        <div class="big-num" id="scalpScore" style="font-size:24px;">--</div>
+        <span class="big-sub">Score</span>
+      </div>
+      <div style="text-align:center;">
+        <div class="big-num" id="scalpDir" style="font-size:24px;">--</div>
+        <span class="big-sub">Direction</span>
+      </div>
+      <div style="text-align:center;">
+        <div class="big-num" id="scalpDailyPnl" style="font-size:24px;">0%</div>
+        <span class="big-sub">Daily P&L</span>
+      </div>
+      <div style="text-align:center;">
+        <div class="big-num" id="scalpStreak" style="font-size:24px;">0</div>
+        <span class="big-sub">Streak</span>
+      </div>
+      <div style="text-align:center;">
+        <div class="big-num" id="scalpExplosive" style="font-size:20px;color:var(--text-muted);">OFF</div>
+        <span class="big-sub">Explosive</span>
+      </div>
+      <div style="text-align:center;">
+        <div class="big-num" id="scalpSMC" style="font-size:20px;color:var(--text-muted);">OFF</div>
+        <span class="big-sub">SMC Entry</span>
+      </div>
+    </div>
+    <div id="scalpCooldown" style="display:none;text-align:center;padding:8px;background:var(--red);color:white;border-radius:6px;font-weight:700;font-size:12px;">
+      COOLDOWN ACTIVE — Waiting...
+    </div>
+    <div id="scalpStopped" style="display:none;text-align:center;padding:8px;background:var(--red);color:white;border-radius:6px;font-weight:700;font-size:12px;">
+      DAILY LOSS LIMIT (-10%) — Scalping Stopped
+    </div>
+  </div>
+
   <!-- Recent Trades -->
   <div class="card" style="margin-bottom:24px;">
     <div class="card-header"><span class="card-title">Recent Trades</span></div>
@@ -1373,6 +1413,42 @@ function renderWeights(elId, weights) {
   }).join('');
 }
 
+// ── Scalping State ──
+async function updateScalpState() {
+  const data = await api('/api/scalp/state');
+  if (!data) return;
+
+  document.getElementById('scalpScore').textContent = (data.score||0).toFixed(1);
+  const dirEl = document.getElementById('scalpDir');
+  dirEl.textContent = (data.direction||'--').toUpperCase();
+  dirEl.style.color = data.direction==='long'?'var(--green)':data.direction==='short'?'var(--red)':'var(--text-muted)';
+
+  const pnlEl = document.getElementById('scalpDailyPnl');
+  const pnl = data.daily_pnl||0;
+  pnlEl.textContent = (pnl>=0?'+':'')+pnl.toFixed(1)+'%';
+  pnlEl.style.color = pnl>=0?'var(--green)':'var(--red)';
+
+  const streakEl = document.getElementById('scalpStreak');
+  streakEl.textContent = data.streak||0;
+  streakEl.style.color = (data.streak||0)>=3?'var(--red)':'var(--text-primary)';
+
+  const expEl = document.getElementById('scalpExplosive');
+  expEl.textContent = data.explosive?'ON':'OFF';
+  expEl.style.color = data.explosive?'var(--yellow)':'var(--text-muted)';
+
+  const smcEl = document.getElementById('scalpSMC');
+  smcEl.textContent = data.smc?'ON':'OFF';
+  smcEl.style.color = data.smc?'var(--green)':'var(--text-muted)';
+
+  const badge = document.getElementById('scalpSessionBadge');
+  const sq = {'best':'var(--green)','good':'var(--accent)','normal':'var(--text-secondary)','low':'var(--yellow)','poor':'var(--red)'};
+  badge.textContent = (data.session||'--').toUpperCase();
+  badge.style.color = sq[data.session_quality||'low']||'var(--text-muted)';
+
+  document.getElementById('scalpCooldown').style.display = data.cooldown?'block':'none';
+  document.getElementById('scalpStopped').style.display = (data.daily_pnl||0)<=-10?'block':'none';
+}
+
 // ── Market Regime ──
 const REGIME_COLORS = {
   'trending_up': 'var(--green)', 'trending_down': 'var(--red)',
@@ -1489,8 +1565,10 @@ refreshAll();
 updateMLStatus();
 updatePaperStats();
 updateRegime();
+updateScalpState();
 setInterval(refreshAll, 5000);
 setInterval(updateTicker, 2000);
+setInterval(updateScalpState, 5000);
 setInterval(updateMLStatus, 10000);
 setInterval(updatePaperStats, 10000);
 setInterval(updateRegime, 15000);

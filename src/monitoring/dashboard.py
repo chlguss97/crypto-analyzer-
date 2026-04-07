@@ -682,6 +682,17 @@ def _get_ml_instances():
     return _ml_cache["swing"], _ml_cache["scalp"]
 
 
+@app.get("/api/scalp/state")
+async def get_scalp_state():
+    """스캘핑 실시간 상태"""
+    state = await redis.get_json("sys:scalp_state")
+    if not state:
+        state = {"daily_pnl": 0, "streak": 0, "cooldown": False,
+                 "score": 0, "direction": "neutral", "explosive": False,
+                 "smc": False, "session": "unknown"}
+    return state
+
+
 @app.get("/api/regime")
 async def get_regime():
     """현재 마켓 레짐 조회"""

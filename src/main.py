@@ -109,6 +109,13 @@ class CryptoAnalyzer:
             self.db, self.ml_swing, self.ml_scalp, self.candle_collector
         )
 
+        # 스캘핑 리스크 관리
+        self._scalp_daily_pnl = 0.0         # 일일 스캘핑 P&L (%)
+        self._scalp_streak = 0               # 연패 카운터
+        self._scalp_cooldown_until = 0       # 쿨다운 종료 시각 (timestamp)
+        self._scalp_pending_signal = None    # 진입 확인 대기 시그널
+        self._scalp_pending_price = 0.0
+
         # 캐시
         self._last_fast = {}
         self._last_slow = {}
@@ -260,12 +267,11 @@ class CryptoAnalyzer:
 
     # ── 매매 판단 + 실행 ──
 
-    async def evaluate_and_trade(self):
-        """Swing + Scalp 시그널 평가 → 자동매매"""
+    async def _evaluate_swing(self):
+        """Swing 시그널 평가 + 자동매매 (60초 주기)"""
         autotrading = (await self.redis.get("sys:autotrading") or "off") == "on"
         active_model = await self.redis.get("sys:active_model") or "both"
 
-        # 리스크 상태
         open_positions = list(self.position_manager.positions.values())
         risk_state = await self.risk_manager.get_risk_state([p.to_dict() for p in open_positions])
         fn_min = await self.redis.get("rt:funding_next_min:BTC-USDT-SWAP")
@@ -273,53 +279,130 @@ class CryptoAnalyzer:
             risk_state["funding_blackout"] = True
         risk_state["has_same_symbol"] = self.symbol in self.position_manager.positions
 
-        # Swing 시그널 (항상 계산 — 가상매매 전수 학습용)
-        swing_result = None
         swing_agg = await self.run_swing_signal()
         if swing_agg:
             swing_grade = self.grader.grade(swing_agg, risk_state)
-            swing_result = {"aggregated": swing_agg, "grade": swing_grade, "mode": "swing"}
             await self.redis.set(f"sig:aggregated:{self.symbol}",
                                  {"aggregated": swing_agg, "grade": swing_grade}, ttl=1800)
 
-        # Scalp 시그널 (항상 계산)
-        scalp_result = None
-        scalp_sig = await self.run_scalp_signal()
-        if scalp_sig and scalp_sig["score"] >= self.ml_scalp.entry_threshold:
-            scalp_result = {"signal": scalp_sig, "mode": "scalp"}
-
-        # ── 가상매매 전수 학습 (항상 실행 — 점수 무관, ML 학습용) ──
-        price_str = await self.redis.get("rt:price:BTC-USDT-SWAP")
-        current_price = float(price_str) if price_str else 0
-
-        if current_price > 0:
-            # Swing: tradeable 여부 관계없이 모든 시그널 학습
-            if swing_agg:
+            # 가상매매 전수 학습
+            price_str = await self.redis.get("rt:price:BTC-USDT-SWAP")
+            if price_str:
                 agg = swing_agg.copy()
                 agg["atr_pct"] = self._last_fast.get("atr", {}).get("atr_pct", 0.3)
                 agg["signals_detail"] = {**self._last_fast, **self._last_slow}
-                await self.paper_trader.try_entry(agg, "swing", current_price)
+                await self.paper_trader.try_entry(agg, "swing", float(price_str))
 
-            # Scalp: threshold 관계없이 모든 시그널 학습
-            if scalp_sig:
-                await self.paper_trader.try_entry(scalp_sig, "scalp", current_price)
+            # 실거래
+            if autotrading and active_model in ("swing", "both") and swing_grade["tradeable"]:
+                allowed, _ = self.risk_manager.is_trading_allowed()
+                if allowed:
+                    await self._execute_swing(swing_grade, swing_agg, risk_state)
 
-        # ── 자동매매 (실거래) ──
-        if not autotrading:
+    async def _evaluate_scalp(self):
+        """스캘핑 시그널 평가 + 자동매매 (15초 주기)"""
+        import time as _t
+
+        # 일일 손실 한도 체크 (-10%)
+        if self._scalp_daily_pnl <= -10.0:
             return
 
-        # 매매 가능 체크
-        allowed, reason = self.risk_manager.is_trading_allowed()
-        if not allowed:
+        # 쿨다운 체크
+        if _t.time() < self._scalp_cooldown_until:
             return
 
-        # Swing 진입 (active_model 체크)
-        if swing_result and swing_result["grade"]["tradeable"] and active_model in ("swing", "both"):
-            await self._execute_swing(swing_result["grade"], swing_result["aggregated"], risk_state)
+        scalp_sig = await self.run_scalp_signal()
+        if not scalp_sig:
+            return
 
-        # Scalp 진입 (Swing 포지션 없을 때만)
-        if scalp_result and not risk_state["has_same_symbol"] and active_model in ("scalp", "both"):
-            await self._execute_scalp(scalp_result["signal"], risk_state)
+        price_str = await self.redis.get("rt:price:BTC-USDT-SWAP")
+        current_price = float(price_str) if price_str else 0
+        if current_price <= 0:
+            return
+
+        # 스캘핑 상태 Redis 저장 (대시보드용)
+        await self.redis.set("sys:scalp_state", {
+            "daily_pnl": round(self._scalp_daily_pnl, 2),
+            "streak": self._scalp_streak,
+            "cooldown": self._scalp_cooldown_until > _t.time(),
+            "score": scalp_sig["score"],
+            "direction": scalp_sig["direction"],
+            "explosive": scalp_sig.get("explosive_mode", False),
+            "smc": scalp_sig.get("smc_entry", False),
+            "session": scalp_sig.get("session", "unknown"),
+        }, ttl=30)
+
+        # 가상매매 전수 학습 (항상)
+        await self.paper_trader.try_entry(scalp_sig, "scalp", current_price)
+
+        # ── 진입 확인 대기 로직 ──
+        # 1차: 시그널 발생 → 대기 상태로 저장
+        # 2차 (15초 후): 가격이 같은 방향이면 진입 확정
+        if self._scalp_pending_signal:
+            pending = self._scalp_pending_signal
+            # 방향 확인: 15초 전 시그널 방향과 현재 가격 비교
+            confirmed = False
+            if pending["direction"] == "long" and current_price > self._scalp_pending_price:
+                confirmed = True
+            elif pending["direction"] == "short" and current_price < self._scalp_pending_price:
+                confirmed = True
+
+            if confirmed:
+                # 진입 확정
+                await self._try_scalp_entry(pending, current_price)
+            # 확인 실패 또는 완료 → 대기 초기화
+            self._scalp_pending_signal = None
+            self._scalp_pending_price = 0.0
+            return
+
+        # 새 시그널이 임계값 이상이면 대기 상태로
+        if scalp_sig["score"] >= self.ml_scalp.entry_threshold and scalp_sig["direction"] != "neutral":
+            self._scalp_pending_signal = scalp_sig
+            self._scalp_pending_price = current_price
+
+    async def _try_scalp_entry(self, scalp_sig: dict, current_price: float):
+        """스캘핑 진입 실행 (확인 완료 후)"""
+        autotrading = (await self.redis.get("sys:autotrading") or "off") == "on"
+        active_model = await self.redis.get("sys:active_model") or "both"
+
+        if not autotrading or active_model not in ("scalp", "both"):
+            return
+
+        # 포지션 크기 차등
+        if scalp_sig.get("smc_entry"):
+            size_mult = 1.2  # SMC: 120%
+        elif scalp_sig.get("explosive_mode"):
+            size_mult = 1.0  # 급변동: 100%
+        else:
+            size_mult = 0.8  # 일반: 80%
+
+        scalp_sig["size_mult"] = size_mult
+
+        risk_state = await self.risk_manager.get_risk_state()
+        if self.symbol not in self.position_manager.positions:
+            allowed, _ = self.risk_manager.is_trading_allowed()
+            if allowed:
+                await self._execute_scalp(scalp_sig, risk_state)
+
+    def _scalp_record_result(self, pnl_pct: float):
+        """스캘핑 결과 기록 → 일일 P&L + 연패 관리"""
+        import time as _t
+        self._scalp_daily_pnl += pnl_pct
+
+        if pnl_pct <= 0:
+            self._scalp_streak += 1
+            # 쿨다운 설정
+            if self._scalp_streak >= 5:
+                self._scalp_cooldown_until = _t.time() + 1800  # 30분
+                logger.warning(f"[SCALP] 5연패 → 30분 쿨다운")
+            elif self._scalp_streak >= 3:
+                self._scalp_cooldown_until = _t.time() + 300  # 5분
+                logger.warning(f"[SCALP] 3연패 → 5분 쿨다운")
+        else:
+            self._scalp_streak = 0
+
+        if self._scalp_daily_pnl <= -10.0:
+            logger.warning(f"[SCALP] 일일 손실 한도 도달 ({self._scalp_daily_pnl:.1f}%) → 스캘핑 중단")
 
     async def _execute_swing(self, grade_result, aggregated, risk_state):
         """Swing 매매 실행"""
@@ -507,14 +590,24 @@ class CryptoAnalyzer:
             await asyncio.sleep(30)
 
     async def periodic_signal_eval(self):
-        """시그널 평가 + 매매 (60초마다)"""
-        await asyncio.sleep(15)  # 초기 캔들 수집 대기
+        """Swing 시그널 평가 + 매매 (60초마다)"""
+        await asyncio.sleep(15)
         while self._running:
             try:
-                await self.evaluate_and_trade()
+                await self._evaluate_swing()
             except Exception as e:
-                logger.error(f"시그널 평가 에러: {e}")
+                logger.error(f"Swing 평가 에러: {e}")
             await asyncio.sleep(60)
+
+    async def periodic_scalp_eval(self):
+        """스캘핑 시그널 평가 (15초마다) — 빠른 진입/탈출"""
+        await asyncio.sleep(20)
+        while self._running:
+            try:
+                await self._evaluate_scalp()
+            except Exception as e:
+                logger.error(f"Scalp 평가 에러: {e}")
+            await asyncio.sleep(15)
 
     async def periodic_position_check(self):
         """포지션 체크 (15초마다) — 실거래 + 가상매매"""
@@ -559,6 +652,12 @@ class CryptoAnalyzer:
             if day != self._current_day:
                 self._current_day = day
                 await self.risk_manager.reset_daily()
+
+                # 스캘핑 일일 리셋
+                logger.info(f"[SCALP] 일일 리셋 | 어제 P&L: {self._scalp_daily_pnl:+.1f}%")
+                self._scalp_daily_pnl = 0.0
+                self._scalp_streak = 0
+                self._scalp_cooldown_until = 0
 
                 # 일일 리포트
                 risk = await self.risk_manager.get_risk_state()
@@ -613,6 +712,7 @@ class CryptoAnalyzer:
         tasks = [
             asyncio.create_task(self.periodic_candle_update()),
             asyncio.create_task(self.periodic_signal_eval()),
+            asyncio.create_task(self.periodic_scalp_eval()),
             asyncio.create_task(self.periodic_position_check()),
             asyncio.create_task(self.periodic_oi_funding()),
             asyncio.create_task(self.periodic_daily_reset()),
