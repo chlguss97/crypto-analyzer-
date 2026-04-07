@@ -312,6 +312,10 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
     <h1><span>Crypto</span>Analyzer</h1>
   </div>
   <div class="header-right">
+    <div id="langToggle" style="display:flex;gap:4px;">
+      <button onclick="setLang('en')" class="unit-btn active" id="langEN" style="padding:4px 10px;font-size:11px;cursor:pointer;background:var(--bg-surface);border:1px solid var(--border);border-radius:4px;color:var(--text-secondary);">EN</button>
+      <button onclick="setLang('ko')" class="unit-btn" id="langKO" style="padding:4px 10px;font-size:11px;cursor:pointer;background:var(--bg-surface);border:1px solid var(--border);border-radius:4px;color:var(--text-secondary);">KR</button>
+    </div>
     <span class="clock" id="lastUpdate">--:--:--</span>
     <span class="status-pill status-unknown" id="botStatus">LOADING</span>
   </div>
@@ -348,8 +352,8 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
 
   <!-- Tabs -->
   <div class="tabs">
-    <button class="tab active" onclick="switchTab('trading', this)">Trading</button>
-    <button class="tab" onclick="switchTab('info', this)">Information</button>
+    <button class="tab active" onclick="switchTab('trading', this)" data-i18n="tab.trading">Trading</button>
+    <button class="tab" onclick="switchTab('info', this)" data-i18n="tab.info">Information</button>
     <button class="tab" onclick="switchTab('ml', this)">Machine Learning</button>
   </div>
 
@@ -505,18 +509,18 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
   <div class="grid" style="grid-template-columns: 1fr 1fr;">
 
     <div class="card">
-      <div class="card-header"><span class="card-title">Account</span></div>
+      <div class="card-header"><span class="card-title" data-i18n="account.title">Account</span></div>
       <div class="big-num" id="balance">$--</div>
       <div class="big-sub">USDT Balance</div>
       <div style="margin-top: 18px;">
-        <div class="metric"><span class="metric-label">Daily P&L</span><span class="metric-value" id="dailyPnl">--</span></div>
+        <div class="metric"><span class="metric-label" data-i18n="scalping.daily_pnl">Daily P&L</span><span class="metric-value" id="dailyPnl">--</span></div>
         <div class="metric"><span class="metric-label">Win Streak</span><span class="metric-value" id="streak">--</span></div>
         <div class="metric"><span class="metric-label">BTC Price</span><span class="metric-value" id="btcPrice" style="color:var(--text-primary)">$--</span></div>
       </div>
     </div>
 
     <div class="card position-card" id="positionCard">
-      <div class="card-header"><span class="card-title">Active Position</span></div>
+      <div class="card-header"><span class="card-title" data-i18n="position.title">Active Position</span></div>
       <div id="positionContent"><div class="position-empty">No active position</div></div>
     </div>
 
@@ -526,17 +530,17 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
   <!-- Scalping Status -->
   <div class="card" style="margin-bottom:24px;">
     <div class="card-header">
-      <span class="card-title">Scalping Mode</span>
+      <span class="card-title" data-i18n="scalping.title">Scalping Mode</span>
       <span id="scalpSessionBadge" style="font-size:11px;padding:3px 8px;border-radius:4px;background:var(--bg-surface);color:var(--text-muted);font-weight:600;">--</span>
     </div>
     <div class="grid" style="grid-template-columns: repeat(6, 1fr); gap: 12px; margin-bottom:12px;">
       <div style="text-align:center;">
         <div class="big-num" id="scalpScore" style="font-size:24px;">--</div>
-        <span class="big-sub">Score</span>
+        <span class="big-sub" data-i18n="scalping.score">Score</span>
       </div>
       <div style="text-align:center;">
         <div class="big-num" id="scalpDir" style="font-size:24px;">--</div>
-        <span class="big-sub">Direction</span>
+        <span class="big-sub" data-i18n="scalping.direction">Direction</span>
       </div>
       <div style="text-align:center;">
         <div class="big-num" id="scalpDailyPnl" style="font-size:24px;">0%</div>
@@ -544,15 +548,15 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
       </div>
       <div style="text-align:center;">
         <div class="big-num" id="scalpStreak" style="font-size:24px;">0</div>
-        <span class="big-sub">Streak</span>
+        <span class="big-sub" data-i18n="scalping.streak">Streak</span>
       </div>
       <div style="text-align:center;">
         <div class="big-num" id="scalpExplosive" style="font-size:20px;color:var(--text-muted);">OFF</div>
-        <span class="big-sub">Explosive</span>
+        <span class="big-sub" data-i18n="scalping.explosive">Explosive</span>
       </div>
       <div style="text-align:center;">
         <div class="big-num" id="scalpSMC" style="font-size:20px;color:var(--text-muted);">OFF</div>
-        <span class="big-sub">SMC Entry</span>
+        <span class="big-sub" data-i18n="scalping.smc">SMC Entry</span>
       </div>
     </div>
     <div id="scalpCooldown" style="display:none;text-align:center;padding:8px;background:var(--red);color:white;border-radius:6px;font-weight:700;font-size:12px;">
@@ -565,7 +569,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
 
   <!-- Recent Trades -->
   <div class="card" style="margin-bottom:24px;">
-    <div class="card-header"><span class="card-title">Recent Trades</span></div>
+    <div class="card-header"><span class="card-title" data-i18n="trades.title">Recent Trades</span></div>
     <div style="overflow-x: auto;">
       <table class="trade-table">
         <thead>
@@ -586,7 +590,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
     <!-- Row 1: Signal + Market -->
     <div class="grid" style="grid-template-columns: 1fr 1fr;">
       <div class="card">
-        <div class="card-header"><span class="card-title">Signal Score</span></div>
+        <div class="card-header"><span class="card-title" data-i18n="signal.title">Signal Score</span></div>
         <div class="big-num neutral" id="infoSignalScore">--</div>
         <div class="big-sub">Score / 10</div>
         <div style="margin-top: 18px;">
@@ -599,7 +603,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
       </div>
 
       <div class="card">
-        <div class="card-header"><span class="card-title">Market Overview</span></div>
+        <div class="card-header"><span class="card-title" data-i18n="market.title">Market Overview</span></div>
         <div class="metric"><span class="metric-label">BTC Price</span><span class="metric-value" id="infoBtcPrice" style="font-size:18px">$--</span></div>
         <div class="metric"><span class="metric-label">24h High</span><span class="metric-value" id="infoHigh">--</span></div>
         <div class="metric"><span class="metric-label">24h Low</span><span class="metric-value" id="infoLow">--</span></div>
@@ -612,7 +616,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
 
     <!-- Row 2: Indicators Full Width -->
     <div class="card" style="margin-bottom:14px;">
-      <div class="card-header"><span class="card-title">All Indicators (14)</span></div>
+      <div class="card-header"><span class="card-title" data-i18n="indicators.title" data-i18n="indicators.title">All Indicators (15)</span></div>
       <div class="signal-grid" id="infoSignalGrid" style="grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));">
         <div class="signal-item"><span class="signal-name" style="color:var(--text-muted)">Waiting for signals...</span></div>
       </div>
@@ -621,7 +625,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
     <!-- Row 3: Bot Control -->
     <div class="grid" style="grid-template-columns: 1fr 1fr;">
       <div class="card">
-        <div class="card-header"><span class="card-title">Bot Control</span></div>
+        <div class="card-header"><span class="card-title" data-i18n="bot.title">Bot Control</span></div>
         <p style="font-size:12.5px;color:var(--text-secondary);margin-bottom:14px;line-height:1.6;">
           Pause/Resume trading or activate the emergency kill switch.
         </p>
@@ -634,7 +638,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
       </div>
 
       <div class="card">
-        <div class="card-header"><span class="card-title">System Status</span></div>
+        <div class="card-header"><span class="card-title" data-i18n="system.title">System Status</span></div>
         <div class="metric"><span class="metric-label">Bot Status</span><span class="metric-value" id="infoStatus">--</span></div>
         <div class="metric"><span class="metric-label">Daily P&L</span><span class="metric-value" id="infoDailyPnl">--</span></div>
         <div class="metric"><span class="metric-label">Streak</span><span class="metric-value" id="infoStreak">--</span></div>
@@ -684,7 +688,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
 
     <!-- Market Regime -->
     <div class="card" style="margin-bottom:24px;">
-      <div class="card-header"><span class="card-title">Market Regime</span></div>
+      <div class="card-header"><span class="card-title" data-i18n="regime.title">Market Regime</span></div>
       <div class="grid" style="grid-template-columns: 1fr 2fr 2fr;">
         <div style="text-align:center;">
           <div class="big-num" id="regimeName" style="font-size:22px;">--</div>
@@ -710,7 +714,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
 
     <!-- Swing Regime Performance -->
     <div class="card" style="margin-bottom:24px;">
-      <div class="card-header"><span class="card-title">Swing — Regime Models</span></div>
+      <div class="card-header"><span class="card-title" data-i18n="swing_regime.title">Swing — Regime Models</span></div>
       <div class="grid" style="grid-template-columns: repeat(4, 1fr); gap: 12px;">
         <div style="text-align:center;padding:12px;border-radius:8px;background:var(--bg-surface);">
           <div style="font-size:11px;font-weight:700;color:var(--green);margin-bottom:6px;">TRENDING UP</div>
@@ -738,7 +742,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
 
     <!-- Scalp Regime Performance -->
     <div class="card" style="margin-bottom:24px;">
-      <div class="card-header"><span class="card-title">Scalp — Regime Models</span></div>
+      <div class="card-header"><span class="card-title" data-i18n="scalp_regime.title">Scalp — Regime Models</span></div>
       <div class="grid" style="grid-template-columns: repeat(4, 1fr); gap: 12px;">
         <div style="text-align:center;padding:12px;border-radius:8px;background:var(--bg-surface);">
           <div style="font-size:11px;font-weight:700;color:var(--green);margin-bottom:6px;">TRENDING UP</div>
@@ -768,7 +772,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
     <div class="grid" style="grid-template-columns: 1fr 1fr;">
 
       <div class="card">
-        <div class="card-header"><span class="card-title">Swing Model</span></div>
+        <div class="card-header"><span class="card-title" data-i18n="swing_model.title">Swing Model</span></div>
         <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:4px;">
           <div class="big-num" id="mlSwingTrades" style="font-size:32px;">--</div>
           <span class="big-sub">trades learned</span>
@@ -786,7 +790,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
       </div>
 
       <div class="card">
-        <div class="card-header"><span class="card-title">Scalp Model</span></div>
+        <div class="card-header"><span class="card-title" data-i18n="scalp_model.title">Scalp Model</span></div>
         <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:4px;">
           <div class="big-num" id="mlScalpTrades" style="font-size:32px;">--</div>
           <span class="big-sub">trades learned</span>
@@ -807,7 +811,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
 
     <!-- Paper Trading Stats -->
     <div class="card" style="margin-bottom:24px;">
-      <div class="card-header"><span class="card-title">Paper Trading (ML Learning)</span></div>
+      <div class="card-header"><span class="card-title" data-i18n="paper.title">Paper Trading (ML Learning)</span></div>
       <div class="grid" style="grid-template-columns: repeat(5, 1fr); gap: 16px; margin-bottom: 16px;">
         <div style="text-align:center;">
           <div class="big-num" id="paperTotal" style="font-size:28px;">0</div>
@@ -846,7 +850,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
     <div class="grid" style="grid-template-columns: 1fr 1fr;">
 
       <div class="card">
-        <div class="card-header"><span class="card-title">Swing Trade History (ML)</span></div>
+        <div class="card-header"><span class="card-title" data-i18n="swing_history.title">Swing Trade History (ML)</span></div>
         <div style="overflow-x:auto;max-height:300px;overflow-y:auto;">
           <table class="trade-table">
             <thead><tr><th>#</th><th>Time</th><th>Result</th><th>P&L %</th><th>Cumulative</th></tr></thead>
@@ -858,7 +862,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
       </div>
 
       <div class="card">
-        <div class="card-header"><span class="card-title">Scalp Trade History (ML)</span></div>
+        <div class="card-header"><span class="card-title" data-i18n="scalp_history.title">Scalp Trade History (ML)</span></div>
         <div style="overflow-x:auto;max-height:300px;overflow-y:auto;">
           <table class="trade-table">
             <thead><tr><th>#</th><th>Time</th><th>Result</th><th>P&L %</th><th>Cumulative</th></tr></thead>
@@ -1572,6 +1576,92 @@ setInterval(updateScalpState, 5000);
 setInterval(updateMLStatus, 10000);
 setInterval(updatePaperStats, 10000);
 setInterval(updateRegime, 15000);
+
+// ── Language Toggle ──
+const LANG = {
+  en: {
+    // Tabs
+    'tab.trading': 'Trading', 'tab.info': 'Information', 'tab.ml': 'ML / AI',
+    // Trading tab
+    'scalping.title': 'Scalping Mode', 'scalping.score': 'Score', 'scalping.direction': 'Direction',
+    'scalping.daily_pnl': 'Daily P&L', 'scalping.streak': 'Streak', 'scalping.explosive': 'Explosive',
+    'scalping.smc': 'SMC Entry', 'scalping.cooldown': 'COOLDOWN ACTIVE — Waiting...',
+    'scalping.stopped': 'DAILY LOSS LIMIT (-10%) — Scalping Stopped',
+    'account.title': 'Account', 'position.title': 'Active Position', 'position.empty': 'No active position',
+    'trades.title': 'Recent Trades', 'trades.empty': 'No trades yet',
+    'trades.time': 'Time', 'trades.direction': 'Direction', 'trades.grade': 'Grade',
+    'trades.entry': 'Entry', 'trades.exit': 'Exit', 'trades.pnl': 'P&L', 'trades.reason': 'Reason', 'trades.hold': 'Hold',
+    'manual.long': 'LONG', 'manual.short': 'SHORT', 'manual.margin': 'Margin (USDT)', 'manual.leverage': 'Leverage',
+    'manual.sl': 'Stop Loss', 'manual.tp': 'Take Profit', 'manual.open': 'Open Long', 'manual.open_short': 'Open Short',
+    // Info tab
+    'signal.title': 'Signal Score', 'market.title': 'Market Overview', 'indicators.title': 'All Indicators (15)',
+    'bot.title': 'Bot Control', 'system.title': 'System Status',
+    'bot.autotrading': 'Auto Trading', 'bot.pause': 'Pause', 'bot.resume': 'Resume', 'bot.killswitch': 'Kill Switch',
+    // ML tab
+    'regime.title': 'Market Regime', 'regime.scores': 'Regime Scores',
+    'swing_regime.title': 'Swing — Regime Models', 'scalp_regime.title': 'Scalp — Regime Models',
+    'swing_model.title': 'Swing Model', 'scalp_model.title': 'Scalp Model',
+    'ml.trades_learned': 'trades learned', 'ml.status': 'Status', 'ml.threshold': 'Entry Threshold',
+    'ml.winrate': 'Recent Win Rate', 'ml.buffer': 'Data Buffer', 'ml.weights': 'Weights',
+    'paper.title': 'Paper Trading (ML Learning)', 'paper.empty': 'No paper trades yet — waiting for signals...',
+    'paper.total': 'Total', 'paper.wins': 'Wins', 'paper.losses': 'Losses', 'paper.winrate': 'Win Rate', 'paper.pnl': 'Total P&L',
+    'swing_history.title': 'Swing Trade History (ML)', 'scalp_history.title': 'Scalp Trade History (ML)',
+    'ml.train_acc': 'Train Accuracy', 'ml.oos_acc': 'OOS Accuracy (Walk-Forward)', 'ml.ensemble': 'Ensemble Models',
+    'ml.retrain': 'Retrain Now',
+  },
+  ko: {
+    'tab.trading': '매매', 'tab.info': '정보', 'tab.ml': 'ML / AI',
+    'scalping.title': '스캘핑 모드', 'scalping.score': '점수', 'scalping.direction': '방향',
+    'scalping.daily_pnl': '일일 손익', 'scalping.streak': '연패', 'scalping.explosive': '급변동',
+    'scalping.smc': 'SMC 진입', 'scalping.cooldown': '쿨다운 활성 — 대기 중...',
+    'scalping.stopped': '일일 손실 한도 (-10%) — 스캘핑 중단',
+    'account.title': '계좌', 'position.title': '활성 포지션', 'position.empty': '활성 포지션 없음',
+    'trades.title': '최근 거래', 'trades.empty': '거래 내역 없음',
+    'trades.time': '시간', 'trades.direction': '방향', 'trades.grade': '등급',
+    'trades.entry': '진입가', 'trades.exit': '청산가', 'trades.pnl': '손익', 'trades.reason': '사유', 'trades.hold': '보유',
+    'manual.long': '롱', 'manual.short': '숏', 'manual.margin': '마진 (USDT)', 'manual.leverage': '레버리지',
+    'manual.sl': '손절가', 'manual.tp': '익절가', 'manual.open': '롱 진입', 'manual.open_short': '숏 진입',
+    'signal.title': '시그널 점수', 'market.title': '시장 현황', 'indicators.title': '전체 지표 (15개)',
+    'bot.title': '봇 제어', 'system.title': '시스템 상태',
+    'bot.autotrading': '자동매매', 'bot.pause': '일시정지', 'bot.resume': '재개', 'bot.killswitch': '긴급 청산',
+    'regime.title': '마켓 레짐', 'regime.scores': '레짐 점수',
+    'swing_regime.title': '스윙 — 레짐별 모델', 'scalp_regime.title': '스캘핑 — 레짐별 모델',
+    'swing_model.title': '스윙 모델', 'scalp_model.title': '스캘핑 모델',
+    'ml.trades_learned': '건 학습됨', 'ml.status': '상태', 'ml.threshold': '진입 임계값',
+    'ml.winrate': '최근 승률', 'ml.buffer': '데이터 버퍼', 'ml.weights': '가중치',
+    'paper.title': '가상매매 (ML 학습)', 'paper.empty': '가상매매 없음 — 시그널 대기 중...',
+    'paper.total': '총합', 'paper.wins': '승리', 'paper.losses': '패배', 'paper.winrate': '승률', 'paper.pnl': '총 손익',
+    'swing_history.title': '스윙 거래 내역 (ML)', 'scalp_history.title': '스캘핑 거래 내역 (ML)',
+    'ml.train_acc': '학습 정확도', 'ml.oos_acc': 'OOS 정확도 (Walk-Forward)', 'ml.ensemble': '앙상블 모델',
+    'ml.retrain': '재학습',
+  }
+};
+
+let currentLang = localStorage.getItem('lang') || 'en';
+
+function setLang(lang) {
+  currentLang = lang;
+  localStorage.setItem('lang', lang);
+  document.getElementById('langEN').classList.toggle('active', lang==='en');
+  document.getElementById('langKO').classList.toggle('active', lang==='ko');
+  document.getElementById('langEN').style.color = lang==='en'?'var(--accent)':'var(--text-muted)';
+  document.getElementById('langKO').style.color = lang==='ko'?'var(--accent)':'var(--text-muted)';
+  applyLang();
+}
+
+function t(key) {
+  return (LANG[currentLang] || LANG.en)[key] || (LANG.en)[key] || key;
+}
+
+function applyLang() {
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const key = el.getAttribute('data-i18n');
+    el.textContent = t(key);
+  });
+}
+
+// 초기 적용
+setLang(currentLang);
 
 </script>
 </body>
