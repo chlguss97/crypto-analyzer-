@@ -94,9 +94,9 @@ class SignalTracker:
 
             stat["last_update"] = int(time.time() * 1000)
 
-        # 100건마다 저장
+        # 10건마다 저장 (대시보드에서 빠르게 확인 가능)
         total_records = sum(s["trades"] for s in self.stats.values())
-        if total_records % 100 == 0:
+        if total_records % 10 == 0:
             self.save()
 
     def get_ranking(self) -> list:

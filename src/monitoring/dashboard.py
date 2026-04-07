@@ -711,12 +711,19 @@ def _get_ml_instances():
     return _ml_cache["swing"], _ml_cache["scalp"]
 
 
+_signal_tracker_cache = {"instance": None, "loaded_at": 0}
+
+
 @app.get("/api/signal-tracker")
 async def get_signal_tracker():
-    """시그널 기여도 추적 결과"""
+    """시그널 기여도 추적 결과 (10초 캐시)"""
+    import time as _t
     from src.strategy.signal_tracker import SignalTracker
-    tracker = SignalTracker()
-    return tracker.get_summary()
+    now = _t.time()
+    if now - _signal_tracker_cache["loaded_at"] > 10 or _signal_tracker_cache["instance"] is None:
+        _signal_tracker_cache["instance"] = SignalTracker()
+        _signal_tracker_cache["loaded_at"] = now
+    return _signal_tracker_cache["instance"].get_summary()
 
 
 @app.post("/api/signal-tracker/reset")
