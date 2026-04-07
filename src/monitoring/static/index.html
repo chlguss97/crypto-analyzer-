@@ -93,6 +93,72 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
 .card-icon { font-size: 14px; }
 .full-width { grid-column: 1 / -1; }
 
+/* ── Help Tooltip ── */
+.help {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 9px;
+  font-weight: 700;
+  cursor: help;
+  position: relative;
+  vertical-align: middle;
+  transition: all 0.2s;
+}
+.help:hover {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+.help::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 12px;
+  background: #0a0e16;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 11px;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: normal;
+  white-space: pre-line;
+  width: 280px;
+  text-align: left;
+  line-height: 1.5;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s;
+  z-index: 10000;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+}
+.help::before {
+  content: '';
+  position: absolute;
+  bottom: calc(100% + 2px);
+  left: 50%;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-top-color: var(--accent);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s;
+}
+.help:hover::after,
+.help:hover::before {
+  opacity: 1;
+}
+
 /* ── Metric Rows ── */
 .metric { display: flex; justify-content: space-between; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--border-subtle); }
 .metric:last-child { border-bottom: none; }
@@ -510,7 +576,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
   <div class="grid" style="grid-template-columns: 1fr 1fr;">
 
     <div class="card">
-      <div class="card-header"><span class="card-title" data-i18n="account.title">Account</span></div>
+      <div class="card-header"><span class="card-title" data-i18n="account.title">Account</span><span class="help" data-tip="봇 계좌 잔고와 일일 손익을 표시합니다.&#10;• USDT 잔고: OKX 거래소 실제 잔고&#10;• Daily P&L: 오늘 누적 손익&#10;• Win Streak: 연속 승리 횟수">?</span></div>
       <div class="big-num" id="balance">$--</div>
       <div class="big-sub">USDT Balance</div>
       <div style="margin-top: 18px;">
@@ -521,7 +587,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
     </div>
 
     <div class="card position-card" id="positionCard">
-      <div class="card-header"><span class="card-title" data-i18n="position.title">Open Position</span></div>
+      <div class="card-header"><span class="card-title" data-i18n="position.title">Open Position</span><span class="help" data-tip="현재 열려있는 실거래 포지션입니다.&#10;진입가, 청산가, 손익을 실시간 표시합니다.">?</span></div>
       <div id="positionContent"><div class="position-empty">No active position</div></div>
     </div>
 
@@ -531,7 +597,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
   <!-- Scalping Status -->
   <div class="card" style="margin-bottom:24px;">
     <div class="card-header">
-      <span class="card-title" data-i18n="scalping.title">Live Scalping Status</span>
+      <span class="card-title" data-i18n="scalping.title">Live Scalping Status</span><span class="help" data-tip="실시간 스캘핑 시그널 상태입니다.&#10;• Score: 18종 시그널 합산 점수 (0~10)&#10;• Direction: 진입 방향&#10;• Daily P&L: 오늘 가상매매 손익&#10;• Streak: 연패 카운터 (3연패면 5분 쿨다운)&#10;• Explosive: 변동성 폭발 모드 활성화&#10;• SMC Entry: 오더블록/유동성 스윕 진입">?</span>
       <span id="scalpSessionBadge" style="font-size:11px;padding:3px 8px;border-radius:4px;background:var(--bg-surface);color:var(--text-muted);font-weight:600;">--</span>
     </div>
     <div class="grid" style="grid-template-columns: repeat(6, 1fr); gap: 12px; margin-bottom:12px;">
@@ -570,7 +636,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
 
   <!-- Recent Trades -->
   <div class="card" style="margin-bottom:24px;">
-    <div class="card-header"><span class="card-title" data-i18n="trades.title">Real Trade History</span></div>
+    <div class="card-header"><span class="card-title" data-i18n="trades.title">Real Trade History</span><span class="help" data-tip="실제 OKX 거래소에서 체결된 매매 내역만 표시합니다 (가상매매 제외).">?</span></div>
     <div style="overflow-x: auto;">
       <table class="trade-table">
         <thead>
@@ -591,7 +657,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
     <!-- Row 1: Signal + Market -->
     <div class="grid" style="grid-template-columns: 1fr 1fr;">
       <div class="card">
-        <div class="card-header"><span class="card-title" data-i18n="signal.title">Combined Signal Score</span></div>
+        <div class="card-header"><span class="card-title" data-i18n="signal.title">Combined Signal Score</span><span class="help" data-tip="14개 Swing 시그널 합산 결과입니다.&#10;Long/Short 점수 + 컨플루언스 보너스로 0~10점 산출.">?</span></div>
         <div class="big-num neutral" id="infoSignalScore">--</div>
         <div class="big-sub">Score / 10</div>
         <div style="margin-top: 18px;">
@@ -604,7 +670,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
       </div>
 
       <div class="card">
-        <div class="card-header"><span class="card-title" data-i18n="market.title">BTC Market Snapshot</span></div>
+        <div class="card-header"><span class="card-title" data-i18n="market.title">BTC Market Snapshot</span><span class="help" data-tip="BTC 실시간 가격, 거래량, 변동률입니다.">?</span></div>
         <div class="metric"><span class="metric-label">BTC Price</span><span class="metric-value" id="infoBtcPrice" style="font-size:18px">$--</span></div>
         <div class="metric"><span class="metric-label">24h High</span><span class="metric-value" id="infoHigh">--</span></div>
         <div class="metric"><span class="metric-label">24h Low</span><span class="metric-value" id="infoLow">--</span></div>
@@ -617,7 +683,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
 
     <!-- Row 2: Indicators Full Width -->
     <div class="card" style="margin-bottom:14px;">
-      <div class="card-header"><span class="card-title" data-i18n="indicators.title" data-i18n="indicators.title">All 15 Signal Indicators</span></div>
+      <div class="card-header"><span class="card-title" data-i18n="indicators.title" data-i18n="indicators.title">All 15 Signal Indicators</span><span class="help" data-tip="15개 기술적 지표의 현재 시그널 상태.&#10;방향 (Long/Short/Neutral) + 강도 표시.">?</span></div>
       <div class="signal-grid" id="infoSignalGrid" style="grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));">
         <div class="signal-item"><span class="signal-name" style="color:var(--text-muted)">Waiting for signals...</span></div>
       </div>
@@ -626,7 +692,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
     <!-- Row 3: Bot Control -->
     <div class="grid" style="grid-template-columns: 1fr 1fr;">
       <div class="card">
-        <div class="card-header"><span class="card-title" data-i18n="bot.title">Bot Controls</span></div>
+        <div class="card-header"><span class="card-title" data-i18n="bot.title">Bot Controls</span><span class="help" data-tip="봇 시작/정지, 자동매매 ON/OFF, 긴급 청산 버튼입니다.">?</span></div>
         <p style="font-size:12.5px;color:var(--text-secondary);margin-bottom:14px;line-height:1.6;">
           Pause/Resume trading or activate the emergency kill switch.
         </p>
@@ -639,7 +705,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
       </div>
 
       <div class="card">
-        <div class="card-header"><span class="card-title" data-i18n="system.title">System Status</span></div>
+        <div class="card-header"><span class="card-title" data-i18n="system.title">System Status</span><span class="help" data-tip="봇 프로세스 상태, 마지막 하트비트, ML 활성화 여부 등 시스템 정보.">?</span></div>
         <div class="metric"><span class="metric-label">Bot Status</span><span class="metric-value" id="infoStatus">--</span></div>
         <div class="metric"><span class="metric-label">Daily P&L</span><span class="metric-value" id="infoDailyPnl">--</span></div>
         <div class="metric"><span class="metric-label">Streak</span><span class="metric-value" id="infoStreak">--</span></div>
@@ -689,7 +755,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
 
     <!-- Market Regime -->
     <div class="card" style="margin-bottom:24px;">
-      <div class="card-header"><span class="card-title" data-i18n="regime.title">Current Market Condition</span></div>
+      <div class="card-header"><span class="card-title" data-i18n="regime.title">Current Market Condition</span><span class="help" data-tip="현재 시장이 어떤 상태인지 자동 감지합니다.&#10;• Trending Up/Down: 추세장&#10;• Ranging: 횡보장&#10;• Volatile: 고변동성&#10;ADX, BB Width, ATR로 판단합니다.">?</span></div>
       <div class="grid" style="grid-template-columns: 1fr 2fr 2fr;">
         <div style="text-align:center;">
           <div class="big-num" id="regimeName" style="font-size:22px;">--</div>
@@ -715,7 +781,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
 
     <!-- Swing Regime Performance -->
     <div class="card" style="margin-bottom:24px;">
-      <div class="card-header"><span class="card-title" data-i18n="swing_regime.title">Swing AI — by Market</span></div>
+      <div class="card-header"><span class="card-title" data-i18n="swing_regime.title">Swing AI — by Market</span><span class="help" data-tip="Swing 모델의 마켓 레짐별 성능입니다.&#10;• Trades: 학습 거래 수&#10;• WR: 승률&#10;• OOS: 검증 정확도 (실전 신뢰도)&#10;• Model: 해당 레짐 모델 생성 여부 (20건+)">?</span></div>
       <div class="grid" style="grid-template-columns: repeat(4, 1fr); gap: 12px;">
         <div style="text-align:center;padding:12px;border-radius:8px;background:var(--bg-surface);">
           <div style="font-size:11px;font-weight:700;color:var(--green);margin-bottom:6px;">TRENDING UP</div>
@@ -743,7 +809,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
 
     <!-- Scalp Regime Performance -->
     <div class="card" style="margin-bottom:24px;">
-      <div class="card-header"><span class="card-title" data-i18n="scalp_regime.title">Scalp AI — by Market</span></div>
+      <div class="card-header"><span class="card-title" data-i18n="scalp_regime.title">Scalp AI — by Market</span><span class="help" data-tip="Scalp 모델의 마켓 레짐별 성능입니다.&#10;레짐별로 다른 모델이 학습됩니다.">?</span></div>
       <div class="grid" style="grid-template-columns: repeat(4, 1fr); gap: 12px;">
         <div style="text-align:center;padding:12px;border-radius:8px;background:var(--bg-surface);">
           <div style="font-size:11px;font-weight:700;color:var(--green);margin-bottom:6px;">TRENDING UP</div>
@@ -773,7 +839,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
     <div class="grid" style="grid-template-columns: 1fr 1fr;">
 
       <div class="card">
-        <div class="card-header"><span class="card-title" data-i18n="swing_model.title">Swing Model</span></div>
+        <div class="card-header"><span class="card-title" data-i18n="swing_model.title">Swing Model</span><span class="help" data-tip="Swing 매매 ML 모델 상태.&#10;• trades learned: 누적 학습 건수&#10;• Status: TRAINED/LEARNING&#10;• Entry Threshold: 진입 임계값 (자동 조정)&#10;• Recent Win Rate: 최근 승률&#10;• Weights: 시그널별 자동 조정된 가중치">?</span></div>
         <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:4px;">
           <div class="big-num" id="mlSwingTrades" style="font-size:32px;">--</div>
           <span class="big-sub">trades learned</span>
@@ -791,7 +857,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
       </div>
 
       <div class="card">
-        <div class="card-header"><span class="card-title" data-i18n="scalp_model.title">Scalp Model</span></div>
+        <div class="card-header"><span class="card-title" data-i18n="scalp_model.title">Scalp Model</span><span class="help" data-tip="Scalp 매매 ML 모델 상태. Swing과 동일 구조.">?</span></div>
         <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:4px;">
           <div class="big-num" id="mlScalpTrades" style="font-size:32px;">--</div>
           <span class="big-sub">trades learned</span>
@@ -813,7 +879,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
     <!-- Auto Backtest Results -->
     <div class="card" style="margin-bottom:24px;">
       <div class="card-header">
-        <span class="card-title">30-Day Strategy Backtest</span>
+        <span class="card-title">30-Day Strategy Backtest</span><span class="help" data-tip="최근 30일 데이터로 현재 전략을 시뮬레이션한 결과.&#10;• Trades: 거래 횟수&#10;• Win Rate: 승률&#10;• Total P&L: 총 손익&#10;• Sharpe: 위험 대비 수익률 (1.0+ 좋음)&#10;매일 UTC 02:00 자동 실행">?</span>
         <button onclick="runBacktest()" style="padding:4px 12px;font-size:11px;background:var(--bg-surface);border:1px solid var(--border);border-radius:4px;color:var(--text-muted);cursor:pointer;">Run Now</button>
       </div>
       <div id="backtestSummary" style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">--</div>
@@ -843,7 +909,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
     <!-- Meta Learner Results -->
     <div class="card" style="margin-bottom:24px;">
       <div class="card-header">
-        <span class="card-title">Self-Improving AI</span>
+        <span class="card-title">Self-Improving AI</span><span class="help" data-tip="매주 일요일 자동 실행되는 AI 자가 업그레이드.&#10;• 하이퍼파라미터 자동 튜닝&#10;• 약한 시그널 가중치 자동 조정&#10;• 모델 종류 자동 선택 (GBM/RF/LR)&#10;• OOS 저하 시 자동 복구">?</span>
         <button onclick="runMetaLearner()" style="padding:4px 12px;font-size:11px;background:var(--bg-surface);border:1px solid var(--border);border-radius:4px;color:var(--text-muted);cursor:pointer;">Run Now</button>
       </div>
       <div id="metaSummary" style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">아직 실행 안 됨 (매주 일요일 자동 실행)</div>
@@ -853,7 +919,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
     <!-- Signal Contribution Tracker -->
     <div class="card" style="margin-bottom:24px;">
       <div class="card-header">
-        <span class="card-title">Signal Performance Ranking</span>
+        <span class="card-title">Signal Performance Ranking</span><span class="help" data-tip="각 시그널이 실제로 얼마나 수익을 냈는지 추적.&#10;시그널별 거래수, 승률, 평균 P&L, 기여도 점수 표시.&#10;약한 시그널은 자동 식별되어 가중치 조정 권장됨.">?</span>
         <button onclick="resetSignalTracker()" style="padding:4px 12px;font-size:11px;background:var(--bg-surface);border:1px solid var(--border);border-radius:4px;color:var(--text-muted);cursor:pointer;">Reset</button>
       </div>
       <div id="signalTrackerSummary" style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">--</div>
@@ -885,7 +951,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
 
     <!-- Paper Trading Stats -->
     <div class="card" style="margin-bottom:24px;">
-      <div class="card-header"><span class="card-title" data-i18n="paper.title">Virtual Trades (Training Data)</span></div>
+      <div class="card-header"><span class="card-title" data-i18n="paper.title">Virtual Trades (Training Data)</span><span class="help" data-tip="실거래 안 하고 시뮬레이션만 하는 가상매매.&#10;ML 학습 데이터 수집 + 전략 검증용입니다.">?</span></div>
       <div class="grid" style="grid-template-columns: repeat(5, 1fr); gap: 16px; margin-bottom: 16px;">
         <div style="text-align:center;">
           <div class="big-num" id="paperTotal" style="font-size:28px;">0</div>
@@ -924,7 +990,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
     <div class="grid" style="grid-template-columns: 1fr 1fr;">
 
       <div class="card">
-        <div class="card-header"><span class="card-title" data-i18n="swing_history.title">Swing Learning History</span></div>
+        <div class="card-header"><span class="card-title" data-i18n="swing_history.title">Swing Learning History</span><span class="help" data-tip="Swing 모델이 학습한 최근 거래 결과 50건.">?</span></div>
         <div style="overflow-x:auto;max-height:300px;overflow-y:auto;">
           <table class="trade-table">
             <thead><tr><th>#</th><th>Time</th><th>Result</th><th>P&L %</th><th>Cumulative</th></tr></thead>
@@ -936,7 +1002,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
       </div>
 
       <div class="card">
-        <div class="card-header"><span class="card-title" data-i18n="scalp_history.title">Scalp Learning History</span></div>
+        <div class="card-header"><span class="card-title" data-i18n="scalp_history.title">Scalp Learning History</span><span class="help" data-tip="Scalp 모델이 학습한 최근 거래 결과 50건.">?</span></div>
         <div style="overflow-x:auto;max-height:300px;overflow-y:auto;">
           <table class="trade-table">
             <thead><tr><th>#</th><th>Time</th><th>Result</th><th>P&L %</th><th>Cumulative</th></tr></thead>
@@ -956,7 +1022,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
 
     <!-- Real Trading Risk State -->
     <div class="card" style="margin-bottom:24px;">
-      <div class="card-header"><span class="card-title">Real Trading Risk Limits</span></div>
+      <div class="card-header"><span class="card-title">Real Trading Risk Limits</span><span class="help" data-tip="실거래 손실 한도 모니터링.&#10;• 일일 -10% 도달 시 → 당일 매매 자동 중단&#10;• 주간 -20% 도달 시 → 주간 매매 자동 중단&#10;3연패: 5분 쿨다운 / 5연패: 30분 쿨다운">?</span></div>
       <div class="grid" style="grid-template-columns: repeat(4, 1fr); gap: 12px;">
         <div style="text-align:center;">
           <div class="big-num" id="riskDailyPnl" style="font-size:28px;">0%</div>
@@ -982,7 +1048,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
 
     <!-- News / Event Filter -->
     <div class="card" style="margin-bottom:24px;">
-      <div class="card-header"><span class="card-title">Economic Events Filter</span></div>
+      <div class="card-header"><span class="card-title">Economic Events Filter</span><span class="help" data-tip="FOMC, CPI, NFP 등 주요 경제 이벤트 시간대에 매매 자동 차단.&#10;급변동으로 인한 손실 방지를 위함.">?</span></div>
       <div id="newsStatus" style="padding:12px;border-radius:6px;background:var(--bg-surface);font-size:13px;font-weight:600;text-align:center;margin-bottom:14px;">
         Loading...
       </div>
@@ -992,7 +1058,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
 
     <!-- Bot System Status -->
     <div class="card" style="margin-bottom:24px;">
-      <div class="card-header"><span class="card-title">System Status</span></div>
+      <div class="card-header"><span class="card-title">System Status</span><span class="help" data-tip="봇 프로세스 상태, 마지막 하트비트, ML 활성화 여부 등 시스템 정보.">?</span></div>
       <div class="metric"><span class="metric-label">Bot Status</span><span class="metric-value" id="botStatusDetail">--</span></div>
       <div class="metric"><span class="metric-label">Last Heartbeat</span><span class="metric-value" id="lastHeartbeat">--</span></div>
       <div class="metric"><span class="metric-label">Auto Trading</span><span class="metric-value" id="autoTradingStatus">--</span></div>
