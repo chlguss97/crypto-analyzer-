@@ -1608,6 +1608,45 @@ function renderWeights(elId, weights) {
   }).join('');
 }
 
+// ── System Status (Risk tab) ──
+async function updateSystemStatus() {
+  const status = await api('/api/status');
+  const ml = await api('/api/ml/status');
+  if (!status) return;
+
+  const botEl = document.getElementById('botStatusDetail');
+  if (botEl) {
+    botEl.textContent = (status.status||'unknown').toUpperCase();
+    botEl.style.color = status.status==='running'?'var(--green)':'var(--red)';
+  }
+
+  const hbEl = document.getElementById('lastHeartbeat');
+  if (hbEl) {
+    const hb = parseInt(status.last_heartbeat||0);
+    if (hb > 0) {
+      const ago = Math.floor(Date.now()/1000 - hb);
+      hbEl.textContent = ago < 60 ? `${ago}s ago` : `${Math.floor(ago/60)}m ago`;
+      hbEl.style.color = ago < 120 ? 'var(--green)' : 'var(--red)';
+    } else {
+      hbEl.textContent = '--';
+    }
+  }
+
+  const atEl = document.getElementById('autoTradingStatus');
+  if (atEl) {
+    const on = status.autotrading === 'on';
+    atEl.textContent = on ? 'ON' : 'OFF';
+    atEl.style.color = on ? 'var(--green)' : 'var(--text-muted)';
+  }
+
+  const mlEl = document.getElementById('mlEnabledStatus');
+  if (mlEl && ml) {
+    const on = ml.ml_enabled;
+    mlEl.textContent = on ? 'ON' : 'OFF';
+    mlEl.style.color = on ? 'var(--green)' : 'var(--text-muted)';
+  }
+}
+
 // ── Real Trading Risk ──
 async function updateRiskState() {
   const data = await api('/api/risk/state');
@@ -1959,6 +1998,7 @@ updateRiskState();
 updateNews();
 updateBacktest();
 updateMeta();
+updateSystemStatus();
 setInterval(refreshAll, 5000);
 setInterval(updateTicker, 2000);
 setInterval(updateScalpState, 5000);
@@ -1970,6 +2010,7 @@ setInterval(updateSignalTracker, 30000);
 setInterval(updateNews, 60000);
 setInterval(updateBacktest, 60000);
 setInterval(updateMeta, 120000);
+setInterval(updateSystemStatus, 5000);
 
 // ── Language Toggle ──
 const LANG = {
