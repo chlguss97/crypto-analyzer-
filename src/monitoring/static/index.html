@@ -88,7 +88,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
   transition: border-color 0.2s, box-shadow 0.2s;
 }
 .card:hover { border-color: #253345; box-shadow: 0 4px 24px rgba(0,0,0,0.3); }
-.card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+.card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; position: relative; overflow: visible; }
 .card-title { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1.2px; font-weight: 600; }
 .card-icon { font-size: 14px; }
 .full-width { grid-column: 1 / -1; }
@@ -120,10 +120,9 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
 .help::after {
   content: attr(data-tip);
   position: absolute;
-  bottom: calc(100% + 8px);
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 8px 12px;
+  top: calc(100% + 8px);
+  left: 0;
+  padding: 10px 14px;
   background: #0a0e16;
   border: 1px solid var(--accent);
   border-radius: 6px;
@@ -133,9 +132,9 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
   text-transform: none;
   letter-spacing: normal;
   white-space: pre-line;
-  width: 280px;
+  width: 300px;
   text-align: left;
-  line-height: 1.5;
+  line-height: 1.55;
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.2s;
@@ -145,11 +144,10 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
 .help::before {
   content: '';
   position: absolute;
-  bottom: calc(100% + 2px);
-  left: 50%;
-  transform: translateX(-50%);
+  top: calc(100% + 2px);
+  left: 4px;
   border: 6px solid transparent;
-  border-top-color: var(--accent);
+  border-bottom-color: var(--accent);
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.2s;
