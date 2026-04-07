@@ -160,6 +160,24 @@ class AdaptiveML:
         if not self.is_trained:
             return {"ml_score": 0.0, "ml_direction": "neutral", "ml_confidence": 0.0, "trained": False}
 
+        # 피처 개수 일치 확인 (불일치 시 모델 리셋)
+        try:
+            expected_features = self.global_scaler.n_features_in_ if hasattr(
+                self.global_scaler, "n_features_in_"
+            ) else len(features)
+            if expected_features != len(features):
+                logger.warning(
+                    f"[{self.mode}] 피처 불일치 감지: 모델 {expected_features} vs 입력 {len(features)} → 모델 리셋"
+                )
+                self.global_model = None
+                self.global_scaler = StandardScaler()
+                self.models = {}
+                self.scalers = {}
+                self.is_trained = False
+                return {"ml_score": 0.0, "ml_direction": "neutral", "ml_confidence": 0.0, "trained": False}
+        except Exception:
+            pass
+
         try:
             X = np.array([features])
             regime = (meta or {}).get("regime", "ranging")
@@ -529,37 +547,68 @@ class AdaptiveML:
         self.scalers = data.get("scalers", {})
         self.weights = data["weights"]
 
-        # ── 시그널 이름 마이그레이션 (scalp_ob → order_block, scalp_fvg → fvg) ──
+        # ── 시그널 이름 마이그레이션 + 피처 호환성 체크 ──
+        original_keys = set(self.weights.keys())
+        feature_changed = False
+
         if self.mode == "scalp":
             renames = {"scalp_ob": "order_block", "scalp_fvg": "fvg"}
             for old_key, new_key in renames.items():
                 if old_key in self.weights and new_key not in self.weights:
                     self.weights[new_key] = self.weights.pop(old_key)
                     logger.info(f"[{self.mode}] 시그널 이름 마이그레이션: {old_key} → {new_key}")
+                    feature_changed = True
 
-            # 기본 가중치에 있는데 로드된 weights에 없는 키 추가
             defaults = self._default_weights()
             for k, v in defaults.items():
                 if k not in self.weights:
                     self.weights[k] = v
                     logger.info(f"[{self.mode}] 누락된 시그널 추가: {k}={v}")
+                    feature_changed = True
+
+        # 피처 개수 변경 감지 → 모델/scaler 리셋 (기존 학습 데이터로 재학습 필요)
+        if feature_changed:
+            logger.warning(
+                f"[{self.mode}] 피처 구조 변경 감지 → 모델/scaler 리셋 (재학습 필요)"
+            )
+            self.global_model = None
+            self.global_scaler = StandardScaler()
+            self.models = {}
+            self.scalers = {}
+            self.train_accuracy = 0.0
+            self.oos_accuracy = 0.0
+            self._needs_retrain = True
+            # 버퍼는 유지하되 피처 차원이 다르므로 비움
+            self.X_buffer = deque(maxlen=10000)
+            self.y_buffer = deque(maxlen=10000)
+            for r in REGIMES:
+                self.regime_buffers[r] = {
+                    "X": deque(maxlen=3000),
+                    "y": deque(maxlen=3000),
+                }
 
         self.entry_threshold = data["entry_threshold"]
         self.trade_count = data["trade_count"]
-        self.X_buffer = deque(data.get("X_buffer", []), maxlen=10000)
-        self.y_buffer = deque(data.get("y_buffer", []), maxlen=10000)
-        self.regime_labels = deque(data.get("regime_labels", []), maxlen=10000)
-        for r in REGIMES:
-            rb = data.get("regime_buffers", {}).get(r, {"X": [], "y": []})
-            self.regime_buffers[r] = {"X": deque(rb["X"], maxlen=3000), "y": deque(rb["y"], maxlen=3000)}
+
+        # 피처 변경 안 됐을 때만 버퍼 복원
+        if not feature_changed:
+            self.X_buffer = deque(data.get("X_buffer", []), maxlen=10000)
+            self.y_buffer = deque(data.get("y_buffer", []), maxlen=10000)
+            self.regime_labels = deque(data.get("regime_labels", []), maxlen=10000)
+            for r in REGIMES:
+                rb = data.get("regime_buffers", {}).get(r, {"X": [], "y": []})
+                self.regime_buffers[r] = {"X": deque(rb["X"], maxlen=3000), "y": deque(rb["y"], maxlen=3000)}
+            self.train_accuracy = data.get("train_accuracy", 0)
+            self.oos_accuracy = data.get("oos_accuracy", 0)
+            self.regime_performance = data.get("regime_performance", self.regime_performance)
+
+        # recent_results는 단순 결과 기록이라 항상 복원
         self.recent_results = deque(data.get("recent_results", []), maxlen=200)
-        self.train_accuracy = data.get("train_accuracy", 0)
-        self.oos_accuracy = data.get("oos_accuracy", 0)
-        self.regime_performance = data.get("regime_performance", self.regime_performance)
         self.is_trained = self.global_model is not None
         logger.info(
             f"[{self.mode}] ML v2 loaded: {self.trade_count}건 | "
-            f"레짐 모델: {list(self.models.keys())} | OOS={self.oos_accuracy:.3f}"
+            f"레짐 모델: {list(self.models.keys())} | OOS={self.oos_accuracy:.3f} | "
+            f"{'재학습 필요' if feature_changed else '정상'}"
         )
 
     def _load_v1(self, data):
