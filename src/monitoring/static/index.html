@@ -527,6 +527,42 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
   </div>
 
 
+  <!-- Real Trading Risk State -->
+  <div class="card" style="margin-bottom:24px;">
+    <div class="card-header"><span class="card-title">Real Trading Risk</span></div>
+    <div class="grid" style="grid-template-columns: repeat(4, 1fr); gap: 12px;">
+      <div style="text-align:center;">
+        <div class="big-num" id="riskDailyPnl" style="font-size:24px;">0%</div>
+        <span class="big-sub">Daily P&L (Limit -10%)</span>
+      </div>
+      <div style="text-align:center;">
+        <div class="big-num" id="riskWeeklyPnl" style="font-size:24px;">0%</div>
+        <span class="big-sub">Weekly P&L (Limit -20%)</span>
+      </div>
+      <div style="text-align:center;">
+        <div class="big-num" id="riskStreak" style="font-size:24px;">0</div>
+        <span class="big-sub">Loss Streak</span>
+      </div>
+      <div style="text-align:center;">
+        <div class="big-num" id="riskCooldown" style="font-size:24px;">0m</div>
+        <span class="big-sub">Cooldown</span>
+      </div>
+    </div>
+    <div id="riskBlocked" style="display:none;text-align:center;padding:8px;background:var(--red);color:white;border-radius:6px;font-weight:700;font-size:12px;margin-top:12px;">
+      REAL TRADING BLOCKED
+    </div>
+  </div>
+
+  <!-- News / Event Filter -->
+  <div class="card" style="margin-bottom:24px;">
+    <div class="card-header"><span class="card-title">News & Events Filter</span></div>
+    <div id="newsStatus" style="padding:8px;border-radius:6px;background:var(--bg-surface);font-size:12px;font-weight:600;text-align:center;margin-bottom:12px;">
+      Loading...
+    </div>
+    <div style="font-size:11px;font-weight:700;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;">Upcoming Events</div>
+    <div id="upcomingEvents" style="font-size:11px;color:var(--text-secondary);">--</div>
+  </div>
+
   <!-- Scalping Status -->
   <div class="card" style="margin-bottom:24px;">
     <div class="card-header">
@@ -807,6 +843,46 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
         </div>
       </div>
 
+    </div>
+
+    <!-- Auto Backtest Results -->
+    <div class="card" style="margin-bottom:24px;">
+      <div class="card-header">
+        <span class="card-title">Auto Backtest (30 days)</span>
+        <button onclick="runBacktest()" style="padding:4px 12px;font-size:11px;background:var(--bg-surface);border:1px solid var(--border);border-radius:4px;color:var(--text-muted);cursor:pointer;">Run Now</button>
+      </div>
+      <div id="backtestSummary" style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">--</div>
+      <div class="grid" style="grid-template-columns: repeat(4, 1fr); gap: 12px;">
+        <div style="text-align:center;">
+          <div class="big-num" id="btTrades" style="font-size:22px;">--</div>
+          <span class="big-sub">Trades</span>
+        </div>
+        <div style="text-align:center;">
+          <div class="big-num" id="btWinRate" style="font-size:22px;">--</div>
+          <span class="big-sub">Win Rate</span>
+        </div>
+        <div style="text-align:center;">
+          <div class="big-num" id="btTotalPnl" style="font-size:22px;">--</div>
+          <span class="big-sub">Total P&L</span>
+        </div>
+        <div style="text-align:center;">
+          <div class="big-num" id="btSharpe" style="font-size:22px;">--</div>
+          <span class="big-sub">Sharpe</span>
+        </div>
+      </div>
+      <div style="margin-top:12px;font-size:11px;color:var(--text-secondary);">
+        <div>MDD: <b id="btMDD">--</b> | Best: <b id="btBest">--</b> | Worst: <b id="btWorst">--</b> | Avg: <b id="btAvg">--</b></div>
+      </div>
+    </div>
+
+    <!-- Meta Learner Results -->
+    <div class="card" style="margin-bottom:24px;">
+      <div class="card-header">
+        <span class="card-title">Meta Learner (Self-Upgrade)</span>
+        <button onclick="runMetaLearner()" style="padding:4px 12px;font-size:11px;background:var(--bg-surface);border:1px solid var(--border);border-radius:4px;color:var(--text-muted);cursor:pointer;">Run Now</button>
+      </div>
+      <div id="metaSummary" style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">아직 실행 안 됨 (매주 일요일 자동 실행)</div>
+      <div id="metaResults" style="font-size:11px;color:var(--text-secondary);"></div>
     </div>
 
     <!-- Signal Contribution Tracker -->
@@ -1453,6 +1529,134 @@ function renderWeights(elId, weights) {
   }).join('');
 }
 
+// ── Real Trading Risk ──
+async function updateRiskState() {
+  const data = await api('/api/risk/state');
+  if (!data) return;
+
+  const dEl = document.getElementById('riskDailyPnl');
+  const d = data.daily_pnl_pct||0;
+  dEl.textContent = (d>=0?'+':'')+d.toFixed(2)+'%';
+  dEl.style.color = d>=0?'var(--green)':d<=-5?'var(--red)':'var(--yellow)';
+
+  const wEl = document.getElementById('riskWeeklyPnl');
+  const w = data.weekly_pnl_pct||0;
+  wEl.textContent = (w>=0?'+':'')+w.toFixed(2)+'%';
+  wEl.style.color = w>=0?'var(--green)':w<=-10?'var(--red)':'var(--yellow)';
+
+  document.getElementById('riskStreak').textContent = data.streak||0;
+  document.getElementById('riskCooldown').textContent = (data.cooldown_remaining_min||0)+'m';
+  document.getElementById('riskBlocked').style.display = (data.daily_blocked || data.weekly_blocked) ? 'block' : 'none';
+}
+
+// ── News Filter ──
+async function updateNews() {
+  const data = await api('/api/news');
+  if (!data) return;
+
+  const statusEl = document.getElementById('newsStatus');
+  if (data.blocked) {
+    statusEl.textContent = '⚠ ' + data.reason;
+    statusEl.style.background = 'var(--red)';
+    statusEl.style.color = 'white';
+  } else {
+    statusEl.textContent = '✓ No active blackout';
+    statusEl.style.background = 'var(--bg-surface)';
+    statusEl.style.color = 'var(--green)';
+  }
+
+  const upEl = document.getElementById('upcomingEvents');
+  const upcoming = data.upcoming || [];
+  if (upcoming.length === 0) {
+    upEl.textContent = '예정된 이벤트 없음';
+  } else {
+    upEl.innerHTML = upcoming.slice(0, 5).map(e => {
+      const days = Math.floor(e.minutes_until / 1440);
+      const hours = Math.floor((e.minutes_until % 1440) / 60);
+      const time = days > 0 ? `${days}d ${hours}h` : `${hours}h`;
+      return `<div style="margin-bottom:4px;"><b>${e.name}</b> — ${time} 후 (±${e.buffer_min}분 차단)</div>`;
+    }).join('');
+  }
+}
+
+// ── Backtest Results ──
+async function updateBacktest() {
+  const data = await api('/api/backtest');
+  if (!data || !data.available) {
+    document.getElementById('backtestSummary').textContent = '아직 실행 안 됨 (매일 UTC 02:00 자동 실행)';
+    return;
+  }
+
+  const ts = new Date(data.timestamp).toLocaleString('ko');
+  document.getElementById('backtestSummary').textContent =
+    `Last run: ${ts} | ${data.days_tested}일 테스트 | ${data.elapsed_sec}초 소요`;
+
+  document.getElementById('btTrades').textContent = data.trades||0;
+
+  const wr = data.win_rate||0;
+  const wrEl = document.getElementById('btWinRate');
+  wrEl.textContent = wr.toFixed(1)+'%';
+  wrEl.style.color = wr>=50?'var(--green)':wr>=35?'var(--yellow)':'var(--red)';
+
+  const tp = data.total_pnl_pct||0;
+  const tpEl = document.getElementById('btTotalPnl');
+  tpEl.textContent = (tp>=0?'+':'')+tp.toFixed(1)+'%';
+  tpEl.style.color = tp>=0?'var(--green)':'var(--red)';
+
+  const sh = data.sharpe_ratio||0;
+  const shEl = document.getElementById('btSharpe');
+  shEl.textContent = sh.toFixed(2);
+  shEl.style.color = sh>=1?'var(--green)':sh>=0?'var(--yellow)':'var(--red)';
+
+  document.getElementById('btMDD').textContent = (data.max_drawdown_pct||0).toFixed(2)+'%';
+  document.getElementById('btBest').textContent = (data.best_trade>=0?'+':'')+ (data.best_trade||0).toFixed(2)+'%';
+  document.getElementById('btWorst').textContent = (data.worst_trade>=0?'+':'')+(data.worst_trade||0).toFixed(2)+'%';
+  document.getElementById('btAvg').textContent = (data.avg_trade>=0?'+':'')+(data.avg_trade||0).toFixed(3)+'%';
+}
+
+async function runBacktest() {
+  document.getElementById('backtestSummary').textContent = '실행 중... (1~2분)';
+  await fetch('/api/backtest/run', {method:'POST'});
+  setTimeout(updateBacktest, 60000);
+}
+
+// ── Meta Learner ──
+async function updateMeta() {
+  const data = await api('/api/meta');
+  if (!data || !data.available) {
+    document.getElementById('metaSummary').textContent = '아직 실행 안 됨 (매주 일요일 UTC 02:00 자동 실행)';
+    return;
+  }
+
+  const ts = new Date(data.timestamp).toLocaleString('ko');
+  document.getElementById('metaSummary').textContent = `Last run: ${ts} | ${data.elapsed_sec}초 소요`;
+
+  const resultEl = document.getElementById('metaResults');
+  const models = data.models || {};
+  resultEl.innerHTML = Object.entries(models).map(([mode, m]) => {
+    const params = m.best_params?.params || {};
+    const adjustments = Object.keys(m.weight_adjustments || {}).length;
+    const health = m.health || {};
+    const healthColor = health.healthy ? 'var(--green)' : 'var(--red)';
+    return `
+      <div style="margin-bottom:12px;padding:8px;border-radius:6px;background:var(--bg-surface);">
+        <div style="font-weight:700;margin-bottom:4px;text-transform:uppercase;">${mode}</div>
+        <div>Best Params: ${JSON.stringify(params)}</div>
+        <div>Best Model: <b>${m.best_model || '--'}</b></div>
+        <div>Retrain Interval: ${m.new_retrain_interval || '--'}</div>
+        <div>Weight Adjustments: ${adjustments}개</div>
+        <div>Health: <b style="color:${healthColor}">${health.healthy ? 'OK' : 'Issues: ' + (health.issues||[]).join(', ')}</b></div>
+      </div>
+    `;
+  }).join('');
+}
+
+async function runMetaLearner() {
+  document.getElementById('metaSummary').textContent = '실행 중... (5~10분)';
+  await fetch('/api/meta/run', {method:'POST'});
+  setTimeout(updateMeta, 300000);
+}
+
 // ── Signal Contribution Tracker ──
 async function updateSignalTracker() {
   const data = await api('/api/signal-tracker');
@@ -1672,13 +1876,21 @@ updatePaperStats();
 updateRegime();
 updateScalpState();
 updateSignalTracker();
+updateRiskState();
+updateNews();
+updateBacktest();
+updateMeta();
 setInterval(refreshAll, 5000);
 setInterval(updateTicker, 2000);
 setInterval(updateScalpState, 5000);
+setInterval(updateRiskState, 10000);
 setInterval(updateMLStatus, 10000);
 setInterval(updatePaperStats, 10000);
 setInterval(updateRegime, 15000);
 setInterval(updateSignalTracker, 30000);
+setInterval(updateNews, 60000);
+setInterval(updateBacktest, 60000);
+setInterval(updateMeta, 120000);
 
 // ── Language Toggle ──
 const LANG = {

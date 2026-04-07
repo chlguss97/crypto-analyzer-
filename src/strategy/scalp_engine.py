@@ -81,7 +81,7 @@ class ScalpEngine:
 
         # ── SMC 시그널 (10~12) ──
         ob_sig = self._scalp_order_block(candles_5m, candles_1m)
-        signals["scalp_ob"] = ob_sig
+        signals["order_block"] = ob_sig
         score_long += ob_sig["strength"] * 4.0 if ob_sig["direction"] == "long" else 0
         score_short += ob_sig["strength"] * 4.0 if ob_sig["direction"] == "short" else 0
 
@@ -90,8 +90,8 @@ class ScalpEngine:
         score_long += liq_sig["strength"] * 3.5 if liq_sig["direction"] == "long" else 0
         score_short += liq_sig["strength"] * 3.5 if liq_sig["direction"] == "short" else 0
 
-        fvg_sig = self._scalp_fvg(candles_1m)
-        signals["scalp_fvg"] = fvg_sig
+        fvg_sig = self._fvg(candles_1m)
+        signals["fvg"] = fvg_sig
         score_long += fvg_sig["strength"] * 2.5 if fvg_sig["direction"] == "long" else 0
         score_short += fvg_sig["strength"] * 2.5 if fvg_sig["direction"] == "short" else 0
 
@@ -454,7 +454,7 @@ class ScalpEngine:
         - 1m 가격이 OB 존에 도달 + 반전 → 진입
         """
         if len(df_5m) < 30 or len(df_1m) < 10:
-            return {"type": "scalp_ob", "direction": "neutral", "strength": 0.0, "zone": None}
+            return {"type": "order_block", "direction": "neutral", "strength": 0.0, "zone": None}
 
         close_5m = df_5m["close"].values
         open_5m = df_5m["open"].values
@@ -506,7 +506,7 @@ class ScalpEngine:
                 })
 
         if not obs:
-            return {"type": "scalp_ob", "direction": "neutral", "strength": 0.0,
+            return {"type": "order_block", "direction": "neutral", "strength": 0.0,
                     "zone": None, "nearby_count": 0}
 
         # 현재 1m 가격
@@ -530,11 +530,11 @@ class ScalpEngine:
                     best = ob
 
         if not best:
-            return {"type": "scalp_ob", "direction": "neutral", "strength": 0.0,
+            return {"type": "order_block", "direction": "neutral", "strength": 0.0,
                     "zone": None, "nearby_count": len(obs)}
 
         return {
-            "type": "scalp_ob",
+            "type": "order_block",
             "direction": best["dir"],
             "strength": round(best["strength"], 2),
             "zone": [best["low"], best["high"]],
@@ -591,10 +591,10 @@ class ScalpEngine:
         return {"type": "liquidity_sweep", "direction": direction, "strength": round(strength, 2),
                 "sweep": sweep, "recent_high": round(recent_high, 1), "recent_low": round(recent_low, 1)}
 
-    def _scalp_fvg(self, df: pd.DataFrame) -> dict:
+    def _fvg(self, df: pd.DataFrame) -> dict:
         """1m FVG — 갭 채우기 매매 + 방향 확인"""
         if len(df) < 10:
-            return {"type": "scalp_fvg", "direction": "neutral", "strength": 0.0, "gap": None}
+            return {"type": "fvg", "direction": "neutral", "strength": 0.0, "gap": None}
 
         high = df["high"].values
         low = df["low"].values
@@ -623,7 +623,7 @@ class ScalpEngine:
                                  "size_pct": gap_pct, "age": len(df) - 1 - i})
 
         if not fvgs:
-            return {"type": "scalp_fvg", "direction": "neutral", "strength": 0.0, "gap": None}
+            return {"type": "fvg", "direction": "neutral", "strength": 0.0, "gap": None}
 
         # 가격이 FVG 존에 진입 + 추세 일치
         for fvg in fvgs:
@@ -633,15 +633,15 @@ class ScalpEngine:
             # 방향 확인: 추세와 일치할 때만
             if fvg["dir"] == "long" and trend_up:
                 strength = min(1.0, fvg["size_pct"] / 0.2)
-                return {"type": "scalp_fvg", "direction": "long", "strength": round(strength, 2),
+                return {"type": "fvg", "direction": "long", "strength": round(strength, 2),
                         "gap": [fvg["bottom"], fvg["top"]], "gap_pct": round(fvg["size_pct"], 3)}
 
             elif fvg["dir"] == "short" and not trend_up:
                 strength = min(1.0, fvg["size_pct"] / 0.2)
-                return {"type": "scalp_fvg", "direction": "short", "strength": round(strength, 2),
+                return {"type": "fvg", "direction": "short", "strength": round(strength, 2),
                         "gap": [fvg["bottom"], fvg["top"]], "gap_pct": round(fvg["size_pct"], 3)}
 
-        return {"type": "scalp_fvg", "direction": "neutral", "strength": 0.0, "gap": None}
+        return {"type": "fvg", "direction": "neutral", "strength": 0.0, "gap": None}
 
     # ══════════════════════════════════════
     # 강화 시그널 (13~15)
