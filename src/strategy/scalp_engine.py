@@ -1,13 +1,14 @@
 """
-Scalp Engine v3 — 스캘핑 전문 엔진
+Scalp Engine v4 — 스캘핑 전문 엔진 (전면 개편)
 횡보 중 급변동 포착 → 빠른 진입/탈출
 
-시그널 구성 (15종):
+시그널 18종 + 필터 2종:
   [기본]    1.EMA크로스  2.RSI반전  3.BB돌파  4.거래량스파이크  5.모멘텀
   [급변동]  6.변동성폭발  7.레인지브레이크아웃  8.캔들패턴  9.급속모멘텀
-  [SMC]    10.오더블록(1m/5m)  11.유동성스윕  12.FVG(1m)
-  [필터]   13.세션필터  14.안티첩필터
-  [관리]   15.트레일링스탑 모드
+  [SMC]    10.오더블록  11.유동성스윕  12.FVG
+  [강화]   13.VWAP  14.피봇  15.BOS
+  [필터]   16.세션  17.안티첩
+  [관리]   18.트레일링스탑
 """
 import pandas as pd
 import numpy as np
@@ -16,7 +17,7 @@ from src.engine.base import BaseIndicator
 
 
 class ScalpEngine:
-    """스캘핑 전문 엔진 v3"""
+    """스캘핑 전문 엔진 v4"""
 
     def __init__(self):
         self.name = "scalp"
@@ -46,7 +47,8 @@ class ScalpEngine:
         score_long += bb_sig["strength"] * 3.0 if bb_sig["direction"] == "long" else 0
         score_short += bb_sig["strength"] * 3.0 if bb_sig["direction"] == "short" else 0
 
-        vol_sig = self._volume_spike(candles_1m)
+        # 거래량은 5m 사용 (1m은 너무 작음)
+        vol_sig = self._volume_spike(candles_5m)
         signals["volume_spike"] = vol_sig
         score_long += vol_sig["strength"] * 2.0 if vol_sig["direction"] == "long" else 0
         score_short += vol_sig["strength"] * 2.0 if vol_sig["direction"] == "short" else 0
@@ -109,7 +111,7 @@ class ScalpEngine:
         score_long += bos_sig["strength"] * 3.5 if bos_sig["direction"] == "long" else 0
         score_short += bos_sig["strength"] * 3.5 if bos_sig["direction"] == "short" else 0
 
-        # ── 필터 (13~14) ──
+        # ── 필터 (16~17) ──
         session = self._session_filter(candles_1m)
         signals["session"] = session
 
@@ -123,7 +125,7 @@ class ScalpEngine:
             trend_filter = "long" if candles_15m["close"].iloc[-1] > ema50 else "short"
 
         # ── 점수 계산 ──
-        max_possible = 41.5  # 기본11 + 급변동11.5 + SMC10 + 강화9
+        max_possible = 41.5
         if score_long > score_short:
             direction = "long"
             raw = score_long
@@ -134,26 +136,41 @@ class ScalpEngine:
             direction = "neutral"
             raw = 0
 
-        # 필터 적용
+        # 모드 판단 (필터 적용 전에 먼저)
         is_explosive = (vol_explode["strength"] > 0.5 or range_brk["strength"] > 0.5
                         or rapid["strength"] > 0.5)
 
-        # 15m 역방향 감점
+        # SMC 진입: OB와 유동성스윕 방향이 현재 시그널 방향과 일치
+        smc_ob_match = (ob_sig["strength"] > 0.5 and ob_sig["direction"] == direction)
+        smc_liq_match = (liq_sig["strength"] > 0.5 and liq_sig["direction"] == direction)
+        smc_entry = smc_ob_match or smc_liq_match
+
+        # ── 필터 가산 방식 (곱셈 폭락 방지) ──
+        # 기존: raw × 0.5 × 0.7 × 0.5 = 17.5% (너무 가혹)
+        # 개선: 각 필터마다 정해진 비율만 감점
+        penalty = 0.0
+
+        # 15m 역방향 (급변동/SMC면 약화)
         if trend_filter != "neutral" and trend_filter != direction:
-            raw *= 0.7 if is_explosive else 0.5
+            if smc_entry:
+                penalty += 0.10  # SMC는 카운터 트레이드 가능
+            elif is_explosive:
+                penalty += 0.15
+            else:
+                penalty += 0.30
 
-        # 세션 배율
-        raw *= session["multiplier"]
+        # 안티첩 (SMC/급변동 모드면 무시 — 횡보장에서도 이런 시그널 잘 먹음)
+        if antichop["is_chop"] and not (smc_entry or is_explosive):
+            penalty += 0.20
 
-        # 안티첩: 횡보 잡음이면 감점
-        if antichop["is_chop"]:
-            raw *= 0.5
+        # 세션 (배율로 적용)
+        session_mult = session["multiplier"]
 
-        score = min(10.0, raw / max_possible * 10)
+        # 최종 점수: 1) 페널티 차감 → 2) 세션 배율
+        adjusted = raw * (1 - min(0.5, penalty)) * session_mult
+        score = min(10.0, adjusted / max_possible * 10)
 
-        # 급변동 + SMC 모드 판단
         explosive_mode = is_explosive and score >= 2.5
-        smc_entry = ob_sig["strength"] > 0.5 or liq_sig["strength"] > 0.5
 
         # ATR 계산
         atr = self._calc_atr(candles_5m, 14)
@@ -161,12 +178,10 @@ class ScalpEngine:
 
         # SL/TP 모드별 조정
         if smc_entry:
-            # SMC 진입: OB 존 기반 타이트 SL, 높은 RR
             sl_mult = 0.5
             tp_mult = 2.5
             use_trailing = False
         elif explosive_mode:
-            # 급변동: 타이트 SL + 트레일링
             sl_mult = 0.6
             tp_mult = 1.5
             use_trailing = True
@@ -193,6 +208,7 @@ class ScalpEngine:
             "use_trailing": use_trailing,
             "session": session["session"],
             "session_quality": session["quality"],
+            "penalty": round(penalty, 2),
         }
 
     # ══════════════════════════════════════
@@ -224,21 +240,26 @@ class ScalpEngine:
         return {"type": "ema_cross", "direction": direction, "strength": round(strength, 2)}
 
     def _rsi_reversal(self, df: pd.DataFrame) -> dict:
+        """RSI 30/70 임계값 (기존 25/75는 너무 엄격)"""
         close = df["close"]
         delta = close.diff()
         gain = delta.where(delta > 0, 0.0)
         loss = (-delta).where(delta < 0, 0.0)
-        avg_gain = gain.ewm(alpha=1/7, min_periods=7, adjust=False).mean()
-        avg_loss = loss.ewm(alpha=1/7, min_periods=7, adjust=False).mean()
+        avg_gain = gain.ewm(alpha=1/14, min_periods=14, adjust=False).mean()
+        avg_loss = loss.ewm(alpha=1/14, min_periods=14, adjust=False).mean()
         rs = avg_gain / avg_loss.replace(0, np.inf)
         rsi = 100 - (100 / (1 + rs))
-        r, r_prev = rsi.iloc[-1], rsi.iloc[-2] if len(rsi) >= 2 else 50
+        r = rsi.iloc[-1]
+        r_prev = rsi.iloc[-2] if len(rsi) >= 2 else 50
         direction, strength = "neutral", 0.0
 
-        if r < 25 and r > r_prev:
-            direction, strength = "long", min(1.0, (30 - r) / 15)
-        elif r > 75 and r < r_prev:
-            direction, strength = "short", min(1.0, (r - 70) / 15)
+        # 30/70 임계값으로 완화
+        if r < 30 and r > r_prev:
+            direction = "long"
+            strength = min(1.0, (35 - r) / 15)
+        elif r > 70 and r < r_prev:
+            direction = "short"
+            strength = min(1.0, (r - 65) / 15)
 
         return {"type": "rsi_reversal", "direction": direction, "strength": round(strength, 2), "rsi": round(r, 1)}
 
@@ -264,14 +285,17 @@ class ScalpEngine:
         return {"type": "bb_breakout", "direction": direction, "strength": round(strength, 2), "squeeze": is_squeeze}
 
     def _volume_spike(self, df: pd.DataFrame) -> dict:
+        """5m 거래량 스파이크"""
         vol, close = df["volume"], df["close"]
+        if len(vol) < 20:
+            return {"type": "volume_spike", "direction": "neutral", "strength": 0.0, "ratio": 1.0}
         avg = vol.rolling(20).mean()
         ratio = vol.iloc[-1] / avg.iloc[-1] if avg.iloc[-1] > 0 else 1
         direction, strength = "neutral", 0.0
 
-        if ratio > 2.0:
+        if ratio > 1.8:  # 1.8배 이상 (5m 기준)
             direction = "long" if close.iloc[-1] > close.iloc[-2] else "short"
-            strength = min(1.0, ratio / 5.0)
+            strength = min(1.0, (ratio - 1) / 4)
 
         return {"type": "volume_spike", "direction": direction, "strength": round(strength, 2), "ratio": round(ratio, 2)}
 
@@ -310,8 +334,11 @@ class ScalpEngine:
 
         direction, strength = "neutral", 0.0
         if atr_ratio >= 2.0 or range_ratio >= 0.5:
-            direction = "long" if close[-1] > close[-3] else "short"
-            strength = min(1.0, max(0, (atr_ratio - 1.0) / 3.0 + (range_ratio - 0.3) / 2.0))
+            # 방향: 최근 5봉의 누적 변화로 판단 (3봉보다 안정적)
+            cum_change = close[-1] - close[-5] if len(close) >= 5 else close[-1] - close[-3]
+            if abs(cum_change) > 0:
+                direction = "long" if cum_change > 0 else "short"
+                strength = min(1.0, max(0, (atr_ratio - 1.0) / 3.0 + (range_ratio - 0.3) / 2.0))
 
         return {"type": "vol_explosion", "direction": direction, "strength": round(strength, 2),
                 "atr_ratio": round(atr_ratio, 2)}
@@ -338,7 +365,7 @@ class ScalpEngine:
             if overshoot > 0.1:
                 direction, breakout = "long", "upper"
                 strength = min(1.0, overshoot * 2)
-                if len(df_1m) >= 5:
+                if len(df_1m) >= 20:
                     vol_ratio = float(df_1m["volume"].iloc[-1]) / float(df_1m["volume"].tail(20).mean())
                     if vol_ratio > 1.5:
                         strength = min(1.0, strength + 0.2)
@@ -348,7 +375,7 @@ class ScalpEngine:
             if overshoot > 0.1:
                 direction, breakout = "short", "lower"
                 strength = min(1.0, overshoot * 2)
-                if len(df_1m) >= 5:
+                if len(df_1m) >= 20:
                     vol_ratio = float(df_1m["volume"].iloc[-1]) / float(df_1m["volume"].tail(20).mean())
                     if vol_ratio > 1.5:
                         strength = min(1.0, strength + 0.2)
@@ -356,7 +383,7 @@ class ScalpEngine:
         return {"type": "range_breakout", "direction": direction, "strength": round(strength, 2), "breakout": breakout}
 
     def _candle_pattern(self, df: pd.DataFrame) -> dict:
-        """장대봉, 핀바, 갭"""
+        """장대봉, 핀바, 갭 — 핀바를 우선 체크 (반전이 더 강함)"""
         if len(df) < 10:
             return {"type": "candle_pattern", "direction": "neutral", "strength": 0.0, "pattern": "none"}
 
@@ -370,14 +397,21 @@ class ScalpEngine:
 
         direction, strength, pattern = "neutral", 0.0, "none"
 
-        if avg_body > 0 and body > avg_body * 2:
+        # 1) 핀바 우선 (반전 시그널이 가장 강함)
+        if lower_wick > body * 2 and lower_wick > full_range * 0.6:
+            direction, pattern = "long", "pin_bar_bull"
+            strength = min(0.85, lower_wick / full_range)
+        elif upper_wick > body * 2 and upper_wick > full_range * 0.6:
+            direction, pattern = "short", "pin_bar_bear"
+            strength = min(0.85, upper_wick / full_range)
+
+        # 2) 장대봉
+        elif avg_body > 0 and body > avg_body * 2:
             direction = "long" if c > o else "short"
             pattern = "big_bull" if c > o else "big_bear"
-            strength = min(1.0, body / avg_body / 4)
-        elif lower_wick > body * 2 and lower_wick > full_range * 0.6:
-            direction, pattern, strength = "long", "pin_bar_bull", min(0.8, lower_wick / full_range)
-        elif upper_wick > body * 2 and upper_wick > full_range * 0.6:
-            direction, pattern, strength = "short", "pin_bar_bear", min(0.8, upper_wick / full_range)
+            strength = min(0.8, body / avg_body / 4)
+
+        # 3) 갭
         elif prev_c > 0 and abs(o - prev_c) / prev_c * 100 > 0.1:
             direction = "long" if o > prev_c else "short"
             pattern = "gap_up" if o > prev_c else "gap_down"
@@ -410,14 +444,14 @@ class ScalpEngine:
                 "move_ratio": round(move_ratio, 2), "total_pct": round(total_pct, 4)}
 
     # ══════════════════════════════════════
-    # SMC 시그널 (10~12) — 스캘핑 핵심
+    # SMC 시그널 (10~12)
     # ══════════════════════════════════════
 
     def _scalp_order_block(self, df_5m: pd.DataFrame, df_1m: pd.DataFrame) -> dict:
         """
-        1m/5m 오더블록 — 스캘핑 정밀 진입
-        - 5m에서 OB 존 탐지 (임펄스 직전 반대 캔들)
-        - 1m 가격이 OB 존에 도달 → 반전 확인 → 진입
+        1m/5m 오더블록 — 정확한 인덱싱 (양수 인덱스 사용)
+        - 5m에서 OB 탐지: 임펄스 직전 반대 캔들
+        - 1m 가격이 OB 존에 도달 + 반전 → 진입
         """
         if len(df_5m) < 30 or len(df_1m) < 10:
             return {"type": "scalp_ob", "direction": "neutral", "strength": 0.0, "zone": None}
@@ -426,61 +460,82 @@ class ScalpEngine:
         open_5m = df_5m["open"].values
         high_5m = df_5m["high"].values
         low_5m = df_5m["low"].values
+        n = len(df_5m)
 
         # ATR (5m)
         tr = np.maximum(high_5m[1:] - low_5m[1:], np.maximum(
             np.abs(high_5m[1:] - close_5m[:-1]), np.abs(low_5m[1:] - close_5m[:-1])))
-        atr = np.mean(tr[-14:]) if len(tr) >= 14 else np.mean(tr) if len(tr) > 0 else 1
+        atr = float(np.mean(tr[-14:])) if len(tr) >= 14 else float(np.mean(tr)) if len(tr) > 0 else 1.0
 
-        # OB 탐지 (최근 30봉)
+        # OB 탐지: 양수 인덱스 사용 (최근 30봉 중 최근 5봉은 제외 — OB는 발생 후 시간 필요)
         obs = []
-        for i in range(3, min(30, len(df_5m) - 3)):
-            if i + 3 >= len(df_5m):
+        start = max(0, n - 30)
+        end = n - 5  # 최근 5봉은 제외 (OB가 형성될 시간 필요)
+
+        for i in range(start, end):
+            # i 봉 이후 3봉 이내에 임펄스 발생 체크
+            if i + 3 >= n:
                 continue
 
-            move = close_5m[-(i-2)] - close_5m[-(i+1)]
+            # 임펄스: i+1 ~ i+3 봉의 최대 이동
+            future_close = close_5m[i + 3]
+            move = future_close - close_5m[i]
+
             if abs(move) < atr * 1.2:
                 continue
 
-            idx = len(df_5m) - i - 1
-            is_bull_ob = move > 0 and close_5m[idx] < open_5m[idx]  # 음봉 후 상승
-            is_bear_ob = move < 0 and close_5m[idx] > open_5m[idx]  # 양봉 후 하락
+            # OB 캔들: i 봉이 임펄스 방향과 반대 색이어야 함
+            is_bull_ob = move > 0 and close_5m[i] < open_5m[i]  # 음봉 후 강한 상승
+            is_bear_ob = move < 0 and close_5m[i] > open_5m[i]  # 양봉 후 강한 하락
 
             if is_bull_ob:
-                obs.append({"dir": "long", "low": low_5m[idx], "high": high_5m[idx],
-                            "strength": min(1.0, abs(move) / atr / 3), "age": i})
+                obs.append({
+                    "dir": "long",
+                    "low": float(low_5m[i]),
+                    "high": float(high_5m[i]),
+                    "strength": min(1.0, abs(move) / atr / 3),
+                    "age": n - 1 - i,
+                })
             elif is_bear_ob:
-                obs.append({"dir": "short", "low": low_5m[idx], "high": high_5m[idx],
-                            "strength": min(1.0, abs(move) / atr / 3), "age": i})
+                obs.append({
+                    "dir": "short",
+                    "low": float(low_5m[i]),
+                    "high": float(high_5m[i]),
+                    "strength": min(1.0, abs(move) / atr / 3),
+                    "age": n - 1 - i,
+                })
 
         if not obs:
-            return {"type": "scalp_ob", "direction": "neutral", "strength": 0.0, "zone": None}
+            return {"type": "scalp_ob", "direction": "neutral", "strength": 0.0,
+                    "zone": None, "nearby_count": 0}
 
         # 현재 1m 가격
         price = float(df_1m["close"].iloc[-1])
         prev_price = float(df_1m["close"].iloc[-2]) if len(df_1m) >= 2 else price
 
-        # 가장 가까운 OB 존에 가격 도달 + 반전 확인
+        # 가격이 OB 존에 도달 + 반전 확인
         best = None
         for ob in obs:
-            # Bullish OB: 가격이 OB 존까지 내려왔다가 반등
-            if ob["dir"] == "long" and price <= ob["high"] * 1.001 and price >= ob["low"] * 0.999:
-                if price > prev_price:  # 반등 확인
-                    if best is None or ob["strength"] > best["strength"]:
-                        best = ob
+            in_zone = ob["low"] * 0.999 <= price <= ob["high"] * 1.001
 
-            # Bearish OB: 가격이 OB 존까지 올라갔다가 하락
-            elif ob["dir"] == "short" and price >= ob["low"] * 0.999 and price <= ob["high"] * 1.001:
-                if price < prev_price:  # 하락 확인
-                    if best is None or ob["strength"] > best["strength"]:
-                        best = ob
+            if not in_zone:
+                continue
+
+            # 방향 일치 + 반전 확인
+            if ob["dir"] == "long" and price > prev_price:
+                if best is None or ob["strength"] > best["strength"]:
+                    best = ob
+            elif ob["dir"] == "short" and price < prev_price:
+                if best is None or ob["strength"] > best["strength"]:
+                    best = ob
 
         if not best:
             return {"type": "scalp_ob", "direction": "neutral", "strength": 0.0,
                     "zone": None, "nearby_count": len(obs)}
 
         return {
-            "type": "scalp_ob", "direction": best["dir"],
+            "type": "scalp_ob",
+            "direction": best["dir"],
             "strength": round(best["strength"], 2),
             "zone": [best["low"], best["high"]],
             "age": best["age"],
@@ -488,11 +543,7 @@ class ScalpEngine:
         }
 
     def _liquidity_sweep(self, df: pd.DataFrame) -> dict:
-        """
-        유동성 스윕 — 스탑헌팅 후 반전
-        - 최근 고점/저점을 돌파(스윕) 후 빠르게 되돌림
-        - 고래가 개미 스탑을 털고 방향 전환
-        """
+        """유동성 스윕 — 스탑헌팅 후 반전"""
         if len(df) < 30:
             return {"type": "liquidity_sweep", "direction": "neutral", "strength": 0.0, "sweep": "none"}
 
@@ -501,88 +552,91 @@ class ScalpEngine:
         close = df["close"].values
         open_ = df["open"].values
 
-        # 최근 20봉의 주요 고점/저점 (스윙 포인트)
-        recent_high = np.max(high[-20:-1])  # 현재 봉 제외
-        recent_low = np.min(low[-20:-1])
+        recent_high = float(np.max(high[-20:-1]))
+        recent_low = float(np.min(low[-20:-1]))
 
-        current_high = high[-1]
-        current_low = low[-1]
-        current_close = close[-1]
-        current_open = open_[-1]
+        current_high = float(high[-1])
+        current_low = float(low[-1])
+        current_close = float(close[-1])
+        current_open = float(open_[-1])
 
         direction, strength, sweep = "neutral", 0.0, "none"
 
-        # 상단 스윕: 고점 돌파했다가 종가는 아래로 마감 (베어리시 반전)
+        # body 0 방어
+        body = max(abs(current_close - current_open), current_close * 0.0001)
+
+        # 상단 스윕: 고점 돌파했다가 종가는 아래
         if current_high > recent_high and current_close < recent_high:
             wick_above = current_high - recent_high
-            body = abs(current_close - current_open)
-            if wick_above > 0 and body > 0:
-                sweep = "high_swept"
-                direction = "short"
-                strength = min(1.0, wick_above / body * 0.5 + 0.3)
-                # 종가가 시가 아래면 더 강함 (음봉 마감)
-                if current_close < current_open:
-                    strength = min(1.0, strength + 0.2)
+            sweep = "high_swept"
+            direction = "short"
+            # 정규화: wick / atr 비율로 계산
+            atr_proxy = (recent_high - recent_low) / 20  # 평균 봉 크기
+            wick_ratio = wick_above / atr_proxy if atr_proxy > 0 else 0
+            strength = min(1.0, 0.4 + wick_ratio * 0.3)
+            if current_close < current_open:
+                strength = min(1.0, strength + 0.2)
 
-        # 하단 스윕: 저점 돌파했다가 종가는 위로 마감 (불리시 반전)
+        # 하단 스윕: 저점 돌파했다가 종가는 위
         elif current_low < recent_low and current_close > recent_low:
             wick_below = recent_low - current_low
-            body = abs(current_close - current_open)
-            if wick_below > 0 and body > 0:
-                sweep = "low_swept"
-                direction = "long"
-                strength = min(1.0, wick_below / body * 0.5 + 0.3)
-                if current_close > current_open:
-                    strength = min(1.0, strength + 0.2)
+            sweep = "low_swept"
+            direction = "long"
+            atr_proxy = (recent_high - recent_low) / 20
+            wick_ratio = wick_below / atr_proxy if atr_proxy > 0 else 0
+            strength = min(1.0, 0.4 + wick_ratio * 0.3)
+            if current_close > current_open:
+                strength = min(1.0, strength + 0.2)
 
         return {"type": "liquidity_sweep", "direction": direction, "strength": round(strength, 2),
                 "sweep": sweep, "recent_high": round(recent_high, 1), "recent_low": round(recent_low, 1)}
 
     def _scalp_fvg(self, df: pd.DataFrame) -> dict:
-        """
-        1m FVG — 급등/급락 후 갭 채우기 매매
-        - 3봉 패턴: 1봉 고가 < 3봉 저가 (불리시 FVG) 또는 반대
-        - 가격이 갭으로 되돌아오면 진입
-        """
+        """1m FVG — 갭 채우기 매매 + 방향 확인"""
         if len(df) < 10:
             return {"type": "scalp_fvg", "direction": "neutral", "strength": 0.0, "gap": None}
 
         high = df["high"].values
         low = df["low"].values
         close = df["close"].values
-        price = close[-1]
+        price = float(close[-1])
 
-        # 최근 10봉에서 FVG 찾기
+        # 가격 추세 확인 (FVG는 추세 방향에 맞아야 강함)
+        trend_up = close[-1] > close[-5] if len(close) >= 5 else True
+
         fvgs = []
         for i in range(len(df) - 3, max(len(df) - 12, 0), -1):
-            # Bullish FVG: 1봉 고가 < 3봉 저가 (위로 갭)
+            # Bullish FVG: 1봉 고가 < 3봉 저가 (가격이 위로 갭)
             if high[i] < low[i + 2]:
                 gap_size = low[i + 2] - high[i]
                 gap_pct = gap_size / price * 100
                 if gap_pct > 0.05:
-                    fvgs.append({"dir": "long", "top": low[i + 2], "bottom": high[i],
+                    fvgs.append({"dir": "long", "top": float(low[i + 2]), "bottom": float(high[i]),
                                  "size_pct": gap_pct, "age": len(df) - 1 - i})
 
-            # Bearish FVG: 1봉 저가 > 3봉 고가 (아래로 갭)
+            # Bearish FVG: 1봉 저가 > 3봉 고가 (가격이 아래로 갭)
             if low[i] > high[i + 2]:
                 gap_size = low[i] - high[i + 2]
                 gap_pct = gap_size / price * 100
                 if gap_pct > 0.05:
-                    fvgs.append({"dir": "short", "top": low[i], "bottom": high[i + 2],
+                    fvgs.append({"dir": "short", "top": float(low[i]), "bottom": float(high[i + 2]),
                                  "size_pct": gap_pct, "age": len(df) - 1 - i})
 
         if not fvgs:
             return {"type": "scalp_fvg", "direction": "neutral", "strength": 0.0, "gap": None}
 
-        # 가격이 FVG 존에 진입했는지 확인
+        # 가격이 FVG 존에 진입 + 추세 일치
         for fvg in fvgs:
-            if fvg["dir"] == "long" and fvg["bottom"] <= price <= fvg["top"]:
-                # 갭 채우러 내려온 상태 → 롱 진입
+            if not (fvg["bottom"] <= price <= fvg["top"]):
+                continue
+
+            # 방향 확인: 추세와 일치할 때만
+            if fvg["dir"] == "long" and trend_up:
                 strength = min(1.0, fvg["size_pct"] / 0.2)
                 return {"type": "scalp_fvg", "direction": "long", "strength": round(strength, 2),
                         "gap": [fvg["bottom"], fvg["top"]], "gap_pct": round(fvg["size_pct"], 3)}
 
-            elif fvg["dir"] == "short" and fvg["bottom"] <= price <= fvg["top"]:
+            elif fvg["dir"] == "short" and not trend_up:
                 strength = min(1.0, fvg["size_pct"] / 0.2)
                 return {"type": "scalp_fvg", "direction": "short", "strength": round(strength, 2),
                         "gap": [fvg["bottom"], fvg["top"]], "gap_pct": round(fvg["size_pct"], 3)}
@@ -590,64 +644,56 @@ class ScalpEngine:
         return {"type": "scalp_fvg", "direction": "neutral", "strength": 0.0, "gap": None}
 
     # ══════════════════════════════════════
-    # 강화 시그널 (13~15) — VWAP/피봇/BOS
+    # 강화 시그널 (13~15)
     # ══════════════════════════════════════
 
     def _vwap_levels(self, df_5m: pd.DataFrame, df_1m: pd.DataFrame) -> dict:
-        """
-        VWAP 일중 레벨 — 가격이 VWAP에 도달 시 반전 매매
-        - 가격이 VWAP 아래에 있다가 위로 돌파 → 롱
-        - 가격이 VWAP 위에 있다가 아래로 이탈 → 숏
-        - VWAP에서 멀리 있을 때 평균회귀
-        """
+        """VWAP 일중 레벨"""
         if len(df_5m) < 50:
             return {"type": "vwap_levels", "direction": "neutral", "strength": 0.0, "vwap": 0}
 
-        # 24시간 VWAP (최근 288봉 = 24시간)
         recent = df_5m.tail(288) if len(df_5m) >= 288 else df_5m
         typical = (recent["high"] + recent["low"] + recent["close"]) / 3
-        vwap = float((typical * recent["volume"]).sum() / recent["volume"].sum())
+        vol_sum = recent["volume"].sum()
+        if vol_sum <= 0:
+            return {"type": "vwap_levels", "direction": "neutral", "strength": 0.0, "vwap": 0}
 
+        vwap = float((typical * recent["volume"]).sum() / vol_sum)
         current_price = float(df_5m["close"].iloc[-1])
         prev_price = float(df_5m["close"].iloc[-2])
-
-        # VWAP 거리 (%)
         distance_pct = (current_price - vwap) / vwap * 100
 
         direction = "neutral"
         strength = 0.0
 
-        # VWAP 돌파 (방금 통과)
+        # VWAP 돌파
         if prev_price < vwap < current_price:
             direction = "long"
             strength = 0.7
         elif prev_price > vwap > current_price:
             direction = "short"
             strength = 0.7
-
-        # VWAP에서 멀리 떨어짐 (평균회귀)
+        # 평균회귀
         elif abs(distance_pct) > 1.0:
-            if distance_pct > 0:
-                direction = "short"
-                strength = min(0.6, abs(distance_pct) / 2.0)
-            else:
-                direction = "long"
-                strength = min(0.6, abs(distance_pct) / 2.0)
+            direction = "short" if distance_pct > 0 else "long"
+            strength = min(0.6, abs(distance_pct) / 2.0)
 
         return {"type": "vwap_levels", "direction": direction, "strength": round(strength, 2),
                 "vwap": round(vwap, 1), "distance_pct": round(distance_pct, 3)}
 
     def _pivot_points(self, df: pd.DataFrame) -> dict:
-        """
-        피봇 포인트 — 일일 지지/저항 레벨
-        - 전일 H/L/C 기반 PP, R1, S1, R2, S2 계산
-        - 가격이 레벨 도달 시 반전 시그널
-        """
-        if len(df) < 288:  # 최소 24시간
+        """피봇 포인트 — 가용 데이터로 동작 (최소 100봉)"""
+        if len(df) < 100:
             return {"type": "pivot_points", "direction": "neutral", "strength": 0.0}
 
-        # 전일 데이터 (288봉 = 24시간 5m)
-        prev_day = df.iloc[-576:-288] if len(df) >= 576 else df.iloc[-288:]
+        # 데이터가 부족하면 가용 범위로
+        if len(df) >= 576:
+            prev_day = df.iloc[-576:-288]
+        elif len(df) >= 288:
+            prev_day = df.iloc[-288:]
+        else:
+            prev_day = df.iloc[-min(288, len(df)//2):-1]
+
         prev_high = float(prev_day["high"].max())
         prev_low = float(prev_day["low"].min())
         prev_close = float(prev_day["close"].iloc[-1])
@@ -664,15 +710,14 @@ class ScalpEngine:
         strength = 0.0
         level = None
 
-        # 피봇 레벨 근접 체크 (0.1% 이내)
-        levels = [("R2", r2, "short"), ("R1", r1, "short"), ("PP", pp, "neutral"),
+        # 피봇 레벨 근접 (0.15% 이내로 완화)
+        levels = [("R2", r2, "short"), ("R1", r1, "short"),
                   ("S1", s1, "long"), ("S2", s2, "long")]
 
         for name, lvl, dir_hint in levels:
-            if abs(current - lvl) / current < 0.001 and dir_hint != "neutral":
+            if abs(current - lvl) / current < 0.0015:
                 direction = dir_hint
                 level = name
-                # R2/S2가 더 강한 시그널
                 strength = 0.8 if name in ("R2", "S2") else 0.6
                 break
 
@@ -680,33 +725,28 @@ class ScalpEngine:
                 "level": level, "pp": round(pp, 1), "r1": round(r1, 1), "s1": round(s1, 1)}
 
     def _break_of_structure(self, df: pd.DataFrame) -> dict:
-        """
-        Break of Structure (BOS) — 1m 구조 변화 감지
-        - 최근 스윙 고/저 돌파 시 추세 전환 시그널
-        - SMC의 핵심 개념
-        """
-        if len(df) < 30:
+        """BOS — 1m 스윙 돌파 (스윙 조건 완화)"""
+        if len(df) < 20:
             return {"type": "bos", "direction": "neutral", "strength": 0.0, "bos": "none"}
 
         high = df["high"].values
         low = df["low"].values
         close = df["close"].values
 
-        # 스윙 포인트 탐지 (최근 20봉)
+        # 스윙 포인트: 양옆 1봉만 비교 (3봉 패턴, 더 자주 발생)
         swing_highs = []
         swing_lows = []
-        for i in range(2, len(high) - 2):
-            # 양옆 2봉보다 높으면 스윙 하이
-            if high[i] > high[i-1] and high[i] > high[i-2] and high[i] > high[i+1] and high[i] > high[i+2]:
+        for i in range(1, len(high) - 1):
+            if high[i] > high[i-1] and high[i] > high[i+1]:
                 swing_highs.append((i, high[i]))
-            if low[i] < low[i-1] and low[i] < low[i-2] and low[i] < low[i+1] and low[i] < low[i+2]:
+            if low[i] < low[i-1] and low[i] < low[i+1]:
                 swing_lows.append((i, low[i]))
 
         if not swing_highs or not swing_lows:
             return {"type": "bos", "direction": "neutral", "strength": 0.0, "bos": "none"}
 
-        last_swing_high = swing_highs[-1][1]
-        last_swing_low = swing_lows[-1][1]
+        last_swing_high = float(swing_highs[-1][1])
+        last_swing_low = float(swing_lows[-1][1])
         current = float(close[-1])
         prev = float(close[-2]) if len(close) >= 2 else current
 
@@ -714,15 +754,14 @@ class ScalpEngine:
         strength = 0.0
         bos_type = "none"
 
-        # 상승 BOS: 직전 스윙 하이 돌파
+        # 상승 BOS
         if current > last_swing_high and prev <= last_swing_high:
             direction = "long"
             bos_type = "bullish_bos"
-            # 돌파 강도
             overshoot = (current - last_swing_high) / last_swing_high
             strength = min(1.0, overshoot * 100 + 0.5)
 
-        # 하락 BOS: 직전 스윙 로우 이탈
+        # 하락 BOS
         elif current < last_swing_low and prev >= last_swing_low:
             direction = "short"
             bos_type = "bearish_bos"
@@ -734,18 +773,11 @@ class ScalpEngine:
                 "swing_low": round(last_swing_low, 1)}
 
     # ══════════════════════════════════════
-    # 필터 (13~14)
+    # 필터 (16~17)
     # ══════════════════════════════════════
 
     def _session_filter(self, df: pd.DataFrame) -> dict:
-        """
-        세션 필터 — 시간대별 스캘핑 적합도
-        - 유럽+미국 겹침 (13:00~17:00 UTC / 22:00~02:00 KST): 최적 → 1.2x
-        - 미국 세션 (13:00~21:00 UTC): 좋음 → 1.1x
-        - 유럽 세션 (07:00~16:00 UTC): 보통 → 1.0x
-        - 아시아 세션 (00:00~08:00 UTC): 변동성 낮음 → 0.7x
-        - 주말: 유동성 부족 → 0.6x
-        """
+        """세션 필터"""
         if len(df) == 0:
             return {"type": "session", "session": "unknown", "quality": "low", "multiplier": 0.8}
 
@@ -754,7 +786,7 @@ class ScalpEngine:
         hour = dt.hour
         weekday = dt.weekday()
 
-        if weekday >= 5:  # 주말
+        if weekday >= 5:
             return {"type": "session", "session": "weekend", "quality": "poor", "multiplier": 0.6}
 
         if 13 <= hour < 17:
@@ -764,52 +796,73 @@ class ScalpEngine:
         elif 7 <= hour < 16:
             return {"type": "session", "session": "eu", "quality": "normal", "multiplier": 1.0}
         elif 0 <= hour < 8:
-            return {"type": "session", "session": "asia", "quality": "low", "multiplier": 0.7}
+            return {"type": "session", "session": "asia", "quality": "low", "multiplier": 0.8}  # 0.7 → 0.8
         else:
             return {"type": "session", "session": "late_us", "quality": "normal", "multiplier": 0.9}
 
     def _anti_chop(self, df: pd.DataFrame) -> dict:
-        """
-        안티첩 필터 — 횡보 잡음 구간 감지
-        - 5m ADX < 15 → 추세 없음 (첩)
-        - 최근 10봉이 좁은 레인지에서 왔다갔다 → 첩
-        """
-        if len(df) < 20:
-            return {"type": "anti_chop", "is_chop": False, "adx": 0}
-
-        close = df["close"].values
-        high = df["high"].values
-        low = df["low"].values
-
-        # 간이 ADX
-        tr = np.maximum(high[1:] - low[1:], np.maximum(
-            np.abs(high[1:] - close[:-1]), np.abs(low[1:] - close[:-1])))
-
-        plus_dm = np.zeros(len(high) - 1)
-        minus_dm = np.zeros(len(high) - 1)
-        for i in range(len(high) - 1):
-            up = high[i + 1] - high[i]
-            down = low[i] - low[i + 1]
-            plus_dm[i] = up if up > down and up > 0 else 0
-            minus_dm[i] = down if down > up and down > 0 else 0
-
-        period = 14
-        if len(tr) < period:
+        """안티첩 — Wilder's smoothing 적용 정통 ADX"""
+        if len(df) < 30:
             return {"type": "anti_chop", "is_chop": False, "adx": 20}
 
-        atr = np.mean(tr[-period:])
-        pdi = np.mean(plus_dm[-period:]) / atr * 100 if atr > 0 else 0
-        mdi = np.mean(minus_dm[-period:]) / atr * 100 if atr > 0 else 0
-        dx = abs(pdi - mdi) / (pdi + mdi) * 100 if (pdi + mdi) > 0 else 0
-        adx = dx  # 간이 계산
+        high = df["high"].values
+        low = df["low"].values
+        close = df["close"].values
+        n = len(high)
 
-        # 레인지 첩 감지: 최근 10봉의 방향 전환 횟수
+        # True Range
+        tr = np.zeros(n)
+        for i in range(1, n):
+            tr[i] = max(high[i] - low[i],
+                        abs(high[i] - close[i-1]),
+                        abs(low[i] - close[i-1]))
+
+        # Directional Movement
+        plus_dm = np.zeros(n)
+        minus_dm = np.zeros(n)
+        for i in range(1, n):
+            up = high[i] - high[i-1]
+            down = low[i-1] - low[i]
+            plus_dm[i] = up if (up > down and up > 0) else 0
+            minus_dm[i] = down if (down > up and down > 0) else 0
+
+        # Wilder's smoothing
+        period = 14
+        if n < period + 1:
+            return {"type": "anti_chop", "is_chop": False, "adx": 20}
+
+        atr = np.zeros(n)
+        smooth_plus = np.zeros(n)
+        smooth_minus = np.zeros(n)
+        atr[period] = np.mean(tr[1:period + 1])
+        smooth_plus[period] = np.mean(plus_dm[1:period + 1])
+        smooth_minus[period] = np.mean(minus_dm[1:period + 1])
+
+        for i in range(period + 1, n):
+            atr[i] = (atr[i-1] * (period - 1) + tr[i]) / period
+            smooth_plus[i] = (smooth_plus[i-1] * (period - 1) + plus_dm[i]) / period
+            smooth_minus[i] = (smooth_minus[i-1] * (period - 1) + minus_dm[i]) / period
+
+        # DX → ADX
+        dx_values = []
+        for i in range(period, n):
+            if atr[i] > 0:
+                pdi = smooth_plus[i] / atr[i] * 100
+                mdi = smooth_minus[i] / atr[i] * 100
+                if (pdi + mdi) > 0:
+                    dx_values.append(abs(pdi - mdi) / (pdi + mdi) * 100)
+
+        adx = float(np.mean(dx_values[-period:])) if len(dx_values) >= period else 20.0
+
+        # 방향 전환 횟수 (보조 지표)
         direction_changes = 0
         for i in range(-10, -1):
-            if (close[i] > close[i-1]) != (close[i+1] > close[i]):
-                direction_changes += 1
+            if i - 1 >= -len(close) and i + 1 < 0:
+                if (close[i] > close[i-1]) != (close[i+1] > close[i]):
+                    direction_changes += 1
 
-        is_chop = adx < 15 or direction_changes >= 7
+        # 첩 판단 완화: ADX < 18 + 방향 전환 7회+ (하나만 만족하면 첩 아님)
+        is_chop = adx < 18 and direction_changes >= 6
 
         return {"type": "anti_chop", "is_chop": is_chop, "adx": round(adx, 1),
                 "direction_changes": direction_changes}
