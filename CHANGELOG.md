@@ -6,6 +6,33 @@
 
 ## 2026-04-07
 
+### 1주일 운영 최종 안정성 강화 (★★★ 5건)
+- **adaptive_ml.py save()**: tempfile + shutil.move 원자적 저장 → pkl 손상 방지
+- **signal_tracker.py save()**: 동일 원자적 저장 → JSON 손상 방지
+- **main.py periodic_daily_reset**: day 비교 → date() 객체 비교 (월 변경 안전), 60→30초 주기
+- **main.py cleanup**: Graceful Shutdown 강화 (ML/Tracker 저장 우선, 미청산 포지션 로그)
+- **ws_stream.py**: CVD 오버플로우 방어 (±1e9 클램프)
+
+### 안정성 보강 6건
+- **adaptive_ml.py _load_v2**: 시그널 이름 마이그레이션 자동 처리 (scalp_ob → order_block)
+- **ws_stream.py**: WebSocket 무한 재연결 (3회 → 무제한, 최대 60초 대기)
+- **main.py**: asyncio.gather return_exceptions=True (한 태스크 죽어도 봇 안 죽음)
+- **storage.py**: Redis set/get/hset/hgetall/delete/publish 모두 try/except (silent fail)
+- **main.py**: 30일 이상 paper 거래 자동 삭제 (DB 무한 증가 방지)
+- **docker-compose.yml**: 로그 회전 (bot 50MB×5, redis 10MB×3)
+
+### 대시보드 UI 재구성 + 도움말 툴팁
+- **3탭 → 4탭 거래소 스타일**:
+  - Dashboard (핵심 운영)
+  - Market & Signals (시장 분석)
+  - AI / Models (ML 전체)
+  - Risk & System (리스크/뉴스/시스템) — 신규
+- **빠진 UI 4개 추가**: Real Trading Risk, News Filter, Auto Backtest, Meta Learner
+- **System Status 카드**: 봇 상태/하트비트/자동매매/ML 활성화
+- **명칭 직관화 16개**: Recent Trades → Real Trade History 등
+- **23개 카드에 도움말 툴팁(?) 추가**: 마우스 오버 시 한국어 설명
+- **시그널 이름 변경**: scalp_ob → order_block, scalp_fvg → fvg
+
 ### SignalTracker — 시그널 기여도 추적 시스템
 - **신규 모듈**: `src/strategy/signal_tracker.py`
 - 각 거래의 활성 시그널(강도≥0.3) 추출 → 강도 비례 P&L 분배
