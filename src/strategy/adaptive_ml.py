@@ -516,6 +516,22 @@ class AdaptiveML:
         self.models = data.get("models", {})
         self.scalers = data.get("scalers", {})
         self.weights = data["weights"]
+
+        # ── 시그널 이름 마이그레이션 (scalp_ob → order_block, scalp_fvg → fvg) ──
+        if self.mode == "scalp":
+            renames = {"scalp_ob": "order_block", "scalp_fvg": "fvg"}
+            for old_key, new_key in renames.items():
+                if old_key in self.weights and new_key not in self.weights:
+                    self.weights[new_key] = self.weights.pop(old_key)
+                    logger.info(f"[{self.mode}] 시그널 이름 마이그레이션: {old_key} → {new_key}")
+
+            # 기본 가중치에 있는데 로드된 weights에 없는 키 추가
+            defaults = self._default_weights()
+            for k, v in defaults.items():
+                if k not in self.weights:
+                    self.weights[k] = v
+                    logger.info(f"[{self.mode}] 누락된 시그널 추가: {k}={v}")
+
         self.entry_threshold = data["entry_threshold"]
         self.trade_count = data["trade_count"]
         self.X_buffer = deque(data.get("X_buffer", []), maxlen=10000)

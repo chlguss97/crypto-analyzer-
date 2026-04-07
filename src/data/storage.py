@@ -244,17 +244,24 @@ class RedisClient:
     async def set(self, key: str, value, ttl: int = None):
         if not self._client:
             return
-        if isinstance(value, (dict, list)):
-            value = json.dumps(value, default=_json_default)
-        if ttl:
-            await self._client.setex(key, ttl, value)
-        else:
-            await self._client.set(key, value)
+        try:
+            if isinstance(value, (dict, list)):
+                value = json.dumps(value, default=_json_default)
+            if ttl:
+                await self._client.setex(key, ttl, value)
+            else:
+                await self._client.set(key, value)
+        except Exception as e:
+            logger.debug(f"Redis set error ({key}): {e}")
 
     async def get(self, key: str) -> str | None:
         if not self._client:
             return None
-        return await self._client.get(key)
+        try:
+            return await self._client.get(key)
+        except Exception as e:
+            logger.debug(f"Redis get error ({key}): {e}")
+            return None
 
     async def get_json(self, key: str) -> dict | list | None:
         val = await self.get(key)
@@ -265,21 +272,33 @@ class RedisClient:
     async def hset(self, key: str, mapping: dict):
         if not self._client:
             return
-        # Redis 3.x 호환: hset(mapping=) 대신 개별 hset 사용
-        for field, value in mapping.items():
-            await self._client.hset(key, field, value)
+        try:
+            for field, value in mapping.items():
+                await self._client.hset(key, field, value)
+        except Exception as e:
+            logger.debug(f"Redis hset error ({key}): {e}")
 
     async def hgetall(self, key: str) -> dict:
         if not self._client:
             return {}
-        return await self._client.hgetall(key)
+        try:
+            return await self._client.hgetall(key)
+        except Exception as e:
+            logger.debug(f"Redis hgetall error ({key}): {e}")
+            return {}
 
     async def delete(self, key: str):
         if not self._client:
             return
-        await self._client.delete(key)
+        try:
+            await self._client.delete(key)
+        except Exception as e:
+            logger.debug(f"Redis delete error ({key}): {e}")
 
     async def publish(self, channel: str, message: str):
         if not self._client:
             return
-        await self._client.publish(channel, message)
+        try:
+            await self._client.publish(channel, message)
+        except Exception as e:
+            logger.debug(f"Redis publish error ({channel}): {e}")

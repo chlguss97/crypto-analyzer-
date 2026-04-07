@@ -18,28 +18,28 @@ class WebSocketStream:
         self.ws = None
         self._running = False
         self._reconnect_count = 0
-        self._max_reconnect = 3
         self._cvd_15m = 0.0
         self._cvd_1h = 0.0
         self._cvd_reset_15m = 0
         self._cvd_reset_1h = 0
 
     async def start(self, symbol: str = "BTC-USDT-SWAP"):
-        """WebSocket 연결 시작"""
+        """WebSocket 연결 시작 (무한 재시도)"""
         self._running = True
         self._reconnect_count = 0
 
         while self._running:
             try:
                 await self._connect(symbol)
+                # 정상 종료 시에도 재연결
+                self._reconnect_count = 0
             except Exception as e:
                 self._reconnect_count += 1
-                if self._reconnect_count > self._max_reconnect:
-                    logger.error(f"WebSocket 재연결 {self._max_reconnect}회 실패 → 중단")
-                    self._running = False
-                    break
-                wait = min(5 * self._reconnect_count, 30)
-                logger.warning(f"WebSocket 끊김: {e} → {wait}초 후 재연결 ({self._reconnect_count}/{self._max_reconnect})")
+                # 무한 재시도 (최대 60초 대기)
+                wait = min(5 * min(self._reconnect_count, 12), 60)
+                logger.warning(
+                    f"WebSocket 끊김: {e} → {wait}초 후 재연결 (시도 {self._reconnect_count})"
+                )
                 await asyncio.sleep(wait)
 
     async def _connect(self, symbol: str):

@@ -725,7 +725,22 @@ class CryptoAnalyzer:
                 # ML 모델 주기적 저장
                 self.ml_swing.save()
                 self.ml_scalp.save()
-                logger.info("일일 리셋 + ML 저장 완료")
+
+                # 오래된 가상매매 기록 정리 (30일 이상)
+                try:
+                    import time as _t
+                    cutoff = int((_t.time() - 30 * 86400) * 1000)
+                    cursor = await self.db._db.execute(
+                        "DELETE FROM trades WHERE entry_time < ? AND grade LIKE 'PAPER_%'",
+                        (cutoff,)
+                    )
+                    await self.db._db.commit()
+                    deleted = cursor.rowcount if hasattr(cursor, 'rowcount') else 0
+                    logger.info(f"[CLEAN] 30일 이상 가상매매 {deleted}건 삭제")
+                except Exception as e:
+                    logger.error(f"DB 정리 에러: {e}")
+
+                logger.info("일일 리셋 + ML 저장 + DB 정리 완료")
 
             await asyncio.sleep(60)
 
@@ -780,7 +795,11 @@ class CryptoAnalyzer:
         ]
 
         try:
-            await asyncio.gather(*tasks)
+            # return_exceptions=True: 한 태스크 죽어도 다른 태스크 계속 실행
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            for i, r in enumerate(results):
+                if isinstance(r, Exception) and not isinstance(r, asyncio.CancelledError):
+                    logger.error(f"태스크 {i} 종료: {r}", exc_info=r)
         except asyncio.CancelledError:
             logger.info("봇 종료 중...")
         finally:
