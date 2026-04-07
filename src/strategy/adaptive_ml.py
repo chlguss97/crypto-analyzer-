@@ -424,10 +424,16 @@ class AdaptiveML:
         recent = list(self.recent_results)
         if len(recent) >= 10:
             recent_wr = sum(1 for r in recent[-10:] if self._get_pnl(r) > 0) / 10
+            # 모드별 임계값 상한/하한
+            if self.mode == "scalp":
+                max_threshold, min_threshold = 6.0, 3.0
+            else:
+                max_threshold, min_threshold = 8.0, 4.0
+
             if recent_wr < 0.3:
-                self.entry_threshold = min(8.0, self.entry_threshold + 0.1)
+                self.entry_threshold = min(max_threshold, self.entry_threshold + 0.1)
             elif recent_wr > 0.5:
-                self.entry_threshold = max(3.0, self.entry_threshold - 0.05)
+                self.entry_threshold = max(min_threshold, self.entry_threshold - 0.05)
 
     def get_adjusted_score(self, raw_score: float, signals: dict, meta: dict = None) -> float:
         """ML 예측으로 점수 조정"""
