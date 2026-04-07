@@ -235,8 +235,9 @@ async def startup():
     global _bg_task, executor
     await db.connect()
     await redis.connect()
-    _bg_task = asyncio.create_task(_candle_loop())
-    asyncio.create_task(_signal_loop())
+    # 캔들/시그널 루프는 main.py에서 실행 — 대시보드는 조회만
+    # _bg_task = asyncio.create_task(_candle_loop())
+    # asyncio.create_task(_signal_loop())
 
     # 매매 실행기 초기화 (API 키 있을 때만)
     try:

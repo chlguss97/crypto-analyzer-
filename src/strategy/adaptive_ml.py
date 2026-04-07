@@ -282,13 +282,15 @@ class AdaptiveML:
 
         if self.trade_count % self.retrain_interval == 0 and len(self.X_buffer) >= self.min_trades_to_train:
             self.train()
-        else:
+        elif self.trade_count % 50 == 0:
+            # 50건마다만 저장 (매건 저장하면 I/O 병목)
             self.save()
 
-        logger.info(
-            f"[{self.mode}] ML 학습: PnL {pnl_pct:+.2f}% | 레짐:{regime} | "
-            f"버퍼 {len(self.X_buffer)} | {'TRAINED' if self.is_trained else 'LEARNING'}"
-        )
+        if self.trade_count % 100 == 0:
+            logger.info(
+                f"[{self.mode}] ML 학습 {self.trade_count}건 | 레짐:{regime} | "
+                f"버퍼 {len(self.X_buffer)} | {'TRAINED' if self.is_trained else 'LEARNING'}"
+            )
 
     # ── 앙상블 학습 ──
 

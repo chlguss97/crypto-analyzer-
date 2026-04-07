@@ -156,9 +156,9 @@ class HistoricalLearner:
                 logger.debug(f"[HIST] bar {i} 에러: {e}")
                 continue
 
-            # CPU 양보 (매 50건마다)
-            if trades_learned % 50 == 0 and trades_learned > 0:
-                await asyncio.sleep(0.1)
+            # CPU 양보 (매 10건마다 — 대시보드 응답 보장)
+            if trades_learned % 10 == 0 and trades_learned > 0:
+                await asyncio.sleep(0.05)
 
         elapsed = time.time() - start_time
         win_rate = self._stats["wins"] / max(self._stats["total"], 1) * 100
@@ -382,8 +382,8 @@ class HistoricalLearner:
                 logger.debug(f"[HIST-SCALP] bar {i} 에러: {e}")
                 continue
 
-            if scalp_stats["total"] % 50 == 0 and scalp_stats["total"] > 0:
-                await asyncio.sleep(0.1)
+            if scalp_stats["total"] % 10 == 0 and scalp_stats["total"] > 0:
+                await asyncio.sleep(0.05)
 
         elapsed = time.time() - start_time
         wr = scalp_stats["wins"] / max(scalp_stats["total"], 1) * 100
@@ -607,8 +607,8 @@ class HistoricalLearner:
             except Exception:
                 continue
 
-            if learned % 30 == 0 and learned > 0:
-                await asyncio.sleep(0.1)
+            if learned % 10 == 0 and learned > 0:
+                await asyncio.sleep(0.05)
 
         logger.info(f"[HIST] 급변동 집중 학습 완료: {learned}건 (Scalp)")
 

@@ -157,9 +157,8 @@ class CryptoAnalyzer:
             await self.candle_collector.backfill(tf, days=7)
         logger.info("캔들 백필 완료")
 
-        # 시작 시 역사 백필 학습 (비동기 — 봇 시작 안 막음)
-        logger.info("역사 백필 ML 학습 예약...")
-        asyncio.create_task(self._initial_history_learn())
+        # 역사 백필은 스케줄러(하루 3회)에서 실행 — 시작 시 대시보드 응답 보장
+        logger.info("ML 학습은 스케줄러에서 실행됩니다 (UTC 02/10/18)")
 
     # ── Swing 시그널 ──
 
@@ -684,15 +683,20 @@ class CryptoAnalyzer:
 
     # ── 대시보드 서버 ──
 
-    async def start_dashboard(self):
-        """uvicorn 대시보드를 asyncio task로 실행"""
+    def start_dashboard_thread(self):
+        """uvicorn 대시보드를 별도 스레드로 실행 (메인 루프 블로킹 방지)"""
         import uvicorn
+        import threading
         from src.monitoring.dashboard import app
 
-        config = uvicorn.Config(app, host="0.0.0.0", port=8000, log_level="warning")
-        server = uvicorn.Server(config)
-        logger.info("대시보드 시작: http://localhost:8000")
-        await server.serve()
+        def _run():
+            config = uvicorn.Config(app, host="0.0.0.0", port=8000, log_level="warning")
+            server = uvicorn.Server(config)
+            server.run()
+
+        t = threading.Thread(target=_run, daemon=True)
+        t.start()
+        logger.info("대시보드 시작 (별도 스레드): http://localhost:8000")
 
     # ── 메인 ──
 
@@ -702,7 +706,7 @@ class CryptoAnalyzer:
         self._current_day = datetime.now(timezone.utc).day
 
         logger.info("봇 시작 — Swing + Scalp 듀얼 모델 + AdaptiveML + PaperTrading")
-        logger.info("대시보드: http://localhost:8000")
+        self.start_dashboard_thread()  # 대시보드 별도 스레드
         await self.redis.set("sys:bot_status", "running")
         await self.redis.set("sys:autotrading", "off")  # 초기 OFF (웹에서 켜기)
         await self.redis.set("sys:ml_enabled", "on")
@@ -719,7 +723,6 @@ class CryptoAnalyzer:
             asyncio.create_task(self.periodic_study_scheduler()),
             asyncio.create_task(self.periodic_heartbeat()),
             asyncio.create_task(self.ws_stream.start()),
-            asyncio.create_task(self.start_dashboard()),
         ]
 
         try:
