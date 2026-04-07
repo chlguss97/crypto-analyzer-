@@ -1511,14 +1511,14 @@ async function updateMLStatus() {
     if (b.textContent.toLowerCase() === (data.active_model||'both')) b.classList.add('active');
   });
   const sw = data.swing||{}, sc = data.scalp||{};
-  document.getElementById('mlSwingTrades').textContent = sw.trade_count||0;
+  document.getElementById('mlSwingTrades').textContent = sw.buffer_size||0;
   document.getElementById('mlSwingStatus').textContent = sw.trained?'TRAINED':'UNTRAINED';
   document.getElementById('mlSwingStatus').className = 'metric-value '+(sw.trained?'positive':'neutral');
   document.getElementById('mlSwingThreshold').textContent = sw.entry_threshold||'--';
   document.getElementById('mlSwingWR').textContent = (sw.recent_win_rate||0)+'%';
   document.getElementById('mlSwingWR').className = 'metric-value '+(sw.recent_win_rate>=50?'positive':sw.recent_win_rate>=30?'neutral':'negative');
   document.getElementById('mlSwingBuffer').textContent = sw.buffer_size||0;
-  document.getElementById('mlScalpTrades').textContent = sc.trade_count||0;
+  document.getElementById('mlScalpTrades').textContent = sc.buffer_size||0;
   document.getElementById('mlScalpStatus').textContent = sc.trained?'TRAINED':'UNTRAINED';
   document.getElementById('mlScalpStatus').className = 'metric-value '+(sc.trained?'positive':'neutral');
   document.getElementById('mlScalpThreshold').textContent = sc.entry_threshold||'--';
