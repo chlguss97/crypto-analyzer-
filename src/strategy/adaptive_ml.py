@@ -453,6 +453,16 @@ class AdaptiveML:
 
     def save(self):
         DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+        # 안전장치: 빈 상태로 기존 파일 덮어쓰기 방지
+        if len(self.X_buffer) == 0 and self.model_path.exists():
+            existing_size = self.model_path.stat().st_size
+            if existing_size > 10000:  # 기존 파일이 10KB+ 면 보호
+                logger.warning(
+                    f"[{self.mode}] save() 빈 버퍼로 호출됨 → 기존 파일 보호 (크기: {existing_size})"
+                )
+                return
+
         try:
             data = {
                 "version": 2,
