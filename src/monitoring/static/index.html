@@ -352,9 +352,10 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
 
   <!-- Tabs -->
   <div class="tabs">
-    <button class="tab active" onclick="switchTab('trading', this)" data-i18n="tab.trading">Trading</button>
-    <button class="tab" onclick="switchTab('info', this)" data-i18n="tab.info">Information</button>
-    <button class="tab" onclick="switchTab('ml', this)">Machine Learning</button>
+    <button class="tab active" onclick="switchTab('trading', this)" data-i18n="tab.trading">Dashboard</button>
+    <button class="tab" onclick="switchTab('info', this)" data-i18n="tab.info">Market & Signals</button>
+    <button class="tab" onclick="switchTab('ml', this)" data-i18n="tab.ml">AI / Models</button>
+    <button class="tab" onclick="switchTab('risk', this)" data-i18n="tab.risk">Risk & Logs</button>
   </div>
 
   <!-- ══ Trading Tab ══ -->
@@ -520,53 +521,17 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
     </div>
 
     <div class="card position-card" id="positionCard">
-      <div class="card-header"><span class="card-title" data-i18n="position.title">Active Position</span></div>
+      <div class="card-header"><span class="card-title" data-i18n="position.title">Open Position</span></div>
       <div id="positionContent"><div class="position-empty">No active position</div></div>
     </div>
 
   </div>
 
 
-  <!-- Real Trading Risk State -->
-  <div class="card" style="margin-bottom:24px;">
-    <div class="card-header"><span class="card-title">Real Trading Risk</span></div>
-    <div class="grid" style="grid-template-columns: repeat(4, 1fr); gap: 12px;">
-      <div style="text-align:center;">
-        <div class="big-num" id="riskDailyPnl" style="font-size:24px;">0%</div>
-        <span class="big-sub">Daily P&L (Limit -10%)</span>
-      </div>
-      <div style="text-align:center;">
-        <div class="big-num" id="riskWeeklyPnl" style="font-size:24px;">0%</div>
-        <span class="big-sub">Weekly P&L (Limit -20%)</span>
-      </div>
-      <div style="text-align:center;">
-        <div class="big-num" id="riskStreak" style="font-size:24px;">0</div>
-        <span class="big-sub">Loss Streak</span>
-      </div>
-      <div style="text-align:center;">
-        <div class="big-num" id="riskCooldown" style="font-size:24px;">0m</div>
-        <span class="big-sub">Cooldown</span>
-      </div>
-    </div>
-    <div id="riskBlocked" style="display:none;text-align:center;padding:8px;background:var(--red);color:white;border-radius:6px;font-weight:700;font-size:12px;margin-top:12px;">
-      REAL TRADING BLOCKED
-    </div>
-  </div>
-
-  <!-- News / Event Filter -->
-  <div class="card" style="margin-bottom:24px;">
-    <div class="card-header"><span class="card-title">News & Events Filter</span></div>
-    <div id="newsStatus" style="padding:8px;border-radius:6px;background:var(--bg-surface);font-size:12px;font-weight:600;text-align:center;margin-bottom:12px;">
-      Loading...
-    </div>
-    <div style="font-size:11px;font-weight:700;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;">Upcoming Events</div>
-    <div id="upcomingEvents" style="font-size:11px;color:var(--text-secondary);">--</div>
-  </div>
-
   <!-- Scalping Status -->
   <div class="card" style="margin-bottom:24px;">
     <div class="card-header">
-      <span class="card-title" data-i18n="scalping.title">Scalping Mode</span>
+      <span class="card-title" data-i18n="scalping.title">Live Scalping Status</span>
       <span id="scalpSessionBadge" style="font-size:11px;padding:3px 8px;border-radius:4px;background:var(--bg-surface);color:var(--text-muted);font-weight:600;">--</span>
     </div>
     <div class="grid" style="grid-template-columns: repeat(6, 1fr); gap: 12px; margin-bottom:12px;">
@@ -605,7 +570,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
 
   <!-- Recent Trades -->
   <div class="card" style="margin-bottom:24px;">
-    <div class="card-header"><span class="card-title" data-i18n="trades.title">Recent Trades</span></div>
+    <div class="card-header"><span class="card-title" data-i18n="trades.title">Real Trade History</span></div>
     <div style="overflow-x: auto;">
       <table class="trade-table">
         <thead>
@@ -626,7 +591,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
     <!-- Row 1: Signal + Market -->
     <div class="grid" style="grid-template-columns: 1fr 1fr;">
       <div class="card">
-        <div class="card-header"><span class="card-title" data-i18n="signal.title">Signal Score</span></div>
+        <div class="card-header"><span class="card-title" data-i18n="signal.title">Combined Signal Score</span></div>
         <div class="big-num neutral" id="infoSignalScore">--</div>
         <div class="big-sub">Score / 10</div>
         <div style="margin-top: 18px;">
@@ -639,7 +604,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
       </div>
 
       <div class="card">
-        <div class="card-header"><span class="card-title" data-i18n="market.title">Market Overview</span></div>
+        <div class="card-header"><span class="card-title" data-i18n="market.title">BTC Market Snapshot</span></div>
         <div class="metric"><span class="metric-label">BTC Price</span><span class="metric-value" id="infoBtcPrice" style="font-size:18px">$--</span></div>
         <div class="metric"><span class="metric-label">24h High</span><span class="metric-value" id="infoHigh">--</span></div>
         <div class="metric"><span class="metric-label">24h Low</span><span class="metric-value" id="infoLow">--</span></div>
@@ -652,7 +617,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
 
     <!-- Row 2: Indicators Full Width -->
     <div class="card" style="margin-bottom:14px;">
-      <div class="card-header"><span class="card-title" data-i18n="indicators.title" data-i18n="indicators.title">All Indicators (15)</span></div>
+      <div class="card-header"><span class="card-title" data-i18n="indicators.title" data-i18n="indicators.title">All 15 Signal Indicators</span></div>
       <div class="signal-grid" id="infoSignalGrid" style="grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));">
         <div class="signal-item"><span class="signal-name" style="color:var(--text-muted)">Waiting for signals...</span></div>
       </div>
@@ -661,7 +626,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
     <!-- Row 3: Bot Control -->
     <div class="grid" style="grid-template-columns: 1fr 1fr;">
       <div class="card">
-        <div class="card-header"><span class="card-title" data-i18n="bot.title">Bot Control</span></div>
+        <div class="card-header"><span class="card-title" data-i18n="bot.title">Bot Controls</span></div>
         <p style="font-size:12.5px;color:var(--text-secondary);margin-bottom:14px;line-height:1.6;">
           Pause/Resume trading or activate the emergency kill switch.
         </p>
@@ -724,7 +689,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
 
     <!-- Market Regime -->
     <div class="card" style="margin-bottom:24px;">
-      <div class="card-header"><span class="card-title" data-i18n="regime.title">Market Regime</span></div>
+      <div class="card-header"><span class="card-title" data-i18n="regime.title">Current Market Condition</span></div>
       <div class="grid" style="grid-template-columns: 1fr 2fr 2fr;">
         <div style="text-align:center;">
           <div class="big-num" id="regimeName" style="font-size:22px;">--</div>
@@ -750,7 +715,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
 
     <!-- Swing Regime Performance -->
     <div class="card" style="margin-bottom:24px;">
-      <div class="card-header"><span class="card-title" data-i18n="swing_regime.title">Swing — Regime Models</span></div>
+      <div class="card-header"><span class="card-title" data-i18n="swing_regime.title">Swing AI — by Market</span></div>
       <div class="grid" style="grid-template-columns: repeat(4, 1fr); gap: 12px;">
         <div style="text-align:center;padding:12px;border-radius:8px;background:var(--bg-surface);">
           <div style="font-size:11px;font-weight:700;color:var(--green);margin-bottom:6px;">TRENDING UP</div>
@@ -778,7 +743,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
 
     <!-- Scalp Regime Performance -->
     <div class="card" style="margin-bottom:24px;">
-      <div class="card-header"><span class="card-title" data-i18n="scalp_regime.title">Scalp — Regime Models</span></div>
+      <div class="card-header"><span class="card-title" data-i18n="scalp_regime.title">Scalp AI — by Market</span></div>
       <div class="grid" style="grid-template-columns: repeat(4, 1fr); gap: 12px;">
         <div style="text-align:center;padding:12px;border-radius:8px;background:var(--bg-surface);">
           <div style="font-size:11px;font-weight:700;color:var(--green);margin-bottom:6px;">TRENDING UP</div>
@@ -848,7 +813,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
     <!-- Auto Backtest Results -->
     <div class="card" style="margin-bottom:24px;">
       <div class="card-header">
-        <span class="card-title">Auto Backtest (30 days)</span>
+        <span class="card-title">30-Day Strategy Backtest</span>
         <button onclick="runBacktest()" style="padding:4px 12px;font-size:11px;background:var(--bg-surface);border:1px solid var(--border);border-radius:4px;color:var(--text-muted);cursor:pointer;">Run Now</button>
       </div>
       <div id="backtestSummary" style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">--</div>
@@ -878,7 +843,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
     <!-- Meta Learner Results -->
     <div class="card" style="margin-bottom:24px;">
       <div class="card-header">
-        <span class="card-title">Meta Learner (Self-Upgrade)</span>
+        <span class="card-title">Self-Improving AI</span>
         <button onclick="runMetaLearner()" style="padding:4px 12px;font-size:11px;background:var(--bg-surface);border:1px solid var(--border);border-radius:4px;color:var(--text-muted);cursor:pointer;">Run Now</button>
       </div>
       <div id="metaSummary" style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">아직 실행 안 됨 (매주 일요일 자동 실행)</div>
@@ -888,7 +853,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
     <!-- Signal Contribution Tracker -->
     <div class="card" style="margin-bottom:24px;">
       <div class="card-header">
-        <span class="card-title">Signal Contribution Tracker</span>
+        <span class="card-title">Signal Performance Ranking</span>
         <button onclick="resetSignalTracker()" style="padding:4px 12px;font-size:11px;background:var(--bg-surface);border:1px solid var(--border);border-radius:4px;color:var(--text-muted);cursor:pointer;">Reset</button>
       </div>
       <div id="signalTrackerSummary" style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">--</div>
@@ -920,7 +885,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
 
     <!-- Paper Trading Stats -->
     <div class="card" style="margin-bottom:24px;">
-      <div class="card-header"><span class="card-title" data-i18n="paper.title">Paper Trading (ML Learning)</span></div>
+      <div class="card-header"><span class="card-title" data-i18n="paper.title">Virtual Trades (Training Data)</span></div>
       <div class="grid" style="grid-template-columns: repeat(5, 1fr); gap: 16px; margin-bottom: 16px;">
         <div style="text-align:center;">
           <div class="big-num" id="paperTotal" style="font-size:28px;">0</div>
@@ -959,7 +924,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
     <div class="grid" style="grid-template-columns: 1fr 1fr;">
 
       <div class="card">
-        <div class="card-header"><span class="card-title" data-i18n="swing_history.title">Swing Trade History (ML)</span></div>
+        <div class="card-header"><span class="card-title" data-i18n="swing_history.title">Swing Learning History</span></div>
         <div style="overflow-x:auto;max-height:300px;overflow-y:auto;">
           <table class="trade-table">
             <thead><tr><th>#</th><th>Time</th><th>Result</th><th>P&L %</th><th>Cumulative</th></tr></thead>
@@ -971,7 +936,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
       </div>
 
       <div class="card">
-        <div class="card-header"><span class="card-title" data-i18n="scalp_history.title">Scalp Trade History (ML)</span></div>
+        <div class="card-header"><span class="card-title" data-i18n="scalp_history.title">Scalp Learning History</span></div>
         <div style="overflow-x:auto;max-height:300px;overflow-y:auto;">
           <table class="trade-table">
             <thead><tr><th>#</th><th>Time</th><th>Result</th><th>P&L %</th><th>Cumulative</th></tr></thead>
@@ -985,6 +950,56 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
     </div>
 
   </div><!-- /tab-ml -->
+
+  <!-- ══ Risk & Logs Tab ══ -->
+  <div class="tab-content" id="tab-risk">
+
+    <!-- Real Trading Risk State -->
+    <div class="card" style="margin-bottom:24px;">
+      <div class="card-header"><span class="card-title">Real Trading Risk Limits</span></div>
+      <div class="grid" style="grid-template-columns: repeat(4, 1fr); gap: 12px;">
+        <div style="text-align:center;">
+          <div class="big-num" id="riskDailyPnl" style="font-size:28px;">0%</div>
+          <span class="big-sub">Today's P&L (Stop -10%)</span>
+        </div>
+        <div style="text-align:center;">
+          <div class="big-num" id="riskWeeklyPnl" style="font-size:28px;">0%</div>
+          <span class="big-sub">This Week (Stop -20%)</span>
+        </div>
+        <div style="text-align:center;">
+          <div class="big-num" id="riskStreak" style="font-size:28px;">0</div>
+          <span class="big-sub">Loss Streak</span>
+        </div>
+        <div style="text-align:center;">
+          <div class="big-num" id="riskCooldown" style="font-size:28px;">0m</div>
+          <span class="big-sub">Cooldown Left</span>
+        </div>
+      </div>
+      <div id="riskBlocked" style="display:none;text-align:center;padding:12px;background:var(--red);color:white;border-radius:6px;font-weight:700;font-size:13px;margin-top:12px;">
+        ⚠ REAL TRADING BLOCKED — Loss limit reached
+      </div>
+    </div>
+
+    <!-- News / Event Filter -->
+    <div class="card" style="margin-bottom:24px;">
+      <div class="card-header"><span class="card-title">Economic Events Filter</span></div>
+      <div id="newsStatus" style="padding:12px;border-radius:6px;background:var(--bg-surface);font-size:13px;font-weight:600;text-align:center;margin-bottom:14px;">
+        Loading...
+      </div>
+      <div style="font-size:11px;font-weight:700;color:var(--text-muted);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.8px;">Upcoming Events (next 7 days)</div>
+      <div id="upcomingEvents" style="font-size:12px;color:var(--text-secondary);">--</div>
+    </div>
+
+    <!-- Bot System Status -->
+    <div class="card" style="margin-bottom:24px;">
+      <div class="card-header"><span class="card-title">System Status</span></div>
+      <div class="metric"><span class="metric-label">Bot Status</span><span class="metric-value" id="botStatusDetail">--</span></div>
+      <div class="metric"><span class="metric-label">Last Heartbeat</span><span class="metric-value" id="lastHeartbeat">--</span></div>
+      <div class="metric"><span class="metric-label">Auto Trading</span><span class="metric-value" id="autoTradingStatus">--</span></div>
+      <div class="metric"><span class="metric-label">ML Enabled</span><span class="metric-value" id="mlEnabledStatus">--</span></div>
+    </div>
+
+  </div><!-- /tab-risk -->
 
 </div>
 
@@ -1896,7 +1911,7 @@ setInterval(updateMeta, 120000);
 const LANG = {
   en: {
     // Tabs
-    'tab.trading': 'Trading', 'tab.info': 'Information', 'tab.ml': 'ML / AI',
+    'tab.trading': 'Dashboard', 'tab.info': 'Market & Signals', 'tab.ml': 'AI / Models', 'tab.risk': 'Risk & System',
     // Trading tab
     'scalping.title': 'Scalping Mode', 'scalping.score': 'Score', 'scalping.direction': 'Direction',
     'scalping.daily_pnl': 'Daily P&L', 'scalping.streak': 'Streak', 'scalping.explosive': 'Explosive',
@@ -1925,7 +1940,7 @@ const LANG = {
     'ml.retrain': 'Retrain Now',
   },
   ko: {
-    'tab.trading': '매매', 'tab.info': '정보', 'tab.ml': 'ML / AI',
+    'tab.trading': '대시보드', 'tab.info': '시장 & 시그널', 'tab.ml': 'AI / 모델', 'tab.risk': '리스크 & 시스템',
     'scalping.title': '스캘핑 모드', 'scalping.score': '점수', 'scalping.direction': '방향',
     'scalping.daily_pnl': '일일 손익', 'scalping.streak': '연패', 'scalping.explosive': '급변동',
     'scalping.smc': 'SMC 진입', 'scalping.cooldown': '쿨다운 활성 — 대기 중...',
