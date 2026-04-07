@@ -426,7 +426,7 @@ class AdaptiveML:
             recent_wr = sum(1 for r in recent[-10:] if self._get_pnl(r) > 0) / 10
             # 모드별 임계값 상한/하한
             if self.mode == "scalp":
-                max_threshold, min_threshold = 6.0, 3.0
+                max_threshold, min_threshold = 5.0, 2.5
             else:
                 max_threshold, min_threshold = 8.0, 4.0
 
