@@ -31,3 +31,4 @@ data/reports/
 docker-compose.override.yml
 *.jpg
 .claude/
+111.png
