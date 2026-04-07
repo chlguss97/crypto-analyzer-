@@ -837,12 +837,13 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
     <div class="grid" style="grid-template-columns: 1fr 1fr;">
 
       <div class="card">
-        <div class="card-header"><div style="display:flex;align-items:center;"><span class="card-title" data-i18n="swing_model.title">Swing Model</span><span class="help" data-tip="Swing 매매 ML 모델 상태.&#10;• trades learned: 누적 학습 건수&#10;• Status: TRAINED/LEARNING&#10;• Entry Threshold: 진입 임계값 (자동 조정)&#10;• Recent Win Rate: 최근 승률&#10;• Weights: 시그널별 자동 조정된 가중치">?</span></div></div>
+        <div class="card-header"><div style="display:flex;align-items:center;"><span class="card-title" data-i18n="swing_model.title">Swing Model</span><span class="help" data-tip="Swing 매매 ML 모델 상태.&#10;• OOS: 미래 데이터 예측 정확도 (실전 신뢰도)&#10;• Trained: 학습된 데이터 건수&#10;• Status: TRAINED/LEARNING&#10;• Entry Threshold: 진입 임계값 (자동 조정)&#10;• Recent Win Rate: 최근 승률">?</span></div></div>
         <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:4px;">
-          <div class="big-num" id="mlSwingTrades" style="font-size:32px;">--</div>
-          <span class="big-sub">trades learned</span>
+          <div class="big-num" id="mlSwingOOS" style="font-size:32px;">--</div>
+          <span class="big-sub">OOS Accuracy (신뢰도)</span>
         </div>
         <div style="margin-top:14px;">
+          <div class="metric"><span class="metric-label">Trained</span><span class="metric-value" id="mlSwingTrades">--</span></div>
           <div class="metric"><span class="metric-label">Status</span><span class="metric-value" id="mlSwingStatus">--</span></div>
           <div class="metric"><span class="metric-label">Entry Threshold</span><span class="metric-value" id="mlSwingThreshold">--</span></div>
           <div class="metric"><span class="metric-label">Recent Win Rate</span><span class="metric-value" id="mlSwingWR">--</span></div>
@@ -857,10 +858,11 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
       <div class="card">
         <div class="card-header"><div style="display:flex;align-items:center;"><span class="card-title" data-i18n="scalp_model.title">Scalp Model</span><span class="help" data-tip="Scalp 매매 ML 모델 상태. Swing과 동일 구조.">?</span></div></div>
         <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:4px;">
-          <div class="big-num" id="mlScalpTrades" style="font-size:32px;">--</div>
-          <span class="big-sub">trades learned</span>
+          <div class="big-num" id="mlScalpOOS" style="font-size:32px;">--</div>
+          <span class="big-sub">OOS Accuracy (신뢰도)</span>
         </div>
         <div style="margin-top:14px;">
+          <div class="metric"><span class="metric-label">Trained</span><span class="metric-value" id="mlScalpTrades">--</span></div>
           <div class="metric"><span class="metric-label">Status</span><span class="metric-value" id="mlScalpStatus">--</span></div>
           <div class="metric"><span class="metric-label">Entry Threshold</span><span class="metric-value" id="mlScalpThreshold">--</span></div>
           <div class="metric"><span class="metric-label">Recent Win Rate</span><span class="metric-value" id="mlScalpWR">--</span></div>
@@ -1511,14 +1513,28 @@ async function updateMLStatus() {
     if (b.textContent.toLowerCase() === (data.active_model||'both')) b.classList.add('active');
   });
   const sw = data.swing||{}, sc = data.scalp||{};
-  document.getElementById('mlSwingTrades').textContent = sw.buffer_size||0;
+  // Swing OOS 메인 표시
+  const swOOS = (sw.oos_accuracy||0)*100;
+  const swOOSEl = document.getElementById('mlSwingOOS');
+  if (swOOSEl) {
+    swOOSEl.textContent = swOOS.toFixed(1)+'%';
+    swOOSEl.style.color = swOOS>=70?'var(--green)':swOOS>=50?'var(--yellow)':'var(--red)';
+  }
+  document.getElementById('mlSwingTrades').textContent = (sw.buffer_size||0).toLocaleString()+'건';
   document.getElementById('mlSwingStatus').textContent = sw.trained?'TRAINED':'UNTRAINED';
   document.getElementById('mlSwingStatus').className = 'metric-value '+(sw.trained?'positive':'neutral');
   document.getElementById('mlSwingThreshold').textContent = sw.entry_threshold||'--';
   document.getElementById('mlSwingWR').textContent = (sw.recent_win_rate||0)+'%';
   document.getElementById('mlSwingWR').className = 'metric-value '+(sw.recent_win_rate>=50?'positive':sw.recent_win_rate>=30?'neutral':'negative');
   document.getElementById('mlSwingBuffer').textContent = sw.buffer_size||0;
-  document.getElementById('mlScalpTrades').textContent = sc.buffer_size||0;
+  // Scalp OOS 메인 표시
+  const scOOS = (sc.oos_accuracy||0)*100;
+  const scOOSEl = document.getElementById('mlScalpOOS');
+  if (scOOSEl) {
+    scOOSEl.textContent = scOOS.toFixed(1)+'%';
+    scOOSEl.style.color = scOOS>=70?'var(--green)':scOOS>=50?'var(--yellow)':'var(--red)';
+  }
+  document.getElementById('mlScalpTrades').textContent = (sc.buffer_size||0).toLocaleString()+'건';
   document.getElementById('mlScalpStatus').textContent = sc.trained?'TRAINED':'UNTRAINED';
   document.getElementById('mlScalpStatus').className = 'metric-value '+(sc.trained?'positive':'neutral');
   document.getElementById('mlScalpThreshold').textContent = sc.entry_threshold||'--';
