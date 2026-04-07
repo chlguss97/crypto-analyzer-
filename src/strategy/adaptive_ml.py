@@ -34,11 +34,11 @@ class AdaptiveML:
         self.global_model = None  # 전체 데이터 모델 (레짐 부족 시 폴백)
         self.global_scaler = StandardScaler()
 
-        # 레짐별 학습 데이터 버퍼
-        self.regime_buffers = {r: {"X": deque(maxlen=3000), "y": deque(maxlen=3000)} for r in REGIMES}
-        self.X_buffer = deque(maxlen=10000)  # 전체 버퍼 (글로벌 모델용)
-        self.y_buffer = deque(maxlen=10000)
-        self.regime_labels = deque(maxlen=10000)  # 각 샘플의 레짐
+        # 레짐별 학습 데이터 버퍼 (1주일치)
+        self.regime_buffers = {r: {"X": deque(maxlen=15000), "y": deque(maxlen=15000)} for r in REGIMES}
+        self.X_buffer = deque(maxlen=50000)  # 전체 버퍼 (글로벌 모델용, ~1주일)
+        self.y_buffer = deque(maxlen=50000)
+        self.regime_labels = deque(maxlen=50000)
 
         # 적응형 가중치
         self.weights = self._default_weights()
@@ -579,12 +579,12 @@ class AdaptiveML:
             self.oos_accuracy = 0.0
             self._needs_retrain = True
             # 버퍼는 유지하되 피처 차원이 다르므로 비움
-            self.X_buffer = deque(maxlen=10000)
-            self.y_buffer = deque(maxlen=10000)
+            self.X_buffer = deque(maxlen=50000)
+            self.y_buffer = deque(maxlen=50000)
             for r in REGIMES:
                 self.regime_buffers[r] = {
-                    "X": deque(maxlen=3000),
-                    "y": deque(maxlen=3000),
+                    "X": deque(maxlen=15000),
+                    "y": deque(maxlen=15000),
                 }
 
         self.entry_threshold = data["entry_threshold"]
@@ -592,12 +592,12 @@ class AdaptiveML:
 
         # 피처 변경 안 됐을 때만 버퍼 복원
         if not feature_changed:
-            self.X_buffer = deque(data.get("X_buffer", []), maxlen=10000)
-            self.y_buffer = deque(data.get("y_buffer", []), maxlen=10000)
-            self.regime_labels = deque(data.get("regime_labels", []), maxlen=10000)
+            self.X_buffer = deque(data.get("X_buffer", []), maxlen=50000)
+            self.y_buffer = deque(data.get("y_buffer", []), maxlen=50000)
+            self.regime_labels = deque(data.get("regime_labels", []), maxlen=50000)
             for r in REGIMES:
                 rb = data.get("regime_buffers", {}).get(r, {"X": [], "y": []})
-                self.regime_buffers[r] = {"X": deque(rb["X"], maxlen=3000), "y": deque(rb["y"], maxlen=3000)}
+                self.regime_buffers[r] = {"X": deque(rb["X"], maxlen=15000), "y": deque(rb["y"], maxlen=15000)}
             self.train_accuracy = data.get("train_accuracy", 0)
             self.oos_accuracy = data.get("oos_accuracy", 0)
             self.regime_performance = data.get("regime_performance", self.regime_performance)
@@ -623,12 +623,12 @@ class AdaptiveML:
                 self.train_accuracy = 0.0
                 self.oos_accuracy = 0.0
                 # 옛날 피처로 학습된 버퍼는 무효 → 비움
-                self.X_buffer = deque(maxlen=10000)
-                self.y_buffer = deque(maxlen=10000)
+                self.X_buffer = deque(maxlen=50000)
+                self.y_buffer = deque(maxlen=50000)
                 for r in REGIMES:
                     self.regime_buffers[r] = {
-                        "X": deque(maxlen=3000),
-                        "y": deque(maxlen=3000),
+                        "X": deque(maxlen=15000),
+                        "y": deque(maxlen=15000),
                     }
                 feature_changed = True
         except Exception as e:
@@ -652,8 +652,8 @@ class AdaptiveML:
         # v1 버퍼를 글로벌 버퍼로 마이그레이션
         old_x = data.get("X_buffer", [])
         old_y = data.get("y_buffer", [])
-        self.X_buffer = deque(maxlen=10000)
-        self.y_buffer = deque(maxlen=10000)
+        self.X_buffer = deque(maxlen=50000)
+        self.y_buffer = deque(maxlen=50000)
 
         # v1 피처는 길이가 다를 수 있으므로 버퍼는 비움 (재학습 필요)
         self.recent_results = deque(data.get("recent_results", []), maxlen=200)
