@@ -1,13 +1,18 @@
 import logging
 import time
+from datetime import datetime, timezone
 from src.data.storage import RedisClient
 from src.utils.helpers import load_config
 
 logger = logging.getLogger(__name__)
 
+# 실거래 손실 한도 (사용자 지정)
+MAX_DAILY_LOSS_PCT = 10.0   # 일일 -10%
+MAX_WEEKLY_LOSS_PCT = 20.0  # 주간 -20%
+
 
 class RiskManager:
-    """리스크 관리: 일일 한도, 드로다운, 연패 쿨다운"""
+    """리스크 관리: 일일/주간 한도, 드로다운, 연패 쿨다운"""
 
     def __init__(self, redis_client: RedisClient):
         self.redis = redis_client
@@ -15,14 +20,15 @@ class RiskManager:
         self.risk_cfg = self.config["risk"]
         self.cooldown_cfg = self.config["cooldown"]
 
-        # 메모리 폴백 (Redis 장애 시)
         self._state = {
             "daily_pnl_pct": 0.0,
+            "weekly_pnl_pct": 0.0,
             "peak_balance": 0.0,
             "current_balance": 0.0,
             "streak": 0,
             "cooldown_until": 0,
             "trade_count_today": 0,
+            "current_week": datetime.now(timezone.utc).isocalendar()[1],
         }
 
     async def initialize(self, balance: float):
@@ -30,13 +36,15 @@ class RiskManager:
         self._state["peak_balance"] = balance
         self._state["current_balance"] = balance
 
-        # Redis에서 기존 상태 복원
         streak = await self.redis.get("risk:streak")
         if streak:
             self._state["streak"] = int(streak)
         daily_pnl = await self.redis.get("risk:daily_pnl")
         if daily_pnl:
             self._state["daily_pnl_pct"] = float(daily_pnl)
+        weekly_pnl = await self.redis.get("risk:weekly_pnl")
+        if weekly_pnl:
+            self._state["weekly_pnl_pct"] = float(weekly_pnl)
         cooldown = await self.redis.get("risk:cooldown_until")
         if cooldown:
             self._state["cooldown_until"] = int(cooldown)
@@ -78,9 +86,17 @@ class RiskManager:
         }
 
     async def record_trade_result(self, pnl_pct: float, pnl_usdt: float):
-        """매매 결과 기록 → 연패/쿨다운/일일 P&L 갱신"""
-        # 일일 P&L
+        """매매 결과 기록 → 연패/쿨다운/일일·주간 P&L 갱신"""
+        # 주차 변경 체크
+        current_week = datetime.now(timezone.utc).isocalendar()[1]
+        if current_week != self._state["current_week"]:
+            self._state["weekly_pnl_pct"] = 0.0
+            self._state["current_week"] = current_week
+            logger.info("[RISK] 주간 P&L 리셋")
+
+        # 일일/주간 P&L
         self._state["daily_pnl_pct"] += pnl_pct
+        self._state["weekly_pnl_pct"] += pnl_pct
         self._state["trade_count_today"] += 1
 
         # 잔고 갱신
@@ -110,12 +126,19 @@ class RiskManager:
         # Redis 동기화
         await self.redis.set("risk:streak", str(self._state["streak"]))
         await self.redis.set("risk:daily_pnl", str(round(self._state["daily_pnl_pct"], 4)))
+        await self.redis.set("risk:weekly_pnl", str(round(self._state["weekly_pnl_pct"], 4)))
         await self.redis.set("risk:cooldown_until", str(self._state["cooldown_until"]))
 
-        # 일일 손실 한도 체크
-        if self._state["daily_pnl_pct"] <= -self.risk_cfg["max_daily_loss"] * 100:
+        # 일일 손실 한도 (-10%)
+        if self._state["daily_pnl_pct"] <= -MAX_DAILY_LOSS_PCT:
             logger.error(
-                f"일일 손실 한도 도달: {self._state['daily_pnl_pct']:.2f}% → 당일 매매 중단"
+                f"[RISK] 일일 손실 한도 -10% 도달: {self._state['daily_pnl_pct']:.2f}% → 당일 매매 중단"
+            )
+
+        # 주간 손실 한도 (-20%)
+        if self._state["weekly_pnl_pct"] <= -MAX_WEEKLY_LOSS_PCT:
+            logger.error(
+                f"[RISK] 주간 손실 한도 -20% 도달: {self._state['weekly_pnl_pct']:.2f}% → 주간 매매 중단"
             )
 
         # 최대 드로다운 체크
@@ -137,9 +160,13 @@ class RiskManager:
 
     def is_trading_allowed(self) -> tuple[bool, str]:
         """매매 가능 여부 판단"""
-        # 일일 한도
-        if self._state["daily_pnl_pct"] <= -self.risk_cfg["max_daily_loss"] * 100:
-            return False, "일일 손실 한도"
+        # 일일 손실 -10%
+        if self._state["daily_pnl_pct"] <= -MAX_DAILY_LOSS_PCT:
+            return False, f"일일 손실 한도 (-10%): {self._state['daily_pnl_pct']:.2f}%"
+
+        # 주간 손실 -20%
+        if self._state["weekly_pnl_pct"] <= -MAX_WEEKLY_LOSS_PCT:
+            return False, f"주간 손실 한도 (-20%): {self._state['weekly_pnl_pct']:.2f}%"
 
         # 드로다운
         peak = self._state["peak_balance"]

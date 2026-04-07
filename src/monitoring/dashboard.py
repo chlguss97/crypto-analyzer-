@@ -683,6 +683,61 @@ def _get_ml_instances():
     return _ml_cache["swing"], _ml_cache["scalp"]
 
 
+@app.get("/api/backtest")
+async def get_backtest():
+    """최근 자동 백테스트 결과"""
+    bt = await redis.get_json("sys:last_backtest")
+    if not bt:
+        return {"trades": 0, "available": False}
+    bt["available"] = True
+    return bt
+
+
+@app.post("/api/backtest/run")
+async def trigger_backtest():
+    """수동 백테스트 실행"""
+    from src.strategy.auto_backtest import AutoBacktest
+    swing, scalp = _get_ml_instances()
+    bt = AutoBacktest(db, swing, scalp)
+    result = await bt.run(days=30)
+    await redis.set("sys:last_backtest", result, ttl=86400)
+    return result
+
+
+@app.get("/api/news")
+async def get_news_status():
+    """뉴스 필터 상태 + 다음 이벤트"""
+    from src.trading.news_filter import NewsFilter
+    nf = NewsFilter()
+    blocked, reason = nf.is_news_blackout()
+    upcoming = nf.get_upcoming_events(days=7)
+    return {
+        "blocked": blocked,
+        "reason": reason,
+        "upcoming": upcoming,
+    }
+
+
+@app.get("/api/risk/state")
+async def get_risk_state():
+    """실거래 리스크 상태"""
+    daily = await redis.get("risk:daily_pnl") or "0"
+    weekly = await redis.get("risk:weekly_pnl") or "0"
+    streak = await redis.get("risk:streak") or "0"
+    cooldown = await redis.get("risk:cooldown_until") or "0"
+    import time as _t
+    return {
+        "daily_pnl_pct": float(daily),
+        "weekly_pnl_pct": float(weekly),
+        "streak": int(streak),
+        "cooldown_remaining_min": max(0, (int(cooldown) - int(_t.time())) // 60),
+        "daily_limit": -10.0,
+        "weekly_limit": -20.0,
+        "daily_blocked": float(daily) <= -10.0,
+        "weekly_blocked": float(weekly) <= -20.0,
+    }
+
+
 @app.get("/api/scalp/state")
 async def get_scalp_state():
     """스캘핑 실시간 상태"""

@@ -93,6 +93,22 @@ class ScalpEngine:
         score_long += fvg_sig["strength"] * 2.5 if fvg_sig["direction"] == "long" else 0
         score_short += fvg_sig["strength"] * 2.5 if fvg_sig["direction"] == "short" else 0
 
+        # ── 강화 시그널 (13~15) ──
+        vwap_sig = self._vwap_levels(candles_5m, candles_1m)
+        signals["vwap_levels"] = vwap_sig
+        score_long += vwap_sig["strength"] * 3.0 if vwap_sig["direction"] == "long" else 0
+        score_short += vwap_sig["strength"] * 3.0 if vwap_sig["direction"] == "short" else 0
+
+        pivot_sig = self._pivot_points(candles_5m)
+        signals["pivot_points"] = pivot_sig
+        score_long += pivot_sig["strength"] * 2.5 if pivot_sig["direction"] == "long" else 0
+        score_short += pivot_sig["strength"] * 2.5 if pivot_sig["direction"] == "short" else 0
+
+        bos_sig = self._break_of_structure(candles_1m)
+        signals["bos"] = bos_sig
+        score_long += bos_sig["strength"] * 3.5 if bos_sig["direction"] == "long" else 0
+        score_short += bos_sig["strength"] * 3.5 if bos_sig["direction"] == "short" else 0
+
         # ── 필터 (13~14) ──
         session = self._session_filter(candles_1m)
         signals["session"] = session
@@ -107,7 +123,7 @@ class ScalpEngine:
             trend_filter = "long" if candles_15m["close"].iloc[-1] > ema50 else "short"
 
         # ── 점수 계산 ──
-        max_possible = 32.5  # 기본11 + 급변동11.5 + SMC10
+        max_possible = 41.5  # 기본11 + 급변동11.5 + SMC10 + 강화9
         if score_long > score_short:
             direction = "long"
             raw = score_long
@@ -572,6 +588,150 @@ class ScalpEngine:
                         "gap": [fvg["bottom"], fvg["top"]], "gap_pct": round(fvg["size_pct"], 3)}
 
         return {"type": "scalp_fvg", "direction": "neutral", "strength": 0.0, "gap": None}
+
+    # ══════════════════════════════════════
+    # 강화 시그널 (13~15) — VWAP/피봇/BOS
+    # ══════════════════════════════════════
+
+    def _vwap_levels(self, df_5m: pd.DataFrame, df_1m: pd.DataFrame) -> dict:
+        """
+        VWAP 일중 레벨 — 가격이 VWAP에 도달 시 반전 매매
+        - 가격이 VWAP 아래에 있다가 위로 돌파 → 롱
+        - 가격이 VWAP 위에 있다가 아래로 이탈 → 숏
+        - VWAP에서 멀리 있을 때 평균회귀
+        """
+        if len(df_5m) < 50:
+            return {"type": "vwap_levels", "direction": "neutral", "strength": 0.0, "vwap": 0}
+
+        # 24시간 VWAP (최근 288봉 = 24시간)
+        recent = df_5m.tail(288) if len(df_5m) >= 288 else df_5m
+        typical = (recent["high"] + recent["low"] + recent["close"]) / 3
+        vwap = float((typical * recent["volume"]).sum() / recent["volume"].sum())
+
+        current_price = float(df_5m["close"].iloc[-1])
+        prev_price = float(df_5m["close"].iloc[-2])
+
+        # VWAP 거리 (%)
+        distance_pct = (current_price - vwap) / vwap * 100
+
+        direction = "neutral"
+        strength = 0.0
+
+        # VWAP 돌파 (방금 통과)
+        if prev_price < vwap < current_price:
+            direction = "long"
+            strength = 0.7
+        elif prev_price > vwap > current_price:
+            direction = "short"
+            strength = 0.7
+
+        # VWAP에서 멀리 떨어짐 (평균회귀)
+        elif abs(distance_pct) > 1.0:
+            if distance_pct > 0:
+                direction = "short"
+                strength = min(0.6, abs(distance_pct) / 2.0)
+            else:
+                direction = "long"
+                strength = min(0.6, abs(distance_pct) / 2.0)
+
+        return {"type": "vwap_levels", "direction": direction, "strength": round(strength, 2),
+                "vwap": round(vwap, 1), "distance_pct": round(distance_pct, 3)}
+
+    def _pivot_points(self, df: pd.DataFrame) -> dict:
+        """
+        피봇 포인트 — 일일 지지/저항 레벨
+        - 전일 H/L/C 기반 PP, R1, S1, R2, S2 계산
+        - 가격이 레벨 도달 시 반전 시그널
+        """
+        if len(df) < 288:  # 최소 24시간
+            return {"type": "pivot_points", "direction": "neutral", "strength": 0.0}
+
+        # 전일 데이터 (288봉 = 24시간 5m)
+        prev_day = df.iloc[-576:-288] if len(df) >= 576 else df.iloc[-288:]
+        prev_high = float(prev_day["high"].max())
+        prev_low = float(prev_day["low"].min())
+        prev_close = float(prev_day["close"].iloc[-1])
+
+        pp = (prev_high + prev_low + prev_close) / 3
+        r1 = 2 * pp - prev_low
+        s1 = 2 * pp - prev_high
+        r2 = pp + (prev_high - prev_low)
+        s2 = pp - (prev_high - prev_low)
+
+        current = float(df["close"].iloc[-1])
+
+        direction = "neutral"
+        strength = 0.0
+        level = None
+
+        # 피봇 레벨 근접 체크 (0.1% 이내)
+        levels = [("R2", r2, "short"), ("R1", r1, "short"), ("PP", pp, "neutral"),
+                  ("S1", s1, "long"), ("S2", s2, "long")]
+
+        for name, lvl, dir_hint in levels:
+            if abs(current - lvl) / current < 0.001 and dir_hint != "neutral":
+                direction = dir_hint
+                level = name
+                # R2/S2가 더 강한 시그널
+                strength = 0.8 if name in ("R2", "S2") else 0.6
+                break
+
+        return {"type": "pivot_points", "direction": direction, "strength": round(strength, 2),
+                "level": level, "pp": round(pp, 1), "r1": round(r1, 1), "s1": round(s1, 1)}
+
+    def _break_of_structure(self, df: pd.DataFrame) -> dict:
+        """
+        Break of Structure (BOS) — 1m 구조 변화 감지
+        - 최근 스윙 고/저 돌파 시 추세 전환 시그널
+        - SMC의 핵심 개념
+        """
+        if len(df) < 30:
+            return {"type": "bos", "direction": "neutral", "strength": 0.0, "bos": "none"}
+
+        high = df["high"].values
+        low = df["low"].values
+        close = df["close"].values
+
+        # 스윙 포인트 탐지 (최근 20봉)
+        swing_highs = []
+        swing_lows = []
+        for i in range(2, len(high) - 2):
+            # 양옆 2봉보다 높으면 스윙 하이
+            if high[i] > high[i-1] and high[i] > high[i-2] and high[i] > high[i+1] and high[i] > high[i+2]:
+                swing_highs.append((i, high[i]))
+            if low[i] < low[i-1] and low[i] < low[i-2] and low[i] < low[i+1] and low[i] < low[i+2]:
+                swing_lows.append((i, low[i]))
+
+        if not swing_highs or not swing_lows:
+            return {"type": "bos", "direction": "neutral", "strength": 0.0, "bos": "none"}
+
+        last_swing_high = swing_highs[-1][1]
+        last_swing_low = swing_lows[-1][1]
+        current = float(close[-1])
+        prev = float(close[-2]) if len(close) >= 2 else current
+
+        direction = "neutral"
+        strength = 0.0
+        bos_type = "none"
+
+        # 상승 BOS: 직전 스윙 하이 돌파
+        if current > last_swing_high and prev <= last_swing_high:
+            direction = "long"
+            bos_type = "bullish_bos"
+            # 돌파 강도
+            overshoot = (current - last_swing_high) / last_swing_high
+            strength = min(1.0, overshoot * 100 + 0.5)
+
+        # 하락 BOS: 직전 스윙 로우 이탈
+        elif current < last_swing_low and prev >= last_swing_low:
+            direction = "short"
+            bos_type = "bearish_bos"
+            overshoot = (last_swing_low - current) / last_swing_low
+            strength = min(1.0, overshoot * 100 + 0.5)
+
+        return {"type": "bos", "direction": direction, "strength": round(strength, 2),
+                "bos": bos_type, "swing_high": round(last_swing_high, 1),
+                "swing_low": round(last_swing_low, 1)}
 
     # ══════════════════════════════════════
     # 필터 (13~14)

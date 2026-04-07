@@ -41,7 +41,9 @@ from src.monitoring.telegram_bot import TelegramNotifier
 from src.monitoring.trade_logger import TradeLogger
 from src.strategy.paper_trader import PaperTrader
 from src.strategy.historical_learner import HistoricalLearner
+from src.strategy.auto_backtest import AutoBacktest
 from src.engine.regime_detector import MarketRegimeDetector
+from src.trading.news_filter import NewsFilter
 
 logging.basicConfig(
     level=logging.INFO,
@@ -101,6 +103,9 @@ class CryptoAnalyzer:
         self.regime_detector = MarketRegimeDetector()
         self._current_regime = None
 
+        # 뉴스 필터
+        self.news_filter = NewsFilter()
+
         # 가상매매 엔진 (ML 학습용)
         self.paper_trader = PaperTrader(self.db, self.redis, self.ml_swing, self.ml_scalp, self.regime_detector)
 
@@ -108,6 +113,10 @@ class CryptoAnalyzer:
         self.hist_learner = HistoricalLearner(
             self.db, self.ml_swing, self.ml_scalp, self.candle_collector
         )
+
+        # 자동 백테스트
+        self.auto_backtest = AutoBacktest(self.db, self.ml_swing, self.ml_scalp)
+        self._last_backtest = None
 
         # 스캘핑 리스크 관리
         self._scalp_daily_pnl = 0.0         # 일일 스캘핑 P&L (%)
@@ -292,11 +301,15 @@ class CryptoAnalyzer:
                 agg["signals_detail"] = {**self._last_fast, **self._last_slow}
                 await self.paper_trader.try_entry(agg, "swing", float(price_str))
 
-            # 실거래
+            # 실거래 (뉴스 필터 + 리스크 체크)
             if autotrading and active_model in ("swing", "both") and swing_grade["tradeable"]:
-                allowed, _ = self.risk_manager.is_trading_allowed()
-                if allowed:
-                    await self._execute_swing(swing_grade, swing_agg, risk_state)
+                blocked, reason = self.news_filter.is_news_blackout()
+                if blocked:
+                    logger.info(f"[NEWS] Swing 매매 차단: {reason}")
+                else:
+                    allowed, _ = self.risk_manager.is_trading_allowed()
+                    if allowed:
+                        await self._execute_swing(swing_grade, swing_agg, risk_state)
 
     async def _evaluate_scalp(self):
         """스캘핑 시그널 평가 + 자동매매 (15초 주기)"""
@@ -365,6 +378,12 @@ class CryptoAnalyzer:
         active_model = await self.redis.get("sys:active_model") or "both"
 
         if not autotrading or active_model not in ("scalp", "both"):
+            return
+
+        # 뉴스 차단 체크
+        blocked, reason = self.news_filter.is_news_blackout()
+        if blocked:
+            logger.info(f"[NEWS] Scalp 매매 차단: {reason}")
             return
 
         # 포지션 크기 차등
@@ -552,10 +571,17 @@ class CryptoAnalyzer:
                 hour = now.hour
                 today = now.strftime("%Y-%m-%d")
 
-                # UTC 02:00 — 일일 대량 학습
+                # UTC 02:00 — 일일 대량 학습 + 백테스트
                 if hour == 2 and _last_run.get("daily") != today:
                     logger.info("[SCHED] 일일 대량 학습 시작 (UTC 02:00)")
                     await self.hist_learner.run_daily_study()
+
+                    # 학습 후 백테스트
+                    logger.info("[SCHED] 자동 백테스트 시작")
+                    bt = await self.auto_backtest.run(days=30)
+                    self._last_backtest = bt
+                    await self.redis.set("sys:last_backtest", bt, ttl=86400)
+
                     _last_run["daily"] = today
 
                 # UTC 10:00 — 세션 경량 학습

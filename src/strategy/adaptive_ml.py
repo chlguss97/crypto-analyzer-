@@ -74,11 +74,11 @@ class AdaptiveML:
             }
         else:
             return {
-                "scalp_ob": 4.0, "vol_explosion": 3.5, "range_breakout": 3.5,
-                "liquidity_sweep": 3.5, "bb_breakout": 3.0,
+                "scalp_ob": 4.0, "bos": 3.5, "vol_explosion": 3.5, "range_breakout": 3.5,
+                "liquidity_sweep": 3.5, "bb_breakout": 3.0, "vwap_levels": 3.0,
                 "ema_cross": 2.5, "rapid_momentum": 2.5, "scalp_fvg": 2.5,
-                "rsi_reversal": 2.0, "volume_spike": 2.0, "candle_pattern": 2.0,
-                "momentum": 1.5,
+                "pivot_points": 2.5, "rsi_reversal": 2.0, "volume_spike": 2.0,
+                "candle_pattern": 2.0, "momentum": 1.5,
             }
 
     # ── 강화 피처 엔지니어링 ──
