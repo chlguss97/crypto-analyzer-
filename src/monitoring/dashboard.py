@@ -23,20 +23,7 @@ logger = logging.getLogger(__name__)
 
 STATIC_DIR = Path(__file__).parent / "static"
 
-app = FastAPI(
-    title="CryptoAnalyzer v1.0",
-    version="1.0.0",
-    dependencies=[Depends(verify_auth)],  # 모든 엔드포인트 인증
-)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# ── Basic Auth ──
+# ── Basic Auth (앱 생성 전에 정의) ──
 load_env()
 security = HTTPBasic()
 DASHBOARD_USER = os.getenv("DASHBOARD_USER", "admin")
@@ -45,7 +32,6 @@ DASHBOARD_PASS = os.getenv("DASHBOARD_PASS", "")
 def verify_auth(credentials: HTTPBasicCredentials = Depends(security)):
     """대시보드 Basic Auth 검증"""
     if not DASHBOARD_PASS:
-        # 비밀번호 미설정 시 통과 (로컬 개발용)
         return credentials.username
     correct_user = secrets.compare_digest(credentials.username, DASHBOARD_USER)
     correct_pass = secrets.compare_digest(credentials.password, DASHBOARD_PASS)
@@ -56,6 +42,20 @@ def verify_auth(credentials: HTTPBasicCredentials = Depends(security)):
             headers={"WWW-Authenticate": "Basic"},
         )
     return credentials.username
+
+
+app = FastAPI(
+    title="CryptoAnalyzer v1.0",
+    version="1.0.0",
+    dependencies=[Depends(verify_auth)],
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.get("/")

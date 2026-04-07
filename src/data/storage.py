@@ -2,6 +2,7 @@ import aiosqlite
 import redis.asyncio as redis
 import json
 import logging
+import os
 from pathlib import Path
 from src.utils.helpers import load_config, DATA_DIR
 
@@ -213,8 +214,9 @@ class RedisClient:
     def __init__(self):
         config = load_config()
         redis_cfg = config.get("redis", {})
-        self.host = redis_cfg.get("host", "localhost")
-        self.port = redis_cfg.get("port", 6379)
+        # 환경변수 우선 (Docker용), 없으면 config 사용
+        self.host = os.getenv("REDIS_HOST") or redis_cfg.get("host", "localhost")
+        self.port = int(os.getenv("REDIS_PORT", redis_cfg.get("port", 6379)))
         self.db_num = redis_cfg.get("db", 0)
         self._client: redis.Redis | None = None
 
