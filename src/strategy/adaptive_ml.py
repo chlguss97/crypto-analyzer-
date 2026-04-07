@@ -457,12 +457,14 @@ class AdaptiveML:
         # 안전장치: 빈 상태로 기존 파일 덮어쓰기 방지
         if len(self.X_buffer) == 0 and self.model_path.exists():
             existing_size = self.model_path.stat().st_size
-            if existing_size > 10000:  # 기존 파일이 10KB+ 면 보호
+            if existing_size > 10000:
                 logger.warning(
                     f"[{self.mode}] save() 빈 버퍼로 호출됨 → 기존 파일 보호 (크기: {existing_size})"
                 )
                 return
 
+        import tempfile, shutil
+        temp_path = None
         try:
             data = {
                 "version": 2,
@@ -483,10 +485,20 @@ class AdaptiveML:
                 "oos_accuracy": self.oos_accuracy,
                 "regime_performance": self.regime_performance,
             }
-            with open(self.model_path, "wb") as f:
+            # 원자적 저장: temp 파일에 쓰고 rename
+            with tempfile.NamedTemporaryFile(
+                mode="wb", dir=str(DATA_DIR), delete=False, suffix=".pkl.tmp"
+            ) as f:
+                temp_path = f.name
                 pickle.dump(data, f)
+            shutil.move(temp_path, str(self.model_path))
         except Exception as e:
             logger.error(f"ML save error: {e}")
+            if temp_path and Path(temp_path).exists():
+                try:
+                    Path(temp_path).unlink()
+                except Exception:
+                    pass
 
     def load(self):
         """v2 모델 로드 (v1 호환)"""

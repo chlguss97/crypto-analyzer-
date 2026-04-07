@@ -115,10 +115,11 @@ class WebSocketStream:
         side = trade.get("side", "")  # buy or sell
         ts = int(trade.get("ts", 0))
 
-        # CVD 누적: buy → +, sell → -
+        # CVD 누적: buy → +, sell → - (오버플로우 방어 ±1e9)
         delta = size if side == "buy" else -size
-        self._cvd_15m += delta
-        self._cvd_1h += delta
+        MAX_CVD = 1e9
+        self._cvd_15m = max(-MAX_CVD, min(MAX_CVD, self._cvd_15m + delta))
+        self._cvd_1h = max(-MAX_CVD, min(MAX_CVD, self._cvd_1h + delta))
 
         # 15m 리셋 체크 (900초)
         now = int(time.time())

@@ -175,14 +175,26 @@ class SignalTracker:
         }
 
     def save(self):
-        """JSON 파일로 저장"""
+        """JSON 파일로 원자적 저장 (temp + rename)"""
         DATA_DIR.mkdir(parents=True, exist_ok=True)
+        import tempfile, shutil
+        temp_path = None
         try:
             data = {name: dict(stat) for name, stat in self.stats.items()}
-            with open(TRACKER_PATH, "w", encoding="utf-8") as f:
+            with tempfile.NamedTemporaryFile(
+                mode="w", encoding="utf-8", dir=str(DATA_DIR),
+                delete=False, suffix=".tmp"
+            ) as f:
+                temp_path = f.name
                 json.dump(data, f, ensure_ascii=False, indent=2)
+            shutil.move(temp_path, str(TRACKER_PATH))
         except Exception as e:
             logger.error(f"SignalTracker save error: {e}")
+            if temp_path and Path(temp_path).exists():
+                try:
+                    Path(temp_path).unlink()
+                except Exception:
+                    pass
 
     def load(self):
         """JSON 파일에서 로드"""

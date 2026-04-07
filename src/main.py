@@ -698,12 +698,17 @@ class CryptoAnalyzer:
             await asyncio.sleep(300)
 
     async def periodic_daily_reset(self):
-        """일일 리셋 (매일 00:00 UTC)"""
+        """일일 리셋 (매일 00:00 UTC) — date 비교로 월 변경 안전"""
+        last_reset_date = None
         while self._running:
             now = datetime.now(timezone.utc)
-            day = now.day
-            if day != self._current_day:
-                self._current_day = day
+            today = now.date()  # date 객체로 비교 (월 변경 안전)
+            if last_reset_date is None:
+                last_reset_date = today
+
+            if today > last_reset_date:
+                last_reset_date = today
+                self._current_day = today.day
                 await self.risk_manager.reset_daily()
 
                 # 스캘핑 일일 리셋
@@ -742,7 +747,7 @@ class CryptoAnalyzer:
 
                 logger.info("일일 리셋 + ML 저장 + DB 정리 완료")
 
-            await asyncio.sleep(60)
+            await asyncio.sleep(30)
 
     async def periodic_heartbeat(self):
         """헬스체크 (60초마다)"""
@@ -812,12 +817,35 @@ class CryptoAnalyzer:
             await self.cleanup()
 
     async def cleanup(self):
+        # Graceful Shutdown 강화
+        logger.info("=== Graceful Shutdown 시작 ===")
+
+        # 1) ML 모델 + 시그널 트래커 저장 (가장 먼저, 데이터 손실 방지)
+        try:
+            self.ml_swing.save()
+            self.ml_scalp.save()
+            self.signal_tracker.save()
+            logger.info("ML 모델 + SignalTracker 저장 완료")
+        except Exception as e:
+            logger.error(f"종료 시 저장 실패: {e}")
+
+        # 2) 진행 중 포지션 로그 (사용자가 거래소에서 직접 처리)
+        try:
+            for symbol, pos in list(self.position_manager.positions.items()):
+                logger.warning(
+                    f"종료 시 미청산 포지션: {symbol} {pos.direction.upper()} "
+                    f"@ ${pos.entry_price} (거래소에서 수동 처리 필요)"
+                )
+        except Exception:
+            pass
+
+        # 3) 리소스 정리
         await self.candle_collector.close()
         await self.oi_funding.close()
         await self.executor.close()
         await self.redis.close()
         await self.db.close()
-        logger.info("리소스 정리 완료")
+        logger.info("=== Graceful Shutdown 완료 ===")
 
 
 def main():
