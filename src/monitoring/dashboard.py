@@ -683,6 +683,29 @@ def _get_ml_instances():
     return _ml_cache["swing"], _ml_cache["scalp"]
 
 
+@app.get("/api/meta")
+async def get_meta():
+    """최근 메타 학습 결과 (자가 업그레이드)"""
+    meta = await redis.get_json("sys:last_meta")
+    if not meta:
+        return {"available": False}
+    meta["available"] = True
+    return meta
+
+
+@app.post("/api/meta/run")
+async def trigger_meta():
+    """수동 메타 학습 실행"""
+    from src.strategy.meta_learner import MetaLearner
+    swing, scalp = _get_ml_instances()
+    ml = MetaLearner(swing, scalp)
+    result = await ml.run_meta_learning()
+    swing.save()
+    scalp.save()
+    await redis.set("sys:last_meta", result, ttl=604800)
+    return result
+
+
 @app.get("/api/backtest")
 async def get_backtest():
     """최근 자동 백테스트 결과"""

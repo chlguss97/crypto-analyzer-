@@ -42,6 +42,7 @@ from src.monitoring.trade_logger import TradeLogger
 from src.strategy.paper_trader import PaperTrader
 from src.strategy.historical_learner import HistoricalLearner
 from src.strategy.auto_backtest import AutoBacktest
+from src.strategy.meta_learner import MetaLearner
 from src.engine.regime_detector import MarketRegimeDetector
 from src.trading.news_filter import NewsFilter
 
@@ -117,6 +118,10 @@ class CryptoAnalyzer:
         # 자동 백테스트
         self.auto_backtest = AutoBacktest(self.db, self.ml_swing, self.ml_scalp)
         self._last_backtest = None
+
+        # 메타 러너 (자가 업그레이드)
+        self.meta_learner = MetaLearner(self.ml_swing, self.ml_scalp)
+        self._last_meta = None
 
         # 스캘핑 리스크 관리
         self._scalp_daily_pnl = 0.0         # 일일 스캘핑 P&L (%)
@@ -581,6 +586,13 @@ class CryptoAnalyzer:
                     bt = await self.auto_backtest.run(days=30)
                     self._last_backtest = bt
                     await self.redis.set("sys:last_backtest", bt, ttl=86400)
+
+                    # 일요일이면 메타 학습 추가 실행
+                    if now.weekday() == 6:  # 일요일
+                        logger.info("[SCHED] 주간 메타 학습 시작 (자가 업그레이드)")
+                        meta = await self.meta_learner.run_meta_learning()
+                        self._last_meta = meta
+                        await self.redis.set("sys:last_meta", meta, ttl=604800)
 
                     _last_run["daily"] = today
 
