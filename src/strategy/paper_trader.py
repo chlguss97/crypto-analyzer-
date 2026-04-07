@@ -31,6 +31,8 @@ class PaperPosition:
     signals_snapshot: dict = field(default_factory=dict)
     mode: str = "swing"
     tp1_hit: bool = False
+    use_trailing: bool = False
+    best_price: float = 0.0  # 트레일링용 최고/최저가
 
     def pnl_pct(self, current_price: float) -> float:
         if self.direction == "long":
@@ -170,6 +172,8 @@ class PaperTrader:
             "signals_snapshot": signals_json,
         })
 
+        use_trailing = signal_result.get("use_trailing", False)
+
         pos = PaperPosition(
             trade_id=trade_id, symbol="BTC-USDT-SWAP",
             direction=direction, grade=grade_label, score=score,
@@ -177,6 +181,7 @@ class PaperTrader:
             size_usdt=size_usdt, leverage=leverage,
             sl_price=round(sl, 1), tp1_price=round(tp1, 1), tp2_price=round(tp2, 1),
             signals_snapshot=signals_data, mode=mode,
+            use_trailing=use_trailing, best_price=current_price,
         )
 
         self.positions[trade_id] = pos
@@ -284,11 +289,29 @@ class PaperTrader:
         await self.check_shadows(current_price)
 
     def _check_exit(self, pos: PaperPosition, price: float) -> str | None:
-        """청산 조건 체크"""
+        """청산 조건 체크 (트레일링 스탑 지원)"""
         if pos.direction == "long" and price <= pos.sl_price:
             return "sl_hit"
         if pos.direction == "short" and price >= pos.sl_price:
             return "sl_hit"
+
+        # 트레일링 스탑 (급변동 모드)
+        if pos.use_trailing:
+            if pos.direction == "long":
+                if price > pos.best_price:
+                    pos.best_price = price
+                    # 최고가 대비 0.3% 하락하면 청산
+                    pos.sl_price = max(pos.sl_price, price * 0.997)
+                if price >= pos.tp1_price:
+                    pos.sl_price = max(pos.sl_price, pos.entry_price)  # 최소 손익분기
+            else:
+                if price < pos.best_price or pos.best_price == 0:
+                    pos.best_price = price
+                    pos.sl_price = min(pos.sl_price, price * 1.003)
+                if price <= pos.tp1_price:
+                    pos.sl_price = min(pos.sl_price, pos.entry_price)
+            # 트레일링 모드는 TP2 없이 트레일링으로 나감
+            return None
 
         if not pos.tp1_hit:
             if pos.direction == "long" and price >= pos.tp1_price:
