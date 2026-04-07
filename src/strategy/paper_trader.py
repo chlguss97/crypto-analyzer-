@@ -83,12 +83,13 @@ class PaperTrader:
 
     FEE_RATE = 0.0005  # 편도
 
-    def __init__(self, db, redis, ml_swing, ml_scalp, regime_detector=None):
+    def __init__(self, db, redis, ml_swing, ml_scalp, regime_detector=None, signal_tracker=None):
         self.db = db
         self.redis = redis
         self.ml_swing = ml_swing
         self.ml_scalp = ml_scalp
         self.regime_detector = regime_detector
+        self.signal_tracker = signal_tracker
         self.positions: dict[int, PaperPosition] = {}
         self.shadows: list[ShadowTrack] = []  # 미진입 추적
         self.max_positions = 10  # 전수 학습이므로 넉넉하게
@@ -371,6 +372,12 @@ class PaperTrader:
                 regime = history[-1]
         meta = {"atr_pct": 0.3, "hour": datetime.now(timezone.utc).hour, "regime": regime}
         ml.record_trade(pos.signals_snapshot, meta, net_pnl_pct)
+
+        # 시그널 기여도 추적
+        if self.signal_tracker:
+            self.signal_tracker.record_trade(
+                pos.signals_snapshot, net_pnl_pct, mode=pos.mode, regime=regime
+            )
 
         self._stats["total"] += 1
         if net_pnl_pct > 0:

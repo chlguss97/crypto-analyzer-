@@ -711,6 +711,23 @@ def _get_ml_instances():
     return _ml_cache["swing"], _ml_cache["scalp"]
 
 
+@app.get("/api/signal-tracker")
+async def get_signal_tracker():
+    """시그널 기여도 추적 결과"""
+    from src.strategy.signal_tracker import SignalTracker
+    tracker = SignalTracker()
+    return tracker.get_summary()
+
+
+@app.post("/api/signal-tracker/reset")
+async def reset_signal_tracker():
+    """시그널 추적 리셋"""
+    from src.strategy.signal_tracker import SignalTracker
+    tracker = SignalTracker()
+    tracker.reset()
+    return {"status": "reset"}
+
+
 @app.get("/api/meta")
 async def get_meta():
     """최근 메타 학습 결과 (자가 업그레이드)"""

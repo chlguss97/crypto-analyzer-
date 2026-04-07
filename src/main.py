@@ -43,6 +43,7 @@ from src.strategy.paper_trader import PaperTrader
 from src.strategy.historical_learner import HistoricalLearner
 from src.strategy.auto_backtest import AutoBacktest
 from src.strategy.meta_learner import MetaLearner
+from src.strategy.signal_tracker import SignalTracker
 from src.engine.regime_detector import MarketRegimeDetector
 from src.trading.news_filter import NewsFilter
 
@@ -107,8 +108,11 @@ class CryptoAnalyzer:
         # 뉴스 필터
         self.news_filter = NewsFilter()
 
-        # 가상매매 엔진 (ML 학습용)
-        self.paper_trader = PaperTrader(self.db, self.redis, self.ml_swing, self.ml_scalp, self.regime_detector)
+        # 가상매매 엔진 (ML 학습용 + 시그널 추적)
+        self.paper_trader = PaperTrader(
+            self.db, self.redis, self.ml_swing, self.ml_scalp,
+            self.regime_detector, signal_tracker=None  # 아래에서 할당
+        )
 
         # 역사 백필 학습 엔진 (candle_collector 연결 → 90일 수집 가능)
         self.hist_learner = HistoricalLearner(
@@ -122,6 +126,10 @@ class CryptoAnalyzer:
         # 메타 러너 (자가 업그레이드)
         self.meta_learner = MetaLearner(self.ml_swing, self.ml_scalp)
         self._last_meta = None
+
+        # 시그널 기여도 추적
+        self.signal_tracker = SignalTracker()
+        self.paper_trader.signal_tracker = self.signal_tracker
 
         # 스캘핑 리스크 관리
         self._scalp_daily_pnl = 0.0         # 일일 스캘핑 P&L (%)
@@ -538,13 +546,18 @@ class CryptoAnalyzer:
     # ── ML 학습 기록 ──
 
     async def record_ml_trade(self, mode: str, signals: dict, pnl_pct: float):
-        """실거래 결과 → ML 학습 (레짐 정보 포함)"""
+        """실거래 결과 → ML 학습 + 시그널 기여도 추적"""
         ml = self.ml_swing if mode == "swing" else self.ml_scalp
         regime = self._current_regime["regime"] if self._current_regime else "ranging"
         meta = {"atr_pct": self._last_fast.get("atr", {}).get("atr_pct", 0.3),
                 "hour": datetime.now(timezone.utc).hour,
                 "regime": regime}
         ml.record_trade(signals, meta, pnl_pct)
+
+        # 시그널 기여도 추적
+        if self.signal_tracker:
+            self.signal_tracker.record_trade(signals, pnl_pct, mode=mode, regime=regime)
+
         logger.info(f"[실거래→ML] {mode} PnL {pnl_pct:+.2f}% 레짐:{regime} 학습 완료")
 
     # ── 역사 학습 ──

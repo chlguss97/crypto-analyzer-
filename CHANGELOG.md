@@ -6,6 +6,16 @@
 
 ## 2026-04-07
 
+### SignalTracker — 시그널 기여도 추적 시스템
+- **신규 모듈**: `src/strategy/signal_tracker.py`
+- 각 거래의 활성 시그널(강도≥0.3) 추출 → 강도 비례 P&L 분배
+- 시그널별 누적 통계: 거래수, 승률, 평균 P&L, 기여도 점수, 모드별/레짐별
+- **자동 식별**: 약한 시그널(평균 -0.1% 이하) / 강한 시그널(+0.2% 이상)
+- **기여도 점수 공식**: `avg_pnl × min(1, sqrt(trades)/10) × (0.5 + wr×0.5)`
+- 100건마다 자동 저장 (data/signal_tracker.json)
+- **대시보드 표시**: ML 탭에 강한/약한 시그널 + 전체 랭킹 테이블
+- API: `GET /api/signal-tracker`, `POST /api/signal-tracker/reset`
+
 ### 전체 코드베이스 버그 점검 ★ 항목 (10건)
 - **bollinger.py**: NaN 비교 방어 (`pd.isna` 체크) + 데이터 부족 시 안전 반환
 - **executor.py**: API 키 로그 노출 방지 (예외 메시지 마스킹)

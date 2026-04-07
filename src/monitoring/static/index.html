@@ -809,6 +809,39 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
 
     </div>
 
+    <!-- Signal Contribution Tracker -->
+    <div class="card" style="margin-bottom:24px;">
+      <div class="card-header">
+        <span class="card-title">Signal Contribution Tracker</span>
+        <button onclick="resetSignalTracker()" style="padding:4px 12px;font-size:11px;background:var(--bg-surface);border:1px solid var(--border);border-radius:4px;color:var(--text-muted);cursor:pointer;">Reset</button>
+      </div>
+      <div id="signalTrackerSummary" style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">--</div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+        <div>
+          <div style="font-size:11px;font-weight:700;color:var(--green);margin-bottom:8px;text-transform:uppercase;">Strong Signals</div>
+          <div id="strongSignalsList" style="font-size:11px;color:var(--text-secondary);">--</div>
+        </div>
+        <div>
+          <div style="font-size:11px;font-weight:700;color:var(--red);margin-bottom:8px;text-transform:uppercase;">Weak Signals</div>
+          <div id="weakSignalsList" style="font-size:11px;color:var(--text-secondary);">--</div>
+        </div>
+      </div>
+
+      <div style="margin-top:16px;overflow-x:auto;max-height:350px;overflow-y:auto;">
+        <table class="trade-table">
+          <thead>
+            <tr>
+              <th>#</th><th>Signal</th><th>Trades</th><th>WR</th><th>Avg P&L</th><th>Total P&L</th><th>Score</th>
+            </tr>
+          </thead>
+          <tbody id="signalRankingBody">
+            <tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:20px;">Tracking signals... wait for trades to accumulate</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
     <!-- Paper Trading Stats -->
     <div class="card" style="margin-bottom:24px;">
       <div class="card-header"><span class="card-title" data-i18n="paper.title">Paper Trading (ML Learning)</span></div>
@@ -1420,6 +1453,71 @@ function renderWeights(elId, weights) {
   }).join('');
 }
 
+// ── Signal Contribution Tracker ──
+async function updateSignalTracker() {
+  const data = await api('/api/signal-tracker');
+  if (!data) return;
+
+  document.getElementById('signalTrackerSummary').textContent =
+    `Tracking ${data.total_signals_tracked || 0} signals | ${data.signals_with_data || 0} with data`;
+
+  // 강한 시그널
+  const strongEl = document.getElementById('strongSignalsList');
+  const strong = data.strong_signals || [];
+  if (strong.length === 0) {
+    strongEl.innerHTML = '<div style="color:var(--text-muted);">아직 데이터 부족 (20+ 거래 필요)</div>';
+  } else {
+    strongEl.innerHTML = strong.map(s => `
+      <div style="margin-bottom:6px;">
+        <b style="color:var(--green);">${s.name}</b>
+        — ${s.trades} trades, WR ${s.win_rate.toFixed(0)}%, avg ${s.avg_pnl >= 0 ? '+' : ''}${s.avg_pnl.toFixed(2)}%
+      </div>
+    `).join('');
+  }
+
+  // 약한 시그널
+  const weakEl = document.getElementById('weakSignalsList');
+  const weak = data.weak_signals || [];
+  if (weak.length === 0) {
+    weakEl.innerHTML = '<div style="color:var(--text-muted);">없음 (모든 시그널 정상)</div>';
+  } else {
+    weakEl.innerHTML = weak.map(s => `
+      <div style="margin-bottom:6px;">
+        <b style="color:var(--red);">${s.name}</b>
+        — ${s.trades} trades, WR ${s.win_rate.toFixed(0)}%, avg ${s.avg_pnl.toFixed(2)}%
+      </div>
+    `).join('');
+  }
+
+  // 랭킹 테이블
+  const tbody = document.getElementById('signalRankingBody');
+  const ranking = data.ranking || [];
+  if (ranking.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:20px;">Tracking signals... wait for trades to accumulate</td></tr>';
+    return;
+  }
+  tbody.innerHTML = ranking.map((s, i) => {
+    const wrColor = s.win_rate >= 50 ? 'var(--green)' : s.win_rate >= 35 ? 'var(--yellow)' : 'var(--red)';
+    const pnlColor = s.avg_pnl >= 0 ? 'var(--green)' : 'var(--red)';
+    const scoreColor = s.contribution_score >= 0.1 ? 'var(--green)' : s.contribution_score >= 0 ? 'var(--text-secondary)' : 'var(--red)';
+    return `<tr>
+      <td style="color:var(--text-muted);">${i + 1}</td>
+      <td style="font-weight:600;font-size:11px;">${s.name}</td>
+      <td>${s.trades}</td>
+      <td style="color:${wrColor};font-weight:600;">${s.win_rate.toFixed(1)}%</td>
+      <td style="color:${pnlColor};">${s.avg_pnl >= 0 ? '+' : ''}${s.avg_pnl.toFixed(3)}%</td>
+      <td style="color:${pnlColor};">${s.total_pnl >= 0 ? '+' : ''}${s.total_pnl.toFixed(2)}%</td>
+      <td style="color:${scoreColor};font-weight:600;">${s.contribution_score.toFixed(3)}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function resetSignalTracker() {
+  if (!confirm('시그널 추적 데이터를 리셋합니까?')) return;
+  await fetch('/api/signal-tracker/reset', {method:'POST'});
+  updateSignalTracker();
+}
+
 // ── Scalping State ──
 async function updateScalpState() {
   const data = await api('/api/scalp/state');
@@ -1573,12 +1671,14 @@ updateMLStatus();
 updatePaperStats();
 updateRegime();
 updateScalpState();
+updateSignalTracker();
 setInterval(refreshAll, 5000);
 setInterval(updateTicker, 2000);
 setInterval(updateScalpState, 5000);
 setInterval(updateMLStatus, 10000);
 setInterval(updatePaperStats, 10000);
 setInterval(updateRegime, 15000);
+setInterval(updateSignalTracker, 30000);
 
 // ── Language Toggle ──
 const LANG = {
