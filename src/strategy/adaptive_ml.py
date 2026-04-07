@@ -604,6 +604,36 @@ class AdaptiveML:
 
         # recent_results는 단순 결과 기록이라 항상 복원
         self.recent_results = deque(data.get("recent_results", []), maxlen=200)
+
+        # ── 피처 차원 실제 검증 (scaler vs 현재 extract_features) ──
+        try:
+            test_features = self.extract_features({}, {})
+            expected_dim = len(test_features)
+            if (self.global_scaler is not None
+                    and hasattr(self.global_scaler, "n_features_in_")
+                    and self.global_scaler.n_features_in_ != expected_dim):
+                logger.warning(
+                    f"[{self.mode}] scaler 피처 차원 불일치: "
+                    f"{self.global_scaler.n_features_in_} → {expected_dim} | 모델 리셋"
+                )
+                self.global_model = None
+                self.global_scaler = StandardScaler()
+                self.models = {}
+                self.scalers = {}
+                self.train_accuracy = 0.0
+                self.oos_accuracy = 0.0
+                # 옛날 피처로 학습된 버퍼는 무효 → 비움
+                self.X_buffer = deque(maxlen=10000)
+                self.y_buffer = deque(maxlen=10000)
+                for r in REGIMES:
+                    self.regime_buffers[r] = {
+                        "X": deque(maxlen=3000),
+                        "y": deque(maxlen=3000),
+                    }
+                feature_changed = True
+        except Exception as e:
+            logger.debug(f"피처 차원 검증 실패: {e}")
+
         self.is_trained = self.global_model is not None
         logger.info(
             f"[{self.mode}] ML v2 loaded: {self.trade_count}건 | "
