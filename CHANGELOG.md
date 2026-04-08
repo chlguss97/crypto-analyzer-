@@ -7,6 +7,29 @@
 
 ## 2026-04-08
 
+### 정밀 분석 후 6개 버그 수정 (Pass 1~5 ★★★)
+4개 병렬 에이전트로 ~10,000줄 코드 정밀 분석 → critical 3 + high 3 확정 후 수정.
+
+- **`d0f4425` 안전성** — Redis 끊김 fallback + WS JSON 보호 + heartbeat timeout
+  - **BUG #2**: storage.set/get silent fail → `sys:learning` 키 read 실패 시 None == "1" 비교 False → 학습 중 신규 진입 차단 무력화. main.py에 `_learning_local` 메모리 fallback 추가, 5개 체크 사이트에서 OR 조건 사용.
+  - **BUG #3**: ws_stream `_connect`의 `json.loads(message)` 가 raw 호출이라 잘못된 메시지 1건이 연결 끊김 → 5~60초 재연결 → 데이터 누락. JSON parse + handle_message 각각 try/except + continue.
+  - **M1**: `periodic_heartbeat`의 `get_balance()` 가 멈추면 60초간 heartbeat 정지. `asyncio.wait_for(timeout=5.0)` 추가.
+- **`687bfda` 시그널 정확도** — CVD 1봉 lag 제거 + BOS strength 보정 + scalp 지연 단축
+  - **BUG #1**: ws_stream이 15m 경계에서 `_cvd_15m`을 redis에 set하고 0으로 리셋 → main.py가 redis에서 읽으면 항상 직전 윈도우 합계 → 시그널 엔진이 1봉(15분) lag된 CVD로 평가. `cvd:15m:current` 키 신설 (매 체결마다 갱신), main.py가 우선 읽기.
+  - **BUG #5**: `scalp_engine._break_of_structure`의 `strength = min(1.0, overshoot*100+0.5)` → 0.01% 돌파만으로도 strength=1.0 (노이즈 만점). `min(1.0, max(0.3, overshoot*50+0.3))`로 변경 (0.5%→0.55, 1%→0.8, 2%→1.0).
+  - **BUG #6**: `periodic_scalp_eval` 시작 시 `sleep(20)` → 봇 재시작 직후 4 사이클 손실. `sleep(2)`로 단축.
+- **`ec4b5fd` 시그널 점수 인플레이션 보정**
+  - **BUG #4**: WEIGHTS 합 26.0 + CONFLUENCE_BONUSES 합 9.5 → 한 방향 분산 ~13 + 보너스 5 = raw 18 → 정규화 18/12*10 = 15 → clip 10. 보너스 2~3개만 동시 발동해도 점수 천장 도달, A+(≥9.0) 트리거 너무 쉬움. `REALISTIC_MAX_SCORE: 12.0 → 18.0`, `MAX_CONFLUENCE_BONUS = 5.0` cap 신설.
+- **`98daa0a` 정리** — SQLite WAL + WS unknown channel 로깅 + dead code 삭제
+  - SQLite `PRAGMA journal_mode=WAL + synchronous=NORMAL` (다중 코루틴 동시성).
+  - WS `_handle_message`에 unknown channel 로깅 (OKX 신규 채널 감지).
+  - **dead code 삭제**: `src/signal_engine/ml_model.py` (옛 v1 RF 모델, 현재 `adaptive_ml.py` 사용. grep 0건).
+
+#### 검증 후 false positive로 기각된 항목
+- regime_history race (Pass 1) — asyncio 단일 이벤트 루프, await 없는 두 줄 사이 코루틴 전환 불가
+- scalp_engine OB look-ahead (Pass 2) — `end = n - 5` 로 미래 봉 미사용
+- slow OrderBlock/FVG look-ahead (Pass 1 의심) — `lookback = min(100, len-5)`, `range(2, len-1)` 로 안전
+
 ### 보호 주문 파이프라인 전면 재구성 (실거래 -90% 사고 후) ★★★
 - **`4832098`** 진입 시 SL+TP1/TP2/TP3 OKX 서버사이드 일괄 등록
   - `algoClOrdId` underscore 제거 (OKX 영숫자만 허용) — SL/TP 알고 등록 정상화
