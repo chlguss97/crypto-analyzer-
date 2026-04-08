@@ -627,10 +627,10 @@ class CryptoAnalyzer:
 
     async def periodic_study_scheduler(self):
         """
-        하루 3회 학습 스케줄러
-        - UTC 02:00 (한국 11:00) → 일일 대량 학습 (90일 수집 + 파라미터 다양화 + 레짐 집중)
-        - UTC 10:00 (한국 19:00) → 세션 경량 학습
-        - UTC 18:00 (한국 03:00) → 세션 경량 학습
+        하루 3회 학습 스케줄러 (BTC 시장 조용한 시간대 선택)
+        - UTC 22:00 (한국 07:00) → 일일 대량 학습 — 글로벌 최저 활동
+        - UTC 04:00 (한국 13:00) → 세션 경량 학습 — Asia 점심
+        - UTC 11:00 (한국 20:00) → 세션 경량 학습 — EU/US 사이 짧은 조용
 
         🔒 학습 중에는 redis sys:learning=1 flag set → _evaluate_swing/scalp 가
            신규 진입을 스킵 (asyncio 블로킹/CPU 점유 race 방지). 잔존 포지션 보호는 정상 작동.
@@ -653,8 +653,8 @@ class CryptoAnalyzer:
                 hour = now.hour
                 today = now.strftime("%Y-%m-%d")
 
-                # UTC 02:00 — 일일 대량 학습 + 백테스트
-                if hour == 2 and _last_run.get("daily") != today:
+                # UTC 22:00 (KST 07:00) — 일일 대량 학습 + 백테스트
+                if hour == 22 and _last_run.get("daily") != today:
                     await _guarded_study("일일 대량학습", self.hist_learner.run_daily_study())
 
                     # 학습 후 백테스트 (백테스트도 무거우니 같이 보호)
@@ -676,13 +676,13 @@ class CryptoAnalyzer:
 
                     _last_run["daily"] = today
 
-                # UTC 10:00 — 세션 경량 학습
-                elif hour == 10 and _last_run.get("session1") != today:
+                # UTC 04:00 (KST 13:00) — 세션 경량 학습 (Asia 점심)
+                elif hour == 4 and _last_run.get("session1") != today:
                     await _guarded_study("세션학습1", self.hist_learner.run_session_study())
                     _last_run["session1"] = today
 
-                # UTC 18:00 — 세션 경량 학습
-                elif hour == 18 and _last_run.get("session2") != today:
+                # UTC 11:00 (KST 20:00) — 세션 경량 학습 (EU/US 사이)
+                elif hour == 11 and _last_run.get("session2") != today:
                     await _guarded_study("세션학습2", self.hist_learner.run_session_study())
                     _last_run["session2"] = today
 
@@ -731,7 +731,11 @@ class CryptoAnalyzer:
             await asyncio.sleep(5)
 
     async def periodic_position_check(self):
-        """포지션 체크 (15초마다) — 실거래 + 가상매매"""
+        """
+        포지션 체크 — 실거래 + 가상매매
+        - 평상시: 15초 주기
+        - 학습 중 (sys:learning=1): 5초 주기 (TP1 후 SL 본절 이동 지연 최소화)
+        """
         while self._running:
             try:
                 price_str = await self.redis.get("rt:price:BTC-USDT-SWAP")
@@ -754,7 +758,17 @@ class CryptoAnalyzer:
                     await self.telegram.notify_emergency("Kill switch activated")
             except Exception as e:
                 logger.error(f"포지션 체크 에러: {e}")
-            await asyncio.sleep(15)
+
+            # 학습 중이고 활성 포지션 있으면 5초 폴링 (SL 본절 이동 지연 최소화)
+            try:
+                learning = (await self.redis.get("sys:learning")) == "1"
+            except Exception:
+                learning = False
+
+            if learning and self.position_manager.positions:
+                await asyncio.sleep(5)
+            else:
+                await asyncio.sleep(15)
 
     async def periodic_oi_funding(self):
         """OI/펀딩비 수집 (5분마다)"""
