@@ -668,8 +668,9 @@ class HistoricalLearner:
             total_learned += extra["total"]
 
         # 저장
-        self.ml_swing.save()
-        self.ml_scalp.save()
+        # IO 블로킹 방지: 별도 스레드에서 pickle dump
+        await asyncio.to_thread(self.ml_swing.save)
+        await asyncio.to_thread(self.ml_scalp.save)
 
         logger.info(
             f"[HIST] ═══ 일일 학습 완료: 총 {total_learned}건 ═══ | "
@@ -693,8 +694,9 @@ class HistoricalLearner:
         s2 = await self.run_scalp_backfill(lookback=500, step=5)
         total += s2["total"]
 
-        self.ml_swing.save()
-        self.ml_scalp.save()
+        # IO 블로킹 방지: 별도 스레드에서 pickle dump
+        await asyncio.to_thread(self.ml_swing.save)
+        await asyncio.to_thread(self.ml_scalp.save)
 
         logger.info(f"[HIST] 세션 학습 완료: {total}건")
         return total

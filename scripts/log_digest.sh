@@ -30,6 +30,15 @@ echo "📊 로그 디지스트 — 최근 ${MINUTES}분 ($(date '+%Y-%m-%d %H:%M
 echo "═══════════════════════════════════════════════════"
 echo
 
+# ── 🩺 헬스체크 (가장 먼저, 한 눈에 보이게) ──
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -x "$SCRIPT_DIR/health_check.sh" ]; then
+    "$SCRIPT_DIR/health_check.sh"
+elif [ -f "$SCRIPT_DIR/health_check.sh" ]; then
+    bash "$SCRIPT_DIR/health_check.sh"
+fi
+echo
+
 # docker compose 또는 docker-compose 자동 감지
 if command -v docker compose &>/dev/null; then
     DC="docker compose"

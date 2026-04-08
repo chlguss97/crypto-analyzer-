@@ -30,15 +30,11 @@ TIMESTAMP=$(date '+%Y%m%d_%H%M%S')
 
 cd "$REPO_DIR"
 
-# 1. 디지스트 생성
+# 1. 디지스트 생성 (헬스체크 포함됨)
 "$SCRIPT_DIR/log_digest.sh" "$MINUTES" > "$DIGEST_FILE"
 
-# 2. 빈 로그면 푸시 안 함 (트래픽 절약)
-if ! grep -qE "포지션|TP|ERROR|WARNING" "$DIGEST_FILE"; then
-    echo "$(date '+%H:%M:%S') 푸시 스킵: 의미있는 이벤트 없음"
-    rm -f "$DIGEST_FILE"
-    exit 0
-fi
+# 2. 항상 푸시 — 봇 살아있는지 확인하려면 스킵하면 안 됨
+# (디지스트에 health_check.sh 결과가 항상 포함되어 있어서 봇 다운 즉시 감지 가능)
 
 # 3. main 브랜치 백업 (작업 안전)
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)

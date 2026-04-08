@@ -437,6 +437,11 @@ class CryptoAnalyzer:
 
     async def _execute_swing(self, grade_result, aggregated, risk_state):
         """Swing 매매 실행"""
+        # 🔒 학습 중에는 신규 진입 스킵 (asyncio 블로킹 race 방지)
+        if await self.redis.get("sys:learning") == "1":
+            logger.info("[SWING] 학습 중 → 신규 진입 스킵")
+            return
+
         direction = grade_result["direction"]
         atr_pct = self._last_fast.get("atr", {}).get("atr_pct", 0.3)
         lev = self.leverage_calc.calculate(grade_result["grade"], atr_pct, risk_state.get("streak", 0))
@@ -501,6 +506,11 @@ class CryptoAnalyzer:
 
     async def _execute_scalp(self, scalp_sig, risk_state):
         """Scalp 매매 실행"""
+        # 🔒 학습 중에는 신규 진입 스킵
+        if await self.redis.get("sys:learning") == "1":
+            logger.info("[SCALP] 학습 중 → 신규 진입 스킵")
+            return
+
         direction = scalp_sig["direction"]
         if direction == "neutral":
             return
@@ -599,17 +609,21 @@ class CryptoAnalyzer:
         """봇 시작 시 과거 데이터 학습 (백그라운드)"""
         await asyncio.sleep(30)  # 캔들 수집 완료 대기
         try:
-            logger.info("[HIST] 초기 역사 백필 학습 시작 (Swing)...")
+            await self.redis.set("sys:learning", "1", ttl=3600)
+            logger.info("[HIST] 🔒 초기 역사 백필 학습 시작 (Swing) — 신규 진입 일시 정지")
             await self.hist_learner.run_backfill("15m", lookback=2000, step=5)
 
             logger.info("[HIST] 초기 역사 백필 학습 시작 (Scalp)...")
             await self.hist_learner.run_scalp_backfill(lookback=2000, step=5)
 
-            self.ml_swing.save()
-            self.ml_scalp.save()
+            await asyncio.to_thread(self.ml_swing.save)
+            await asyncio.to_thread(self.ml_scalp.save)
             logger.info("[HIST] 초기 학습 완료 (Swing + Scalp)")
         except Exception as e:
             logger.error(f"[HIST] 초기 학습 에러: {e}")
+        finally:
+            await self.redis.delete("sys:learning")
+            logger.info("[HIST] 🔓 초기 학습 종료 — 매매 재개")
 
     async def periodic_study_scheduler(self):
         """
@@ -617,8 +631,22 @@ class CryptoAnalyzer:
         - UTC 02:00 (한국 11:00) → 일일 대량 학습 (90일 수집 + 파라미터 다양화 + 레짐 집중)
         - UTC 10:00 (한국 19:00) → 세션 경량 학습
         - UTC 18:00 (한국 03:00) → 세션 경량 학습
+
+        🔒 학습 중에는 redis sys:learning=1 flag set → _evaluate_swing/scalp 가
+           신규 진입을 스킵 (asyncio 블로킹/CPU 점유 race 방지). 잔존 포지션 보호는 정상 작동.
         """
         _last_run = {}
+
+        async def _guarded_study(label: str, coro):
+            """학습 작업을 redis flag 로 감싸서 실행 — 중간 예외도 안전하게 unset"""
+            try:
+                await self.redis.set("sys:learning", "1", ttl=3600)
+                logger.info(f"[SCHED] 🔒 학습 모드 ON ({label}) — 신규 진입 일시 정지")
+                await coro
+            finally:
+                await self.redis.delete("sys:learning")
+                logger.info(f"[SCHED] 🔓 학습 모드 OFF ({label}) — 매매 재개")
+
         while self._running:
             try:
                 now = datetime.now(timezone.utc)
@@ -627,38 +655,44 @@ class CryptoAnalyzer:
 
                 # UTC 02:00 — 일일 대량 학습 + 백테스트
                 if hour == 2 and _last_run.get("daily") != today:
-                    logger.info("[SCHED] 일일 대량 학습 시작 (UTC 02:00)")
-                    await self.hist_learner.run_daily_study()
+                    await _guarded_study("일일 대량학습", self.hist_learner.run_daily_study())
 
-                    # 학습 후 백테스트
-                    logger.info("[SCHED] 자동 백테스트 시작")
-                    bt = await self.auto_backtest.run(days=30)
-                    self._last_backtest = bt
-                    await self.redis.set("sys:last_backtest", bt, ttl=86400)
+                    # 학습 후 백테스트 (백테스트도 무거우니 같이 보호)
+                    async def _bt_block():
+                        logger.info("[SCHED] 자동 백테스트 시작")
+                        bt = await self.auto_backtest.run(days=30)
+                        self._last_backtest = bt
+                        await self.redis.set("sys:last_backtest", bt, ttl=86400)
+                    await _guarded_study("백테스트30일", _bt_block())
 
                     # 일요일이면 메타 학습 추가 실행
-                    if now.weekday() == 6:  # 일요일
-                        logger.info("[SCHED] 주간 메타 학습 시작 (자가 업그레이드)")
-                        meta = await self.meta_learner.run_meta_learning()
-                        self._last_meta = meta
-                        await self.redis.set("sys:last_meta", meta, ttl=604800)
+                    if now.weekday() == 6:
+                        async def _meta_block():
+                            logger.info("[SCHED] 주간 메타 학습 시작 (자가 업그레이드)")
+                            meta = await self.meta_learner.run_meta_learning()
+                            self._last_meta = meta
+                            await self.redis.set("sys:last_meta", meta, ttl=604800)
+                        await _guarded_study("주간메타", _meta_block())
 
                     _last_run["daily"] = today
 
                 # UTC 10:00 — 세션 경량 학습
                 elif hour == 10 and _last_run.get("session1") != today:
-                    logger.info("[SCHED] 세션 경량 학습 1 시작 (UTC 10:00)")
-                    await self.hist_learner.run_session_study()
+                    await _guarded_study("세션학습1", self.hist_learner.run_session_study())
                     _last_run["session1"] = today
 
                 # UTC 18:00 — 세션 경량 학습
                 elif hour == 18 and _last_run.get("session2") != today:
-                    logger.info("[SCHED] 세션 경량 학습 2 시작 (UTC 18:00)")
-                    await self.hist_learner.run_session_study()
+                    await _guarded_study("세션학습2", self.hist_learner.run_session_study())
                     _last_run["session2"] = today
 
             except Exception as e:
                 logger.error(f"[SCHED] 학습 스케줄러 에러: {e}", exc_info=True)
+                # 예외로 빠져나간 경우에도 flag 해제 (이중 안전망)
+                try:
+                    await self.redis.delete("sys:learning")
+                except Exception:
+                    pass
             await asyncio.sleep(60)
 
     # ── 주기적 루프들 ──
