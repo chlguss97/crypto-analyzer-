@@ -451,9 +451,7 @@ class CryptoAnalyzer:
         atr_pct = self._last_fast.get("atr", {}).get("atr_pct", 0.3)
         lev = self.leverage_calc.calculate(grade_result["grade"], atr_pct, risk_state.get("streak", 0))
         balance = risk_state.get("balance", 0)
-        margin = self.leverage_calc.calculate_position_size(
-            balance, lev["leverage"], lev["sl_pct"], grade_result["size_pct"])
-        if margin <= 0:
+        if balance <= 0:
             return
 
         price_str = await self.redis.get("rt:price:BTC-USDT-SWAP")
@@ -461,14 +459,51 @@ class CryptoAnalyzer:
         if price <= 0:
             return
 
-        # SL 거리는 leverage_calc 가 사용한 sl_pct 와 일관되게 계산
-        # (atr 모듈의 sl_distance 는 clamp 미적용이라 leverage_calc 의 사이즈 계산과 미스매치 가능)
-        sl_dist = price * lev["sl_pct"] / 100
-        if sl_dist <= 0:
-            sl_dist = price * 0.003  # fallback
-        tp1_dist = sl_dist * 1.5   # 1.5R → 50% 익절 + 본절 SL
-        tp2_dist = sl_dist * 2.5   # 2.5R → 30% 익절 + SL을 TP1로
-        tp3_dist = sl_dist * 4.0   # 4.0R → 잔량 20% 익절
+        leverage = lev["leverage"]
+        sizing_mode = self.config["risk"].get("sizing_mode", "margin_loss_cap")
+
+        # ── 사이즈 + SL 계산 ──
+        if sizing_mode == "margin_loss_cap":
+            # 사용자 의도: 마진 손실 = 마진 × max_loss% 가 SL
+            # → SL 가격 거리 = max_loss% / leverage
+            risk_cfg = self.config["risk"]
+            max_loss_pct = risk_cfg.get("max_margin_loss_pct", 10.0)
+            margin_pct = risk_cfg.get("margin_pct", 0.95)
+            use_indicator = risk_cfg.get("use_indicator_sl", True)
+
+            margin_limit_dist = price * (max_loss_pct / leverage / 100)
+
+            if use_indicator:
+                # 매물대(ATR/지표) 기반 SL 과 마진 손실 한도 중 더 가까운 것 사용
+                indicator_dist = self._last_fast.get("atr", {}).get("sl_distance", margin_limit_dist)
+                sl_dist = min(indicator_dist, margin_limit_dist)
+            else:
+                sl_dist = margin_limit_dist
+
+            margin = balance * margin_pct
+            logger.info(
+                f"[SWING-SIZING] balance ${balance:.2f} × {margin_pct*100:.0f}% = "
+                f"margin ${margin:.2f} | leverage {leverage}x | "
+                f"SL dist ${sl_dist:.2f} ({sl_dist/price*100:.3f}% 가격, "
+                f"{sl_dist/price*100*leverage:.1f}% 마진 손실)"
+            )
+        else:
+            # 옛 방식: risk_per_trade 기반
+            margin = self.leverage_calc.calculate_position_size(
+                balance, leverage, lev["sl_pct"], grade_result["size_pct"])
+            if margin <= 0:
+                return
+            sl_dist = price * lev["sl_pct"] / 100
+            if sl_dist <= 0:
+                sl_dist = price * 0.003
+
+        # TP 거리 (config R-multiple)
+        tp1_rr = self.config["risk"].get("tp1_rr", 1.5)
+        tp2_rr = self.config["risk"].get("tp2_rr", 2.5)
+        tp3_rr = self.config["risk"].get("tp3_rr", 4.0)
+        tp1_dist = sl_dist * tp1_rr
+        tp2_dist = sl_dist * tp2_rr
+        tp3_dist = sl_dist * tp3_rr
 
         if direction == "long":
             sl = price - sl_dist
@@ -529,31 +564,56 @@ class CryptoAnalyzer:
             return
 
         balance = risk_state.get("balance", 0)
-        sl_dist = scalp_sig["sl_distance"]
+        sl_dist_indicator = scalp_sig["sl_distance"]
         leverage = 25
-        if balance <= 0 or sl_dist <= 0 or price <= 0:
+        if balance <= 0 or sl_dist_indicator <= 0 or price <= 0:
             return
-        # 마진 공식: leverage 반드시 포함 (옛 공식은 leverage 미반영으로 손실 25배)
-        # 손실 = 마진 × leverage × sl_dist/price → 의도 0.8% = balance × risk
-        risk_per_trade = 0.008
-        sl_pct_decimal = sl_dist / price
-        margin = (balance * risk_per_trade) / (leverage * sl_pct_decimal)
-        # 잔고 30% 캡
-        margin = min(margin, balance * 0.3)
+
+        risk_cfg = self.config["risk"]
+        sizing_mode = risk_cfg.get("sizing_mode", "margin_loss_cap")
+
+        if sizing_mode == "margin_loss_cap":
+            max_loss_pct = risk_cfg.get("max_margin_loss_pct", 10.0)
+            margin_pct = risk_cfg.get("margin_pct", 0.95)
+            use_indicator = risk_cfg.get("use_indicator_sl", True)
+
+            margin_limit_dist = price * (max_loss_pct / leverage / 100)
+            sl_dist = min(sl_dist_indicator, margin_limit_dist) if use_indicator else margin_limit_dist
+            margin = balance * margin_pct
+            logger.info(
+                f"[SCALP-SIZING] balance ${balance:.2f} × {margin_pct*100:.0f}% = "
+                f"margin ${margin:.2f} | leverage {leverage}x | "
+                f"SL dist ${sl_dist:.2f} ({sl_dist/price*100:.3f}% 가격, "
+                f"{sl_dist/price*100*leverage:.1f}% 마진 손실)"
+            )
+        else:
+            risk_per_trade = 0.008
+            sl_pct_decimal = sl_dist_indicator / price
+            margin = (balance * risk_per_trade) / (leverage * sl_pct_decimal)
+            margin = min(margin, balance * 0.3)
+            sl_dist = sl_dist_indicator
+
         if margin <= 0:
             return
 
-        tp_dist = scalp_sig["tp_distance"]
+        # TP 거리 — sl_dist 기반 R-multiple (스캘핑은 좀 작은 R)
+        tp1_rr = risk_cfg.get("tp1_rr_scalp", 1.0)
+        tp2_rr = risk_cfg.get("tp2_rr_scalp", 1.6)
+        tp3_rr = risk_cfg.get("tp3_rr_scalp", 2.5)
+        tp1_dist = sl_dist * tp1_rr
+        tp2_dist = sl_dist * tp2_rr
+        tp3_dist = sl_dist * tp3_rr
+
         if direction == "long":
             sl = price - sl_dist
-            tp1 = price + tp_dist
-            tp2 = price + tp_dist * 1.6   # 1.6× TP1
-            tp3 = price + tp_dist * 2.5   # 2.5× TP1
+            tp1 = price + tp1_dist
+            tp2 = price + tp2_dist
+            tp3 = price + tp3_dist
         else:
             sl = price + sl_dist
-            tp1 = price - tp_dist
-            tp2 = price - tp_dist * 1.6
-            tp3 = price - tp_dist * 2.5
+            tp1 = price - tp1_dist
+            tp2 = price - tp2_dist
+            tp3 = price - tp3_dist
 
         logger.info(
             f"[SCALP] {direction.upper()} @ ${price:.0f} SL ${sl:.0f} "
