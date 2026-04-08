@@ -13,6 +13,8 @@ services:
   bot:
     build: .
     restart: always
+    # SIGTERM 후 cleanup (ML save + db.close) 시간 확보 — DB 손상 예방
+    stop_grace_period: 30s
     depends_on:
       - redis
     env_file:

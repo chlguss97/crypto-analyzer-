@@ -1076,6 +1076,14 @@ class PositionManager:
                     pass
             return
 
+        # 봇 재시작 시 거래소 활성 알고 모두 정리 → 옛 알고와 self_heal 새 알고 중복 방지
+        # (포지션이 있든 없든 옛 알고는 모두 stale 로 간주)
+        if exchange_positions:
+            try:
+                await self.executor.cancel_all_algos()
+            except Exception as e:
+                logger.error(f"sync 시 알고 정리 실패: {e}")
+
         for ep in exchange_positions:
             symbol = ep["symbol"]
             if symbol in self.positions:

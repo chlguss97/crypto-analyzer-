@@ -1,4 +1,5 @@
 import aiosqlite
+import sqlite3
 import redis.asyncio as redis
 import json
 import logging
@@ -83,6 +84,37 @@ class Database:
 
     async def connect(self):
         DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+        # ── DB integrity check + 자동 백업/재생성 (BUG: 04-08 무한 restart loop) ──
+        if self.db_path.exists():
+            try:
+                _check = await aiosqlite.connect(str(self.db_path))
+                cur = await _check.execute("PRAGMA integrity_check")
+                row = await cur.fetchone()
+                await _check.close()
+                if not row or row[0] != "ok":
+                    raise sqlite3.DatabaseError(f"integrity_check 실패: {row}")
+            except Exception as e:
+                # 손상 감지 → 백업 + 재생성 (auto-recover)
+                import time as _t
+                backup = self.db_path.with_suffix(f".db.broken.{int(_t.time())}")
+                logger.critical(
+                    f"💀 SQLite 손상 감지: {e} → 백업 후 재생성 ({backup.name})"
+                )
+                try:
+                    self.db_path.rename(backup)
+                    # WAL/SHM 사이드 파일도 함께 백업
+                    for sfx in ("-wal", "-shm"):
+                        side = self.db_path.with_name(self.db_path.name + sfx)
+                        if side.exists():
+                            side.rename(side.with_suffix(side.suffix + f".broken.{int(_t.time())}"))
+                except Exception as e2:
+                    logger.error(f"손상 DB 백업 실패: {e2} → 직접 삭제")
+                    try:
+                        self.db_path.unlink(missing_ok=True)
+                    except Exception:
+                        pass
+
         self._db = await aiosqlite.connect(str(self.db_path))
         self._db.row_factory = aiosqlite.Row
         # WAL 모드 비활성 — docker volume + 강제 종료 환경에서 손상 발생
@@ -92,7 +124,7 @@ class Database:
         await self._db.execute("PRAGMA synchronous=FULL")     # 안전 우선
         await self._db.executescript(SCHEMA_SQL)
         await self._db.commit()
-        logger.info(f"SQLite 연결: {self.db_path} (journal=DELETE, sync=FULL)")
+        logger.info(f"SQLite 연결: {self.db_path} (journal=DELETE, sync=FULL, integrity OK)")
 
     async def close(self):
         if self._db:

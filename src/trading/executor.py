@@ -495,6 +495,39 @@ class OrderExecutor:
         except Exception as e:
             logger.error(f"주문 전체 취소 실패: {e}")
 
+    async def cancel_all_algos(self) -> int:
+        """
+        OKX 의 BTC-USDT-SWAP 활성 알고 주문 (SL/TP/trigger) 모두 cancel.
+        봇 재시작 시 옛 알고가 살아있고 self_heal 이 새 알고를 추가 등록하면
+        중복 SL/TP 가 됨 → sync_positions 에서 호출.
+        """
+        canceled = 0
+        try:
+            # OKX 알고 주문 조회 (private endpoint)
+            try:
+                resp = await self.exchange.private_get_trade_orders_algo_pending(
+                    {"instType": "SWAP", "instId": self.exchange.market(self.symbol)["id"]}
+                )
+                items = resp.get("data", []) if isinstance(resp, dict) else []
+            except Exception as e:
+                logger.debug(f"알고 조회 실패 (스킵): {e}")
+                return 0
+
+            for item in items:
+                algo_id = item.get("algoId") or item.get("algoClOrdId")
+                if not algo_id:
+                    continue
+                try:
+                    await self.cancel_algo_order(algo_id)
+                    canceled += 1
+                except Exception:
+                    pass
+            if canceled > 0:
+                logger.info(f"거래소 활성 알고 {canceled}개 정리 완료 (sync 단계)")
+        except Exception as e:
+            logger.error(f"cancel_all_algos 에러: {e}")
+        return canceled
+
     async def get_positions(self) -> list[dict]:
         """현재 포지션 조회"""
         try:
