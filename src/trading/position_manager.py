@@ -74,6 +74,7 @@ class Position:
     def to_dict(self) -> dict:
         """
         Redis hset 안전 형태 — 모든 값은 str/int/float (dict/bool 금지).
+        entry_time 은 DB/JS 호환 위해 ms 로 변환.
         """
         return {
             "trade_id": self.trade_id,
@@ -88,7 +89,7 @@ class Position:
             "tp2_price": self.tp2_price,
             "tp3_price": self.tp3_price,
             "grade": self.grade,
-            "entry_time": self.entry_time,
+            "entry_time": self.entry_time * 1000,  # 초 → ms (JS Date 호환)
             # bool → int (Redis hset 호환)
             "tp1_filled": 1 if self.tp1_filled else 0,
             "tp2_filled": 1 if self.tp2_filled else 0,
@@ -115,6 +116,8 @@ class PositionManager:
 
         self.positions: dict[str, Position] = {}  # symbol → Position
         self.on_trade_closed = None  # 콜백: async def(mode, signals, pnl_pct)
+        self.telegram = None  # main.py 에서 주입 — 청산 알림용
+        self.trade_logger = None  # main.py 에서 주입 — 청산 로그용
 
     # 러너 트레일링: TP1 50% 익절 + 잔여 50% 는 트레일링 SL 로 추세 끝까지
     TP1_CLOSE_PCT = 0.5
@@ -368,6 +371,16 @@ class PositionManager:
             # 4. 시간 청산
             await self._check_time_exit(pos, current_price)
 
+            # 종료됐으면 다음 루프
+            if symbol not in self.positions:
+                continue
+
+            # 5. Redis 상태 갱신 (대시보드 hold_minutes/current_sl 실시간 표시)
+            try:
+                await self.redis.hset(f"pos:active:{symbol}", pos.to_dict())
+            except Exception as e:
+                logger.debug(f"Redis 포지션 갱신 실패: {e}")
+
     def _tp_reached(self, pos: Position, current_price: float, tp_price: float) -> bool:
         if pos.direction == "long":
             return current_price >= tp_price
@@ -382,21 +395,25 @@ class PositionManager:
 
         # TP1 도달 처리
         if not pos.tp1_filled and self._tp_reached(pos, current_price, pos.tp1_price):
-            # 사이즈가 최소단위 × 2 미만이면 100% 청산 (분할 불가)
+            # 사이즈가 최소단위 × 2 미만이면 분할 불가 → 직접 전량 청산
             small_position = pos.size < self.MIN_ORDER_SIZE_BTC * 2
-            close_pct = 1.0 if small_position else self.TP1_CLOSE_PCT
+            if small_position:
+                pos.tp1_filled = True
+                logger.info(f"✅ TP1 도달 @ ${pos.tp1_price:.0f} → 100% 청산 (소형 포지션)")
+                await self._cancel_all_algos(pos)
+                await self._full_close(pos, "tp1_full")
+                return
 
-            await self._on_tp_hit(pos, level=1, close_pct=close_pct)
+            await self._on_tp_hit(pos, level=1, close_pct=self.TP1_CLOSE_PCT)
             if pos.symbol not in self.positions:
                 return
             if not pos.tp1_filled:
                 return  # 부분청산 실패 → 다음 폴링 재시도
 
-            # 100% 청산했으면 포지션 종료 처리
-            if small_position or pos.remaining_size < 1e-8:
+            # 50% 청산 후 잔여가 너무 작으면 (부동소수 오차) 종료
+            if pos.remaining_size < 1e-8:
                 await self._cancel_all_algos(pos)
-                await self._full_close(pos, "tp1_full")
-                logger.info(f"✅ TP1 100% 청산 @ ${pos.tp1_price:.0f} (소형 포지션 — 러너 비활성)")
+                await self._full_close(pos, "tp1_residual")
                 return
 
             # SL → 본전 + 수수료 보상
@@ -507,38 +524,12 @@ class PositionManager:
         elif pos.tp1_filled:
             reason = "breakeven_hit"
         elif small_position and pnl_now > 0:
-            # 소형 포지션 — TP1 100% 청산이 서버에서 발동
             reason = "tp1_full_server"
         else:
-            # TP1 도 안 갔는데 청산: 원본 SL 또는 강제청산
             reason = "sl_or_forced"
-        # 가짜 close 처리 (이미 체결됐으므로 close_position 호출 안 함)
-        pnl_pct = pos.pnl_pct(last_price) if last_price > 0 else 0
-        pnl_usdt = (pos.size * pos.entry_price * pnl_pct / 100 / max(pos.leverage, 1)) \
-            if pos.entry_price > 0 else 0
-        try:
-            await self.db.update_trade_exit(pos.trade_id, {
-                "exit_price": last_price,
-                "exit_time": int(time.time() * 1000),
-                "exit_reason": reason,
-                "pnl_usdt": round(pnl_usdt, 2),
-                "pnl_pct": round(pnl_pct, 4),
-                "fee_total": round(pos.total_fee, 4),
-                "funding_cost": round(pos.funding_cost, 4),
-            })
-        except Exception as e:
-            logger.error(f"외부 청산 DB 기록 실패: {e}")
 
-        await self.redis.delete(f"pos:active:{pos.symbol}")
-        if pos.symbol in self.positions:
-            del self.positions[pos.symbol]
-
-        if self.on_trade_closed:
-            mode = "scalp" if pos.grade == "SCALP" else "swing"
-            try:
-                await self.on_trade_closed(mode, pos.signals_snapshot, pnl_pct)
-            except Exception as e:
-                logger.error(f"ML 콜백 에러: {e}")
+        # 정리는 _finalize_position 으로 일관화 (텔레그램/ML/DB/Redis)
+        await self._finalize_position(pos, reason, last_price)
 
     async def _check_time_exit(self, pos: Position, current_price: float) -> bool:
         """
@@ -564,15 +555,25 @@ class PositionManager:
 
         # 2시간 → TP1 미체결 시 75% 청산
         if hours >= 2 and not pos.tp1_filled:
-            await self._partial_close(pos, 0.75, "time_2h")
-            # 잔여 사이즈에 맞춰 OKX SL 알고도 갱신 (size mismatch 방지)
+            # 잔여가 최소단위 미만 되면 전체 청산
+            close_pct = 0.75
+            if pos.remaining_size * (1 - close_pct) < self.MIN_ORDER_SIZE_BTC:
+                await self._cancel_all_algos(pos)
+                await self._full_close(pos, "time_2h_full")
+                return True
+            await self._partial_close(pos, close_pct, "time_2h")
             if pos.remaining_size > 0:
                 await self._move_sl(pos, pos.current_sl, label="time_2h_resize")
             return False
 
         # 1시간 → 수익 < 3% 시 50% 청산
         if hours >= 1 and not pos.tp1_filled and pnl < 3.0:
-            await self._partial_close(pos, 0.5, "time_1h")
+            close_pct = 0.5
+            if pos.remaining_size * (1 - close_pct) < self.MIN_ORDER_SIZE_BTC:
+                await self._cancel_all_algos(pos)
+                await self._full_close(pos, "time_1h_full")
+                return True
+            await self._partial_close(pos, close_pct, "time_1h")
             if pos.remaining_size > 0:
                 await self._move_sl(pos, pos.current_sl, label="time_1h_resize")
             return False
@@ -606,10 +607,12 @@ class PositionManager:
             )
 
     async def _full_close(self, pos: Position, reason: str):
-        """전량 청산 + DB 기록"""
-        if pos.remaining_size <= 0:
-            return
-
+        """
+        전량 청산.
+        - remaining_size 가 이미 0 인 경우 (다른 경로로 청산 완료) → finalize 만
+        - 청산 실패 시: SL 재등록 + 메모리 유지 (좀비 방지) + 다음 폴링 재시도
+        - 청산 성공 시: 잔존 알고 정리 + finalize
+        """
         # entry_price 무결성 체크
         if not pos.entry_price or pos.entry_price <= 0:
             logger.error(f"포지션 청산 실패: entry_price 무효 ({pos.entry_price})")
@@ -617,37 +620,77 @@ class PositionManager:
                 del self.positions[pos.symbol]
             return
 
+        # 이미 청산된 케이스 (small position TP1 100% 후 등) → finalize 만
+        if pos.remaining_size <= 1e-8:
+            await self._finalize_position(pos, reason, exit_price=0)
+            return
+
+        # 청산 시도
         order = await self.executor.close_position(
             pos.direction, pos.remaining_size, reason
         )
 
-        exit_price = 0
-        if order:
-            exit_price = order.get("average") or order.get("price") or 0
-            fee = (order.get("fee") or {}).get("cost", 0) or 0
-            pos.total_fee += float(fee)
+        if not order:
+            # 🚨 청산 실패 — 좀비 방지: SL 알고 긴급 재등록 + 메모리 유지
+            logger.error(
+                f"🚨 청산 실패 ({reason}) → SL 긴급 재등록 + 다음 폴링 재시도"
+            )
+            try:
+                # 호출자가 _cancel_all_algos 를 미리 불렀으므로 SL 다시 만들어야 함
+                new_id = await self.executor.set_stop_loss(
+                    pos.direction, pos.remaining_size, pos.current_sl
+                )
+                pos.algo_ids["sl"] = new_id
+                if not new_id:
+                    logger.critical(
+                        f"💀 SL 재등록도 실패 — {pos.symbol} 포지션 무방비, "
+                        f"수동 개입 필요!"
+                    )
+            except Exception as e:
+                logger.critical(f"💀 SL 재등록 예외: {e}")
+            return  # 메모리 유지 → 다음 폴링에서 _full_close 재호출
 
-        # P&L 계산 (계좌 기준 PnL %, 마진 기준 USDT)
-        pnl_pct = pos.pnl_pct(exit_price) if exit_price > 0 else 0  # 레버리지 적용
-        # 마진 = (size × entry_price) / leverage,  pnl_usdt = 마진 × pnl_pct / 100
-        pnl_usdt = 0
+        # 청산 성공 — fill 정보 추출
+        exit_price = order.get("average") or order.get("price") or 0
+        fee = (order.get("fee") or {}).get("cost", 0) or 0
+        pos.total_fee += float(fee)
+
+        # finalize (DB / Redis / 메모리 / 알림 / ML)
+        await self._finalize_position(pos, reason, exit_price)
+
+    async def _finalize_position(self, pos: Position, reason: str, exit_price: float):
+        """
+        청산된 포지션의 모든 정리 작업 — DB / Redis / 메모리 / 텔레그램 / ML 콜백.
+        _full_close 와 외부 청산 감지 양쪽에서 호출.
+        """
+        # P&L 계산
+        pnl_pct = pos.pnl_pct(exit_price) if exit_price > 0 else 0
+        pnl_usdt = 0.0
         if pos.entry_price > 0 and pos.leverage > 0:
             margin = pos.size * pos.entry_price / pos.leverage
             pnl_usdt = margin * pnl_pct / 100
 
         # DB 업데이트
-        await self.db.update_trade_exit(pos.trade_id, {
-            "exit_price": exit_price,
-            "exit_time": int(time.time() * 1000),
-            "exit_reason": reason,
-            "pnl_usdt": round(pnl_usdt, 2),
-            "pnl_pct": round(pnl_pct, 4),
-            "fee_total": round(pos.total_fee, 4),
-            "funding_cost": round(pos.funding_cost, 4),
-        })
+        try:
+            await self.db.update_trade_exit(pos.trade_id, {
+                "exit_price": exit_price,
+                "exit_time": int(time.time() * 1000),
+                "exit_reason": reason,
+                "pnl_usdt": round(pnl_usdt, 2),
+                "pnl_pct": round(pnl_pct, 4),
+                "fee_total": round(pos.total_fee, 4),
+                "funding_cost": round(pos.funding_cost, 4),
+            })
+        except Exception as e:
+            logger.error(f"DB 청산 기록 실패: {e}")
 
         # Redis 정리
-        await self.redis.delete(f"pos:active:{pos.symbol}")
+        try:
+            await self.redis.delete(f"pos:active:{pos.symbol}")
+        except Exception:
+            pass
+
+        # 메모리 정리
         if pos.symbol in self.positions:
             del self.positions[pos.symbol]
 
@@ -656,6 +699,26 @@ class PositionManager:
             f"P&L: {pnl_pct:+.2f}% (${pnl_usdt:+.2f}) | "
             f"보유: {pos.hold_minutes}분 | 수수료: ${pos.total_fee:.2f}"
         )
+
+        # 텔레그램 청산 알림
+        if self.telegram:
+            try:
+                await self.telegram.notify_exit(
+                    pos.direction, reason, pos.entry_price, exit_price,
+                    pnl_pct, pnl_usdt, pos.hold_minutes
+                )
+            except Exception as e:
+                logger.error(f"텔레그램 청산 알림 실패: {e}")
+
+        # 거래 로그
+        if self.trade_logger:
+            try:
+                self.trade_logger.log_exit(
+                    pos.direction, reason, pos.entry_price, exit_price,
+                    pnl_pct, pnl_usdt, pos.hold_minutes, pos.total_fee
+                )
+            except Exception as e:
+                logger.error(f"trade_logger.log_exit 실패: {e}")
 
         # ML 학습 콜백 (실거래 시그널 데이터 포함)
         if self.on_trade_closed:

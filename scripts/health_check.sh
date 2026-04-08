@@ -21,8 +21,15 @@ else
     exit 1
 fi
 
-# 1. 컨테이너 상태
-BOT_STATUS=$($DC ps bot 2>/dev/null | tail -n +2 | awk '{print $NF}' | head -1)
+# 1. 컨테이너 상태 — --format 으로 정확한 STATUS 컬럼 추출 (PORTS 와 혼동 방지)
+BOT_STATUS=$($DC ps --format '{{.State}}' bot 2>/dev/null | head -1)
+if [ -z "$BOT_STATUS" ]; then
+    # fallback: 옛 docker compose 는 --format 미지원
+    BOT_STATUS=$($DC ps bot 2>/dev/null | tail -n +2 | awk '{
+        # STATUS 컬럼 = "Up X minutes" 또는 "Exited" 등 — 4번째 컬럼부터 시작
+        for (i=4; i<=NF; i++) { if ($i ~ /^(Up|Exited|Restarting|Created|Paused|Dead)/) { print $i; exit } }
+    }' | head -1)
+fi
 [ -z "$BOT_STATUS" ] && BOT_STATUS="not_found"
 
 # 2. 마지막 로그 시각 (어떤 로그든)
@@ -58,11 +65,14 @@ LEARNING=$($DC logs --since 5m bot 2>&1 | grep -E "\[HIST\]|\[SCHED\]" | tail -1
 LEARN_STATUS="idle"
 [ -n "$LEARNING" ] && LEARN_STATUS="active"
 
-# 종합 판정
+# 종합 판정 — running/Up 으로 시작하면 정상
 STATUS="OK"
-if [ "$BOT_STATUS" != "running" ] && [ "$BOT_STATUS" != "Up" ]; then
-    STATUS="DOWN"
-elif [ "$HB_AGO" -lt 0 ] || [ "$HB_AGO" -gt 180 ]; then
+case "$BOT_STATUS" in
+    running|Up*) ;;  # 정상
+    *) STATUS="DOWN" ;;
+esac
+
+if [ "$STATUS" = "OK" ] && { [ "$HB_AGO" -lt 0 ] || [ "$HB_AGO" -gt 180 ]; }; then
     STATUS="STALE"  # 3분 이상 heartbeat 없음
 fi
 

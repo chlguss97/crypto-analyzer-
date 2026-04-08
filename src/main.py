@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import math
 import signal
 import sys
 import time as _time
@@ -168,8 +169,10 @@ class CryptoAnalyzer:
         await self.risk_manager.initialize(balance)
         logger.info(f"계좌 잔고: ${balance:.2f}")
 
-        # 포지션 동기화 + ML 콜백 연결
+        # 포지션 동기화 + ML 콜백 연결 + 청산 알림 주입
         self.position_manager.on_trade_closed = self.record_ml_trade
+        self.position_manager.telegram = self.telegram
+        self.position_manager.trade_logger = self.trade_logger
         await self.position_manager.sync_positions()
 
         # 캔들 백필 (15m, 1h, 5m, 1m)
@@ -458,8 +461,11 @@ class CryptoAnalyzer:
         if price <= 0:
             return
 
-        # SL은 ATR 기반, TP는 R-multiple (1R = SL 거리)
-        sl_dist = self._last_fast.get("atr", {}).get("sl_distance", price * 0.003)
+        # SL 거리는 leverage_calc 가 사용한 sl_pct 와 일관되게 계산
+        # (atr 모듈의 sl_distance 는 clamp 미적용이라 leverage_calc 의 사이즈 계산과 미스매치 가능)
+        sl_dist = price * lev["sl_pct"] / 100
+        if sl_dist <= 0:
+            sl_dist = price * 0.003  # fallback
         tp1_dist = sl_dist * 1.5   # 1.5R → 50% 익절 + 본절 SL
         tp2_dist = sl_dist * 2.5   # 2.5R → 30% 익절 + SL을 TP1로
         tp3_dist = sl_dist * 4.0   # 4.0R → 잔량 20% 익절
@@ -481,9 +487,9 @@ class CryptoAnalyzer:
         )
 
         # OKX BTC-USDT-SWAP: 1 contract = 0.01 BTC, sz 는 contracts 단위
-        # ccxt 에 BTC 단위로 넘기면 자동 변환되지만 0.01 의 배수로 정확히 맞춰주는 게 안전
-        size_btc = round(margin * lev["leverage"] / price, 6)
-        size_btc = round(size_btc / 0.01) * 0.01  # 0.01 BTC 단위로 스냅
+        # 0.01 단위 down rounding (math.floor) — round() 의 banker's rounding 회피
+        raw_size = margin * lev["leverage"] / price
+        size_btc = math.floor(raw_size / 0.01) * 0.01
         size_btc = round(size_btc, 4)
 
         trade_req = {
@@ -550,9 +556,9 @@ class CryptoAnalyzer:
             f"TP1 ${tp1:.0f} TP2 ${tp2:.0f} TP3 ${tp3:.0f}"
         )
 
-        # OKX 0.01 BTC 단위 스냅
-        size_btc = round(margin * leverage / price, 6)
-        size_btc = round(size_btc / 0.01) * 0.01
+        # OKX 0.01 BTC 단위 floor 스냅
+        raw_size = margin * leverage / price
+        size_btc = math.floor(raw_size / 0.01) * 0.01
         size_btc = round(size_btc, 4)
 
         trade_req = {
