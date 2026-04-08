@@ -80,9 +80,13 @@ CONFLUENCE_BONUSES = [
     },
 ]
 
-# 정규화 기준: 한 방향 시그널의 현실적 최대값
-# 모든 기법이 한 방향으로 강도 1.0은 비현실적 → 실전 최대 ~12점
-REALISTIC_MAX_SCORE = 12.0
+# 정규화 기준: 한 방향 시그널 + 보너스 합의 현실적 최대값
+# WEIGHTS 합 = 26.0 (15 시그널). 한 방향 분산 = ~13. 보너스 합 = 9.5.
+# 이전 12.0 은 보너스 미고려 → 보너스 2~3개만으로 점수 천장(10/10) 도달 → A+ 등급 인플레이션
+# 18.0 = 분산 한 방향 ~13 + 합리적 보너스 ~5 (BUG #4)
+REALISTIC_MAX_SCORE = 18.0
+# 보너스 cap (이중 안전): 한 거래가 5개 이상의 보너스를 동시에 받지 않도록
+MAX_CONFLUENCE_BONUS = 5.0
 
 
 def _zones_overlap(signals: dict) -> bool:
@@ -164,6 +168,9 @@ class SignalAggregator:
                     confluence_details.append(bonus_def["name"])
             except Exception:
                 pass
+
+        # 보너스 cap (점수 인플레이션 방지)
+        confluence_bonus = min(MAX_CONFLUENCE_BONUS, confluence_bonus)
 
         # 최종 방향 결정
         if long_score > short_score:
