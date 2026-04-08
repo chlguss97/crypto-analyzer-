@@ -22,11 +22,17 @@ risk:
   max_hold_hours: 6
 
 trailing:
+  # 라이브 거래: 진입 시 OKX 서버사이드 SL/TP1/TP2/TP3 등록
+  # TP는 PRICE 기준 (반익본절 SL 자동 이동) — main.py 가 R-multiple 로 계산
+  # 분할 비율: TP1=50%, TP2=30%, TP3=20% (PositionManager.TP_FRACTIONS)
+  tp1_close_pct: 0.5
+  tp2_close_pct: 0.3
+  tp3_close_pct: 0.2
+
+  # 백테스트(backtest/simulator.py) 호환용 — 라이브에서는 미사용
   breakeven_trigger: 0.008
   tp1_trigger: 0.015
-  tp1_close_pct: 0.5
   tp2_trigger: 0.025
-  tp2_close_pct: 0.3
   tp3_atr_multiplier: 0.8
 
 cooldown:

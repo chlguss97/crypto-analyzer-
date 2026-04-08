@@ -15,6 +15,7 @@ class Position:
     def __init__(self, trade_id: int, symbol: str, direction: str,
                  entry_price: float, size: float, leverage: int,
                  sl_price: float, tp1_price: float, tp2_price: float,
+                 tp3_price: float,
                  grade: str, score: float, signals_snapshot: dict = None):
         self.trade_id = trade_id
         self.symbol = symbol
@@ -23,17 +24,27 @@ class Position:
         self.size = size                  # 원래 사이즈
         self.remaining_size = size        # 잔여 사이즈
         self.leverage = leverage
-        self.sl_price = sl_price
-        self.current_sl = sl_price        # 트레일링으로 갱신
+        self.sl_price = sl_price          # 진입 시 원본 SL (참조용)
+        self.current_sl = sl_price        # 본절/TP 이동으로 갱신
         self.tp1_price = tp1_price
         self.tp2_price = tp2_price
+        self.tp3_price = tp3_price
         self.grade = grade
         self.score = score
         self.entry_time = int(time.time())
-        self.tier = 0                     # 트레일링 단계
         self.total_fee = 0.0
         self.funding_cost = 0.0
         self.signals_snapshot = signals_snapshot or {}
+
+        # TP 체결 상태
+        self.tp1_filled = False
+        self.tp2_filled = False
+        self.tp3_filled = False
+
+        # OKX 알고 주문 ID 추적 (cancel/replace 용)
+        self.algo_ids: dict[str, str | None] = {
+            "sl": None, "tp1": None, "tp2": None, "tp3": None
+        }
 
     @property
     def hold_minutes(self) -> int:
@@ -43,11 +54,16 @@ class Position:
     def hold_hours(self) -> float:
         return (int(time.time()) - self.entry_time) / 3600
 
-    def pnl_pct(self, current_price: float) -> float:
+    def price_pnl_pct(self, current_price: float) -> float:
+        """가격 변동률 (레버리지 미적용)"""
         if self.direction == "long":
             return (current_price - self.entry_price) / self.entry_price * 100
         else:
             return (self.entry_price - current_price) / self.entry_price * 100
+
+    def pnl_pct(self, current_price: float) -> float:
+        """계좌 PnL % (레버리지 적용) — 사용자가 보는 PnL"""
+        return self.price_pnl_pct(current_price) * self.leverage
 
     def to_dict(self) -> dict:
         return {
@@ -61,9 +77,13 @@ class Position:
             "sl_price": self.current_sl,
             "tp1_price": self.tp1_price,
             "tp2_price": self.tp2_price,
+            "tp3_price": self.tp3_price,
             "grade": self.grade,
             "entry_time": self.entry_time,
-            "tier": self.tier,
+            "tp1_filled": self.tp1_filled,
+            "tp2_filled": self.tp2_filled,
+            "tp3_filled": self.tp3_filled,
+            "algo_ids": self.algo_ids,
             "hold_minutes": self.hold_minutes,
         }
 
@@ -82,15 +102,18 @@ class PositionManager:
         self.positions: dict[str, Position] = {}  # symbol → Position
         self.on_trade_closed = None  # 콜백: async def(mode, signals, pnl_pct)
 
+    # 분할익절 비율 (전체 사이즈 대비)
+    TP_FRACTIONS = (0.5, 0.3, 0.2)  # TP1 50%, TP2 30%, TP3 20%
+
     async def open_position(self, trade_request: dict) -> Position | None:
-        """새 포지션 진입"""
+        """새 포지션 진입 + SL/TP1/TP2/TP3 서버사이드 등록"""
         symbol = trade_request["symbol"]
 
         if symbol in self.positions:
             logger.warning(f"이미 {symbol} 포지션 존재 → 진입 거부")
             return None
 
-        # 주문 실행
+        # 주문 실행 (진입만, 보호 주문은 별도)
         order = await self.executor.open_position(
             direction=trade_request["direction"],
             size=trade_request["size"],
@@ -105,14 +128,44 @@ class PositionManager:
 
         fill_price = order.get("average") or order.get("price") or trade_request.get("entry_price", 0)
         filled_size = order.get("filled", trade_request["size"])
-
-        # 수수료 기록
         fee = order.get("fee", {}).get("cost", 0) or 0
+
+        direction = trade_request["direction"]
+        sl_price = float(trade_request["sl_price"])
+        tp1_price = float(trade_request["tp1_price"])
+        tp2_price = float(trade_request["tp2_price"])
+        tp3_price = float(trade_request.get("tp3_price", tp2_price))
+
+        # 🔒 핵심: 진입 직후 SL + TP1/TP2/TP3 서버사이드 등록
+        tp_levels = [
+            (tp1_price, self.TP_FRACTIONS[0]),
+            (tp2_price, self.TP_FRACTIONS[1]),
+            (tp3_price, self.TP_FRACTIONS[2]),
+        ]
+        algo_ids = await self.executor.set_protection(
+            direction=direction,
+            total_size=float(filled_size),
+            sl_price=sl_price,
+            tp_levels=tp_levels,
+        )
+
+        # 🚨 SL 등록 실패 시 진입을 즉시 되돌림 (보호장치 없는 포지션 금지)
+        if not algo_ids.get("sl"):
+            logger.error(
+                f"🚨 SL 알고 등록 실패 → 포지션 즉시 청산 "
+                f"({direction.upper()} {filled_size} @ ${fill_price})"
+            )
+            await self.executor.close_position(direction, float(filled_size), "sl_protect_failed")
+            # 등록된 TP들도 정리
+            for k in ("tp1", "tp2", "tp3"):
+                if algo_ids.get(k):
+                    await self.executor.cancel_algo_order(algo_ids[k])
+            return None
 
         # DB 기록
         trade_id = await self.db.insert_trade({
             "symbol": symbol,
-            "direction": trade_request["direction"],
+            "direction": direction,
             "grade": trade_request["grade"],
             "score": trade_request["score"],
             "entry_price": fill_price,
@@ -122,141 +175,231 @@ class PositionManager:
             "signals_snapshot": json.dumps(trade_request.get("signals_snapshot", {})),
         })
 
-        # Position 객체 생성
         pos = Position(
             trade_id=trade_id,
             symbol=symbol,
-            direction=trade_request["direction"],
+            direction=direction,
             entry_price=float(fill_price),
             size=float(filled_size),
             leverage=trade_request["leverage"],
-            sl_price=trade_request["sl_price"],
-            tp1_price=trade_request["tp1_price"],
-            tp2_price=trade_request["tp2_price"],
+            sl_price=sl_price,
+            tp1_price=tp1_price,
+            tp2_price=tp2_price,
+            tp3_price=tp3_price,
             grade=trade_request["grade"],
             score=trade_request["score"],
             signals_snapshot=trade_request.get("signals_snapshot", {}),
         )
         pos.total_fee = float(fee)
+        pos.algo_ids = algo_ids
         self.positions[symbol] = pos
 
-        # Redis에 포지션 저장
         await self.redis.hset(f"pos:active:{symbol}", pos.to_dict())
+
+        # TP 일부라도 등록 실패한 경우 경고
+        missing_tps = [k for k in ("tp1", "tp2", "tp3") if not algo_ids.get(k)]
+        if missing_tps:
+            logger.warning(f"⚠️  일부 TP 등록 실패: {missing_tps} (봇 폴링이 백업)")
 
         logger.info(
             f"포지션 오픈: {pos.direction.upper()} {symbol} | "
             f"진입 ${fill_price} | SL ${pos.sl_price:.0f} | "
-            f"TP1 ${pos.tp1_price:.0f} TP2 ${pos.tp2_price:.0f} | "
-            f"{pos.leverage}x | 등급 {pos.grade}"
+            f"TP1 ${pos.tp1_price:.0f} TP2 ${pos.tp2_price:.0f} TP3 ${pos.tp3_price:.0f} | "
+            f"{pos.leverage}x | 등급 {pos.grade} | "
+            f"algo: sl={algo_ids.get('sl')} tp1={algo_ids.get('tp1')} "
+            f"tp2={algo_ids.get('tp2')} tp3={algo_ids.get('tp3')}"
         )
 
         return pos
 
     async def check_positions(self, current_price: float):
-        """활성 포지션 체크 (15초마다 호출)"""
+        """
+        활성 포지션 체크 (15초마다 호출)
+        우선순위:
+          1. SL 강제 청산 (failsafe — OKX 알고가 못 뛰는 경우 대비)
+          2. 거래소 사이즈 동기화 (서버사이드 TP 체결 감지)
+          3. 가격 기반 TP1/TP2/TP3 도달 → 부분익절 + SL 끌어올리기 (반익본절)
+          4. 시간 기반 청산
+        """
         if not current_price or current_price <= 0:
             return
+
         for symbol, pos in list(self.positions.items()):
             if not pos.entry_price or pos.entry_price <= 0:
                 continue
-            pnl = pos.pnl_pct(current_price)
 
-            # 1. 시간 청산 체크
-            time_close = await self._check_time_exit(pos, pnl)
-            if time_close:
+            # 1. SL failsafe — 가격이 봇 내부 SL을 넘었으면 즉시 청산
+            sl_breached = (
+                (pos.direction == "long" and current_price <= pos.current_sl) or
+                (pos.direction == "short" and current_price >= pos.current_sl)
+            )
+            if sl_breached:
+                logger.warning(
+                    f"🛑 SL failsafe 발동: {pos.direction.upper()} "
+                    f"가격 ${current_price:.0f} vs SL ${pos.current_sl:.0f}"
+                )
+                await self._cancel_all_algos(pos)
+                await self._full_close(pos, "sl_failsafe")
                 continue
 
-            # 2. 트레일링 업데이트
-            await self._update_trailing(pos, current_price, pnl)
+            # 2. 거래소 사이즈 동기화 — 서버사이드 TP/SL 체결 감지
+            try:
+                ex_size = await self.executor.get_position_size(symbol)
+                if ex_size == 0.0:
+                    # 외부에서 전량 청산됨 (TP3 hit, 강제청산, 수동 등)
+                    logger.warning(
+                        f"포지션 외부 종료 감지 (사이즈=0) → 정리: {symbol}"
+                    )
+                    await self._cancel_all_algos(pos)
+                    await self._reconcile_external_close(pos, current_price)
+                    continue
+                elif ex_size > 0 and ex_size < pos.remaining_size * 0.95:
+                    # 부분 체결 감지 (서버사이드 TP 발동)
+                    logger.info(
+                        f"부분 체결 감지: 봇={pos.remaining_size:.4f} → "
+                        f"거래소={ex_size:.4f}"
+                    )
+                    pos.remaining_size = ex_size
+            except Exception as e:
+                logger.error(f"포지션 사이즈 동기화 실패: {e}")
 
-            # 3. TP 체크
-            await self._check_tp(pos, current_price, pnl)
+            # 3. 가격 기반 TP 도달 처리 + 반익본절 SL 끌어올리기
+            await self._handle_tp_progression(pos, current_price)
 
-    async def _update_trailing(self, pos: Position, current_price: float, pnl: float):
-        """트레일링 스톱 4단계"""
-        cfg = self.trailing_cfg
+            # 종료된 포지션이면 다음 루프
+            if symbol not in self.positions:
+                continue
 
-        # Tier 4: +3.5% 이상 → ATR 트레일링
-        if pnl >= 3.5 and pos.tier < 4:
-            pos.tier = 4
-            # ATR 기반 동적 트레일링 (여기서는 현재가 - 진입가 × 비율로 근사)
-            trail_distance = abs(current_price - pos.entry_price) * 0.2
-            if pos.direction == "long":
-                new_sl = current_price - trail_distance
-            else:
-                new_sl = current_price + trail_distance
-            if self._is_better_sl(pos, new_sl):
-                pos.current_sl = new_sl
-                logger.info(f"트레일링 Tier 4: SL → ${new_sl:.0f} (ATR 동적)")
+            # 4. 시간 청산
+            await self._check_time_exit(pos, current_price)
 
-        # Tier 3: TP2 도달 (+2.5%) → 30% 청산, SL +1.5%
-        elif pnl >= cfg["tp2_trigger"] * 100 and pos.tier < 3:
-            pos.tier = 3
-            await self._partial_close(pos, cfg["tp2_close_pct"], "tp2")
-            if pos.direction == "long":
-                new_sl = pos.entry_price * 1.015
-            else:
-                new_sl = pos.entry_price * 0.985
-            pos.current_sl = new_sl
-            logger.info(f"트레일링 Tier 3: TP2 청산 30% | SL → ${new_sl:.0f}")
+    def _tp_reached(self, pos: Position, current_price: float, tp_price: float) -> bool:
+        if pos.direction == "long":
+            return current_price >= tp_price
+        return current_price <= tp_price
 
-        # Tier 2: TP1 도달 (+1.5%) → 50% 청산, SL +0.5%
-        elif pnl >= cfg["tp1_trigger"] * 100 and pos.tier < 2:
-            pos.tier = 2
-            await self._partial_close(pos, cfg["tp1_close_pct"], "tp1")
-            if pos.direction == "long":
-                new_sl = pos.entry_price * 1.005
-            else:
-                new_sl = pos.entry_price * 0.995
-            pos.current_sl = new_sl
-            logger.info(f"트레일링 Tier 2: TP1 청산 50% | SL → ${new_sl:.0f}")
+    async def _handle_tp_progression(self, pos: Position, current_price: float):
+        """가격 기반 TP1/TP2/TP3 진행 — 반익본절 SL 이동의 핵심"""
 
-        # Tier 1: +0.8% → SL을 본전으로
-        elif pnl >= cfg["breakeven_trigger"] * 100 and pos.tier < 1:
-            pos.tier = 1
-            fee_offset = pos.entry_price * 0.001  # 수수료 보상
-            if pos.direction == "long":
-                new_sl = pos.entry_price + fee_offset
-            else:
-                new_sl = pos.entry_price - fee_offset
-            pos.current_sl = new_sl
-            logger.info(f"트레일링 Tier 1: 본전 확보 | SL → ${new_sl:.0f}")
+        # TP1 도달 → 50% 익절 + SL을 본전으로 이동
+        if not pos.tp1_filled and self._tp_reached(pos, current_price, pos.tp1_price):
+            await self._on_tp_hit(pos, level=1, close_pct=self.TP_FRACTIONS[0])
+            if pos.symbol not in self.positions:
+                return
+            # SL → 본전 + 수수료 보상
+            fee_offset = pos.entry_price * 0.001
+            new_sl = pos.entry_price + fee_offset if pos.direction == "long" \
+                else pos.entry_price - fee_offset
+            await self._move_sl(pos, new_sl, label="본절")
+            logger.info(
+                f"✅ TP1 익절 50% @ ${pos.tp1_price:.0f} → "
+                f"SL을 본전 ${new_sl:.0f}로 이동 (반익본절)"
+            )
 
-        # Tier 4에서는 지속적으로 SL 따라올리기
-        if pos.tier == 4:
-            trail_distance = abs(current_price - pos.entry_price) * 0.2
-            if pos.direction == "long":
-                new_sl = current_price - trail_distance
-            else:
-                new_sl = current_price + trail_distance
-            if self._is_better_sl(pos, new_sl):
-                pos.current_sl = new_sl
+        # TP2 도달 → 30% 익절 + SL을 TP1 가격으로
+        if not pos.tp2_filled and self._tp_reached(pos, current_price, pos.tp2_price):
+            await self._on_tp_hit(pos, level=2, close_pct=self.TP_FRACTIONS[1])
+            if pos.symbol not in self.positions:
+                return
+            new_sl = pos.tp1_price
+            await self._move_sl(pos, new_sl, label="TP1잠금")
+            logger.info(f"✅ TP2 익절 30% @ ${pos.tp2_price:.0f} → SL을 TP1 ${new_sl:.0f}로 이동")
 
-    async def _check_tp(self, pos: Position, current_price: float, pnl: float):
-        """TP 도달 체크 (Tier로 이미 처리, 여기서는 보조)"""
-        pass  # 트레일링에서 처리
+        # TP3 도달 → 잔량 전부 청산
+        if not pos.tp3_filled and self._tp_reached(pos, current_price, pos.tp3_price):
+            pos.tp3_filled = True
+            await self._cancel_all_algos(pos)
+            await self._full_close(pos, "tp3")
+            logger.info(f"✅ TP3 익절 → 포지션 전량 종료 @ ${pos.tp3_price:.0f}")
 
-    async def _check_time_exit(self, pos: Position, pnl: float) -> bool:
-        """시간 기반 청산"""
+    async def _on_tp_hit(self, pos: Position, level: int, close_pct: float):
+        """봇이 TP 가격 도달을 먼저 감지한 경우 — 부분 청산 + 해당 알고 취소"""
+        # 해당 TP 알고 취소 (서버가 동시에 발동하기 전)
+        tp_key = f"tp{level}"
+        algo_id = pos.algo_ids.get(tp_key)
+        if algo_id:
+            await self.executor.cancel_algo_order(algo_id)
+            pos.algo_ids[tp_key] = None
+
+        # 부분 청산 (시장가 reduceOnly)
+        await self._partial_close(pos, close_pct, tp_key)
+        setattr(pos, f"{tp_key}_filled", True)
+
+    async def _move_sl(self, pos: Position, new_sl: float, label: str):
+        """SL 알고 cancel + 새로 등록 (잔여 사이즈 기준)"""
+        old_id = pos.algo_ids.get("sl")
+        new_id = await self.executor.update_stop_loss(
+            pos.direction, pos.remaining_size, new_sl, old_id
+        )
+        pos.algo_ids["sl"] = new_id
+        pos.current_sl = new_sl
+        if not new_id:
+            logger.warning(f"⚠️  SL 갱신 실패 ({label}) → 봇 내부 SL만 적용 (failsafe로 동작)")
+
+    async def _cancel_all_algos(self, pos: Position):
+        """포지션의 모든 SL/TP 알고 주문 취소"""
+        for key in ("sl", "tp1", "tp2", "tp3"):
+            algo_id = pos.algo_ids.get(key)
+            if algo_id:
+                await self.executor.cancel_algo_order(algo_id)
+                pos.algo_ids[key] = None
+
+    async def _reconcile_external_close(self, pos: Position, last_price: float):
+        """외부에서 포지션이 전량 청산된 경우 DB/콜백 정리"""
+        # tp3로 가정 (서버 TP3가 가장 마지막 발동)
+        reason = "tp3" if pos.tp2_filled else ("external_close")
+        # 가짜 close 처리 (이미 체결됐으므로 close_position 호출 안 함)
+        pnl_pct = pos.pnl_pct(last_price) if last_price > 0 else 0
+        pnl_usdt = (pos.size * pos.entry_price * pnl_pct / 100 / max(pos.leverage, 1)) \
+            if pos.entry_price > 0 else 0
+        try:
+            await self.db.update_trade_exit(pos.trade_id, {
+                "exit_price": last_price,
+                "exit_time": int(time.time() * 1000),
+                "exit_reason": reason,
+                "pnl_usdt": round(pnl_usdt, 2),
+                "pnl_pct": round(pnl_pct, 4),
+                "fee_total": round(pos.total_fee, 4),
+                "funding_cost": round(pos.funding_cost, 4),
+            })
+        except Exception as e:
+            logger.error(f"외부 청산 DB 기록 실패: {e}")
+
+        await self.redis.delete(f"pos:active:{pos.symbol}")
+        if pos.symbol in self.positions:
+            del self.positions[pos.symbol]
+
+        if self.on_trade_closed:
+            mode = "scalp" if pos.grade == "SCALP" else "swing"
+            try:
+                await self.on_trade_closed(mode, pos.signals_snapshot, pnl_pct)
+            except Exception as e:
+                logger.error(f"ML 콜백 에러: {e}")
+
+    async def _check_time_exit(self, pos: Position, current_price: float) -> bool:
+        """시간 기반 청산 (계좌 PnL % 기준)"""
         hours = pos.hold_hours
+        pnl = pos.pnl_pct(current_price)  # 계좌 PnL %
 
         # 6시간 → 무조건 전량 청산
         if hours >= 6:
+            await self._cancel_all_algos(pos)
             await self._full_close(pos, "time_6h")
             return True
 
-        # 4시간 → 미청산 전량 청산
-        if hours >= 4 and pos.tier < 3:
+        # 4시간 → TP2 미체결 시 전량 청산
+        if hours >= 4 and not pos.tp2_filled:
+            await self._cancel_all_algos(pos)
             await self._full_close(pos, "time_4h")
             return True
 
-        # 2시간 → TP1 미달 시 75% 청산
-        if hours >= 2 and pos.tier < 2:
+        # 2시간 → TP1 미체결 시 75% 청산
+        if hours >= 2 and not pos.tp1_filled:
             await self._partial_close(pos, 0.75, "time_2h")
             return False
 
-        # 1시간 → 수익 < 0.3% 시 50% 청산
-        if hours >= 1 and pos.tier < 1 and pnl < 0.3:
+        # 1시간 → 손실(-3% 미만) 또는 수익 거의 없음(<3%) 시 50% 청산
+        if hours >= 1 and not pos.tp1_filled and pnl < 3.0:
             await self._partial_close(pos, 0.5, "time_1h")
             return False
 
@@ -265,7 +408,9 @@ class PositionManager:
     async def signal_exit(self, symbol: str, reason: str):
         """시그널 기반 청산 (1H CHoCH, 반대 Grade A 등)"""
         if symbol in self.positions:
-            await self._full_close(self.positions[symbol], reason)
+            pos = self.positions[symbol]
+            await self._cancel_all_algos(pos)
+            await self._full_close(pos, reason)
 
     async def _partial_close(self, pos: Position, close_pct: float, reason: str):
         """부분 청산"""
@@ -308,9 +453,13 @@ class PositionManager:
             fee = order.get("fee", {}).get("cost", 0) or 0
             pos.total_fee += float(fee)
 
-        # P&L 계산 (entry_price 0 방어)
-        pnl_pct = pos.pnl_pct(exit_price) if exit_price > 0 else 0
-        pnl_usdt = (pos.size * pos.entry_price * pnl_pct / 100) if pos.entry_price > 0 else 0
+        # P&L 계산 (계좌 기준 PnL %, 마진 기준 USDT)
+        pnl_pct = pos.pnl_pct(exit_price) if exit_price > 0 else 0  # 레버리지 적용
+        # 마진 = (size × entry_price) / leverage,  pnl_usdt = 마진 × pnl_pct / 100
+        pnl_usdt = 0
+        if pos.entry_price > 0 and pos.leverage > 0:
+            margin = pos.size * pos.entry_price / pos.leverage
+            pnl_usdt = margin * pnl_pct / 100
 
         # DB 업데이트
         await self.db.update_trade_exit(pos.trade_id, {
@@ -347,7 +496,9 @@ class PositionManager:
     async def close_all(self, reason: str = "kill_switch"):
         """전 포지션 청산 (킬 스위치)"""
         for symbol in list(self.positions.keys()):
-            await self._full_close(self.positions[symbol], reason)
+            pos = self.positions[symbol]
+            await self._cancel_all_algos(pos)
+            await self._full_close(pos, reason)
         await self.executor.cancel_all_orders()
         logger.warning(f"전 포지션 청산 완료: {reason}")
 
@@ -369,3 +520,7 @@ class PositionManager:
             return new_sl > pos.current_sl
         else:
             return new_sl < pos.current_sl
+
+    async def restore_position(self, pos: Position):
+        """재시작 시 외부에서 Position 복원 (sync_positions 등에서 호출)"""
+        self.positions[pos.symbol] = pos

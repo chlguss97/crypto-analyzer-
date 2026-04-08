@@ -591,9 +591,13 @@ async def manual_open(req: ManualOrderRequest):
 
         fill_price = order.get("average") or order.get("price") or current_price
 
-        # SL 설정
+        # SL 설정 (서버사이드 알고)
         if req.sl_price:
-            await executor._set_stop_loss(req.direction, size_btc, req.sl_price)
+            sl_id = await executor.set_stop_loss(req.direction, size_btc, req.sl_price)
+            if not sl_id:
+                logger.error("수동 진입 SL 등록 실패 → 즉시 청산")
+                await executor.close_position(req.direction, size_btc, "manual_sl_failed")
+                return {"status": "error", "msg": "SL 등록 실패로 진입 취소"}
 
         # DB 기록
         await db.insert_trade({

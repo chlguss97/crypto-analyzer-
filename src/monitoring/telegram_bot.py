@@ -53,15 +53,19 @@ class TelegramNotifier:
     async def notify_entry(self, direction: str, grade: str, score: float,
                            entry_price: float, sl_price: float,
                            tp1_price: float, tp2_price: float,
-                           leverage: int, margin: float):
+                           leverage: int, margin: float,
+                           tp3_price: float | None = None):
         icon = "\U0001f7e2" if direction == "long" else "\U0001f534"
+        tp_line = f"TP1: ${tp1_price:,.1f} | TP2: ${tp2_price:,.1f}"
+        if tp3_price:
+            tp_line += f" | TP3: ${tp3_price:,.1f}"
         text = (
             f"{icon} <b>진입 | {grade} {direction.upper()}</b>\n"
             f"\n"
             f"점수: {score:.1f}/10\n"
             f"진입가: ${entry_price:,.1f}\n"
             f"SL: ${sl_price:,.1f}\n"
-            f"TP1: ${tp1_price:,.1f} | TP2: ${tp2_price:,.1f}\n"
+            f"{tp_line}\n"
             f"레버리지: {leverage}x\n"
             f"마진: ${margin:,.0f}\n"
             f"\n"

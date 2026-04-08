@@ -1,6 +1,7 @@
 import ccxt.async_support as ccxt
 import asyncio
 import logging
+import random
 import time
 from src.utils.helpers import load_config, get_env
 
@@ -21,10 +22,11 @@ class OrderExecutor:
         self.symbol = self.config["exchange"]["symbol"]
 
     async def initialize(self):
-        """거래소 연결"""
+        """거래소 연결 (OKX_DEMO=1 환경변수 시 데모 트레이딩 모드)"""
         api_key = get_env("OKX_API_KEY", "")
         secret = get_env("OKX_SECRET_KEY", "")
         passphrase = get_env("OKX_PASSPHRASE", "")
+        demo_mode = get_env("OKX_DEMO", "0") in ("1", "true", "True", "yes")
 
         if not api_key:
             logger.warning("OKX API 키 미설정 → 퍼블릭 모드 (실거래 불가)")
@@ -40,6 +42,12 @@ class OrderExecutor:
             }
         )
         self.exchange.aiohttp_resolver = "default"
+
+        if demo_mode:
+            # OKX 데모 트레이딩: x-simulated-trading: 1 헤더
+            self.exchange.set_sandbox_mode(True)
+            logger.warning("🧪 OKX 데모 트레이딩 모드 활성화 (x-simulated-trading: 1)")
+
         try:
             await self.exchange.load_markets()
         except Exception as e:
@@ -109,10 +117,8 @@ class OrderExecutor:
         if not order:
             return None
 
-        # SL 설정 (서버사이드)
-        if sl_price and order:
-            await self._set_stop_loss(direction, size, sl_price)
-
+        # SL/TP 설정은 PositionManager.set_protection 에서 일괄 처리
+        # (실패 시 진입 즉시 되돌리기 위해 호출자가 결과를 받아야 함)
         return order
 
     async def _market_order(self, side: str, size: float, pos_side: str) -> dict | None:
@@ -221,12 +227,25 @@ class OrderExecutor:
                 pass
             return None
 
-    async def _set_stop_loss(self, direction: str, size: float, sl_price: float):
-        """서버사이드 SL 설정 (algo order)"""
-        try:
-            side = "sell" if direction == "long" else "buy"
-            pos_side = "long" if direction == "long" else "short"
+    # ── 알고 주문 (SL/TP) ──
 
+    @staticmethod
+    def _gen_algo_id(prefix: str) -> str:
+        """OKX algoClOrdId 생성: 영숫자만, 32자 이하 (언더스코어 불허)"""
+        ts = int(time.time() * 1000)
+        rnd = random.randint(0, 9999)
+        return f"{prefix}{ts}{rnd:04d}"
+
+    async def _create_algo_order(
+        self, direction: str, size: float, trigger_price: float, prefix: str
+    ) -> str | None:
+        """SL/TP 공통 알고 주문 생성. 성공 시 algoClOrdId 반환, 실패 시 None."""
+        if size <= 0 or trigger_price <= 0:
+            return None
+        side = "sell" if direction == "long" else "buy"
+        pos_side = "long" if direction == "long" else "short"
+        algo_id = self._gen_algo_id(prefix)
+        try:
             await self.exchange.create_order(
                 symbol=self.symbol,
                 type="market",
@@ -235,17 +254,134 @@ class OrderExecutor:
                 params={
                     "tdMode": "isolated",
                     "posSide": pos_side,
-                    "triggerPx": str(sl_price),
-                    "orderPx": "-1",  # 시장가
+                    "triggerPx": str(trigger_price),
+                    "orderPx": "-1",  # 시장가 청산
                     "triggerPxType": "last",
-                    "algoClOrdId": f"sl_{int(time.time())}",
+                    "reduceOnly": True,
+                    "algoClOrdId": algo_id,
                 },
             )
-            logger.info(f"SL 설정 (서버사이드): ${sl_price}")
-
+            logger.info(
+                f"알고 주문 등록 [{prefix}]: trigger=${trigger_price:.1f} "
+                f"size={size:.4f} id={algo_id}"
+            )
+            return algo_id
         except Exception as e:
-            logger.error(f"SL 설정 실패: {e}")
-            raise
+            logger.error(f"알고 주문 등록 실패 [{prefix} ${trigger_price:.1f}]: {e}")
+            return None
+
+    async def set_stop_loss(
+        self, direction: str, size: float, sl_price: float
+    ) -> str | None:
+        """서버사이드 SL 등록 → algoClOrdId 반환"""
+        return await self._create_algo_order(direction, size, sl_price, "sl")
+
+    async def set_take_profit(
+        self, direction: str, size: float, tp_price: float, level: int = 1
+    ) -> str | None:
+        """서버사이드 TP 등록 → algoClOrdId 반환"""
+        return await self._create_algo_order(direction, size, tp_price, f"tp{level}")
+
+    async def cancel_algo_order(self, algo_id: str | None) -> bool:
+        """
+        알고 주문 취소 (이미 체결된 경우는 무시)
+        OKX 는 ccxt 버전에 따라 두 가지 경로 — 둘 다 시도.
+        """
+        if not algo_id:
+            return False
+
+        # 경로 1: OKX 전용 cancel-algos 엔드포인트 (가장 확실)
+        try:
+            inst_id = self.exchange.market(self.symbol)["id"]
+            resp = await self.exchange.private_post_trade_cancel_algos([{
+                "algoClOrdId": algo_id,
+                "instId": inst_id,
+            }])
+            # 응답 코드 확인
+            if isinstance(resp, dict) and resp.get("code") in ("0", 0):
+                logger.debug(f"알고 주문 취소(direct): {algo_id}")
+                return True
+            # data 안에 sCode 0 인지 확인
+            data = resp.get("data", []) if isinstance(resp, dict) else []
+            if data and str(data[0].get("sCode", "")) == "0":
+                logger.debug(f"알고 주문 취소(direct/data): {algo_id}")
+                return True
+        except Exception as e:
+            logger.debug(f"cancel-algos direct 경로 실패 ({algo_id}): {e}")
+
+        # 경로 2: ccxt 통합 cancel_order (trigger=True)
+        try:
+            await self.exchange.cancel_order(
+                algo_id,
+                self.symbol,
+                params={"algoClOrdId": algo_id, "trigger": True, "stop": True},
+            )
+            logger.debug(f"알고 주문 취소(ccxt): {algo_id}")
+            return True
+        except Exception as e:
+            # 이미 체결/취소된 경우는 정상 흐름
+            logger.debug(f"알고 주문 취소 무시 ({algo_id}): {e}")
+            return False
+
+    async def set_protection(
+        self,
+        direction: str,
+        total_size: float,
+        sl_price: float,
+        tp_levels: list[tuple[float, float]],
+    ) -> dict:
+        """
+        진입 직후 보호 알고 주문 일괄 등록.
+
+        Args:
+            direction: 'long' | 'short'
+            total_size: 전체 포지션 크기 (BTC)
+            sl_price: 손절가 (진입 시 SL)
+            tp_levels: [(tp_price, fraction), ...] 예:
+                [(tp1, 0.5), (tp2, 0.3), (tp3, 0.2)]
+
+        Returns:
+            {"sl": id|None, "tp1": id|None, "tp2": id|None, "tp3": id|None}
+        """
+        ids = {"sl": None, "tp1": None, "tp2": None, "tp3": None}
+
+        # SL 먼저 — 가장 중요. 실패 시 호출자가 진입 되돌림
+        ids["sl"] = await self.set_stop_loss(direction, total_size, sl_price)
+
+        # TPs (부분 사이즈)
+        for i, (tp_price, fraction) in enumerate(tp_levels, start=1):
+            tp_size = round(total_size * fraction, 6)
+            if tp_size <= 0:
+                continue
+            ids[f"tp{i}"] = await self.set_take_profit(direction, tp_size, tp_price, level=i)
+
+        return ids
+
+    async def update_stop_loss(
+        self,
+        direction: str,
+        size: float,
+        new_sl: float,
+        old_algo_id: str | None,
+    ) -> str | None:
+        """기존 SL 알고 취소 후 새 SL 등록 (트레일링/본절 이동)"""
+        if old_algo_id:
+            await self.cancel_algo_order(old_algo_id)
+        return await self.set_stop_loss(direction, size, new_sl)
+
+    async def get_position_size(self, symbol: str | None = None) -> float:
+        """현재 포지션 사이즈 (TP 부분체결 감지용)"""
+        sym = symbol or self.symbol
+        try:
+            positions = await self.exchange.fetch_positions([sym])
+            for p in positions:
+                size = abs(p.get("contracts", 0) or 0)
+                if size > 0:
+                    return float(size)
+            return 0.0
+        except Exception as e:
+            logger.error(f"포지션 사이즈 조회 실패: {e}")
+            return -1.0  # 에러 → 호출자가 무시
 
     async def close_position(self, direction: str, size: float,
                              reason: str = "manual") -> dict | None:

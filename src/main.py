@@ -451,16 +451,27 @@ class CryptoAnalyzer:
         if price <= 0:
             return
 
+        # SL은 ATR 기반, TP는 R-multiple (1R = SL 거리)
         sl_dist = self._last_fast.get("atr", {}).get("sl_distance", price * 0.003)
-        tp1_dist = sl_dist * 1.5
-        tp2_dist = sl_dist * 2.5
+        tp1_dist = sl_dist * 1.5   # 1.5R → 50% 익절 + 본절 SL
+        tp2_dist = sl_dist * 2.5   # 2.5R → 30% 익절 + SL을 TP1로
+        tp3_dist = sl_dist * 4.0   # 4.0R → 잔량 20% 익절
 
         if direction == "long":
-            sl, tp1, tp2 = price - sl_dist, price + tp1_dist, price + tp2_dist
+            sl = price - sl_dist
+            tp1 = price + tp1_dist
+            tp2 = price + tp2_dist
+            tp3 = price + tp3_dist
         else:
-            sl, tp1, tp2 = price + sl_dist, price - tp1_dist, price - tp2_dist
+            sl = price + sl_dist
+            tp1 = price - tp1_dist
+            tp2 = price - tp2_dist
+            tp3 = price - tp3_dist
 
-        logger.info(f"[SWING] {grade_result['grade']} {direction.upper()} @ ${price:.0f} SL ${sl:.0f}")
+        logger.info(
+            f"[SWING] {grade_result['grade']} {direction.upper()} @ ${price:.0f} "
+            f"SL ${sl:.0f} TP1 ${tp1:.0f} TP2 ${tp2:.0f} TP3 ${tp3:.0f}"
+        )
 
         trade_req = {
             "symbol": self.symbol, "direction": direction,
@@ -468,14 +479,17 @@ class CryptoAnalyzer:
             "size": round(margin * lev["leverage"] / price, 6),
             "leverage": lev["leverage"],
             "entry_price": None if grade_result["execution"] == "market" else price,
-            "sl_price": round(sl, 1), "tp1_price": round(tp1, 1), "tp2_price": round(tp2, 1),
+            "sl_price": round(sl, 1),
+            "tp1_price": round(tp1, 1),
+            "tp2_price": round(tp2, 1),
+            "tp3_price": round(tp3, 1),
             "signals_snapshot": aggregated.get("signals_detail", {}),
         }
         pos = await self.position_manager.open_position(trade_req)
         if pos:
             await self.telegram.notify_entry(direction, grade_result["grade"], grade_result["score"],
                                              pos.entry_price, pos.sl_price, pos.tp1_price, pos.tp2_price,
-                                             lev["leverage"], margin)
+                                             lev["leverage"], margin, tp3_price=pos.tp3_price)
             self.trade_logger.log_entry(direction, grade_result["grade"], grade_result["score"],
                                         pos.entry_price, pos.sl_price, lev["leverage"], margin)
 
@@ -499,27 +513,35 @@ class CryptoAnalyzer:
         if direction == "long":
             sl = price - sl_dist
             tp1 = price + tp_dist
-            tp2 = price + tp_dist * 1.6  # TP2는 TP1의 1.6배 거리
+            tp2 = price + tp_dist * 1.6   # 1.6× TP1
+            tp3 = price + tp_dist * 2.5   # 2.5× TP1
         else:
             sl = price + sl_dist
             tp1 = price - tp_dist
             tp2 = price - tp_dist * 1.6
+            tp3 = price - tp_dist * 2.5
 
-        logger.info(f"[SCALP] {direction.upper()} @ ${price:.0f} SL ${sl:.0f} TP1 ${tp1:.0f} TP2 ${tp2:.0f}")
+        logger.info(
+            f"[SCALP] {direction.upper()} @ ${price:.0f} SL ${sl:.0f} "
+            f"TP1 ${tp1:.0f} TP2 ${tp2:.0f} TP3 ${tp3:.0f}"
+        )
 
         trade_req = {
             "symbol": self.symbol, "direction": direction,
             "grade": "SCALP", "score": scalp_sig["score"],
             "size": round(margin * leverage / price, 6),
             "leverage": leverage, "entry_price": None,
-            "sl_price": round(sl, 1), "tp1_price": round(tp1, 1), "tp2_price": round(tp2, 1),
+            "sl_price": round(sl, 1),
+            "tp1_price": round(tp1, 1),
+            "tp2_price": round(tp2, 1),
+            "tp3_price": round(tp3, 1),
             "signals_snapshot": scalp_sig.get("signals", {}),
         }
         pos = await self.position_manager.open_position(trade_req)
         if pos:
             await self.telegram.notify_entry(direction, "SCALP", scalp_sig["score"],
                                              pos.entry_price, pos.sl_price, pos.tp1_price, pos.tp2_price,
-                                             leverage, margin)
+                                             leverage, margin, tp3_price=pos.tp3_price)
 
     # ── Context 빌더 ──
 
