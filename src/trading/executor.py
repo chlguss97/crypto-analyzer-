@@ -241,19 +241,22 @@ class OrderExecutor:
     ) -> str | None:
         """SL/TP 공통 알고 주문 생성. 성공 시 algoClOrdId 반환, 실패 시 None."""
         if size <= 0 or trigger_price <= 0:
+            logger.error(f"알고 주문 인자 무효 [{prefix}] size={size} trigger={trigger_price}")
             return None
         side = "sell" if direction == "long" else "buy"
         pos_side = "long" if direction == "long" else "short"
         algo_id = self._gen_algo_id(prefix)
         try:
+            # ordType="trigger" 명시: ccxt 가 알고 엔드포인트로 라우팅
             await self.exchange.create_order(
                 symbol=self.symbol,
-                type="market",
+                type="trigger",
                 side=side,
                 amount=size,
                 params={
                     "tdMode": "isolated",
                     "posSide": pos_side,
+                    "ordType": "trigger",
                     "triggerPx": str(trigger_price),
                     "orderPx": "-1",  # 시장가 청산
                     "triggerPxType": "last",
@@ -263,7 +266,7 @@ class OrderExecutor:
             )
             logger.info(
                 f"알고 주문 등록 [{prefix}]: trigger=${trigger_price:.1f} "
-                f"size={size:.4f} id={algo_id}"
+                f"size={size:.6f} id={algo_id}"
             )
             return algo_id
         except Exception as e:
@@ -370,18 +373,56 @@ class OrderExecutor:
         return await self.set_stop_loss(direction, size, new_sl)
 
     async def get_position_size(self, symbol: str | None = None) -> float:
-        """현재 포지션 사이즈 (TP 부분체결 감지용)"""
+        """
+        현재 포지션 사이즈 — base 통화 (BTC) 단위로 정규화.
+        ccxt OKX 의 contracts 필드는 OKX raw "pos" (contracts 수) 라서
+        contractSize 를 곱해서 base 단위로 변환해야 봇 추적 사이즈와 비교 가능.
+        """
         sym = symbol or self.symbol
         try:
             positions = await self.exchange.fetch_positions([sym])
             for p in positions:
-                size = abs(p.get("contracts", 0) or 0)
-                if size > 0:
-                    return float(size)
+                contracts = abs(float(p.get("contracts", 0) or 0))
+                if contracts <= 0:
+                    continue
+                # contractSize: BTC-USDT-SWAP = 0.01
+                cs = p.get("contractSize")
+                if not cs:
+                    try:
+                        cs = self.exchange.market(sym).get("contractSize", 1)
+                    except Exception:
+                        cs = 1
+                return float(contracts) * float(cs)
             return 0.0
         except Exception as e:
             logger.error(f"포지션 사이즈 조회 실패: {e}")
             return -1.0  # 에러 → 호출자가 무시
+
+    async def get_position_entry(self, symbol: str | None = None) -> tuple[float, float]:
+        """
+        현재 포지션의 (entry_price, size_base) 반환.
+        시장가 진입 직후 정확한 fill price 확인용.
+        """
+        sym = symbol or self.symbol
+        try:
+            positions = await self.exchange.fetch_positions([sym])
+            for p in positions:
+                contracts = abs(float(p.get("contracts", 0) or 0))
+                if contracts <= 0:
+                    continue
+                entry = float(p.get("entryPrice") or p.get("info", {}).get("avgPx") or 0)
+                cs = p.get("contractSize")
+                if not cs:
+                    try:
+                        cs = self.exchange.market(sym).get("contractSize", 1)
+                    except Exception:
+                        cs = 1
+                size_base = float(contracts) * float(cs)
+                return entry, size_base
+            return 0.0, 0.0
+        except Exception as e:
+            logger.error(f"포지션 entry 조회 실패: {e}")
+            return 0.0, 0.0
 
     async def close_position(self, direction: str, size: float,
                              reason: str = "manual") -> dict | None:

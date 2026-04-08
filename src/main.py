@@ -473,10 +473,16 @@ class CryptoAnalyzer:
             f"SL ${sl:.0f} TP1 ${tp1:.0f} TP2 ${tp2:.0f} TP3 ${tp3:.0f}"
         )
 
+        # OKX BTC-USDT-SWAP: 1 contract = 0.01 BTC, sz 는 contracts 단위
+        # ccxt 에 BTC 단위로 넘기면 자동 변환되지만 0.01 의 배수로 정확히 맞춰주는 게 안전
+        size_btc = round(margin * lev["leverage"] / price, 6)
+        size_btc = round(size_btc / 0.01) * 0.01  # 0.01 BTC 단위로 스냅
+        size_btc = round(size_btc, 4)
+
         trade_req = {
             "symbol": self.symbol, "direction": direction,
             "grade": grade_result["grade"], "score": grade_result["score"],
-            "size": round(margin * lev["leverage"] / price, 6),
+            "size": size_btc,
             "leverage": lev["leverage"],
             "entry_price": None if grade_result["execution"] == "market" else price,
             "sl_price": round(sl, 1),
@@ -526,10 +532,15 @@ class CryptoAnalyzer:
             f"TP1 ${tp1:.0f} TP2 ${tp2:.0f} TP3 ${tp3:.0f}"
         )
 
+        # OKX 0.01 BTC 단위 스냅
+        size_btc = round(margin * leverage / price, 6)
+        size_btc = round(size_btc / 0.01) * 0.01
+        size_btc = round(size_btc, 4)
+
         trade_req = {
             "symbol": self.symbol, "direction": direction,
             "grade": "SCALP", "score": scalp_sig["score"],
-            "size": round(margin * leverage / price, 6),
+            "size": size_btc,
             "leverage": leverage, "entry_price": None,
             "sl_price": round(sl, 1),
             "tp1_price": round(tp1, 1),

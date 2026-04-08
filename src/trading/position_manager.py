@@ -113,12 +113,24 @@ class PositionManager:
     # 러너 트레일 거리 = TP1 거리 × 이 비율 (가격이 새 고/저 갱신 시 SL을 이만큼 뒤에 둠)
     RUNNER_TRAIL_RATIO = 0.5
 
+    # OKX BTC-USDT-SWAP 최소 주문: 1 contract = 0.01 BTC
+    MIN_ORDER_SIZE_BTC = 0.01
+
     async def open_position(self, trade_request: dict) -> Position | None:
-        """새 포지션 진입 + SL/TP1/TP2/TP3 서버사이드 등록"""
+        """새 포지션 진입 + SL/TP1 서버사이드 등록 (러너 트레일링)"""
         symbol = trade_request["symbol"]
 
         if symbol in self.positions:
             logger.warning(f"이미 {symbol} 포지션 존재 → 진입 거부")
+            return None
+
+        # 최소 주문 사이즈 체크 (계좌 너무 작으면 OKX 가 거부함)
+        req_size = float(trade_request.get("size", 0) or 0)
+        if req_size < self.MIN_ORDER_SIZE_BTC:
+            logger.warning(
+                f"⚠️  요청 사이즈 {req_size:.6f} BTC < 최소 {self.MIN_ORDER_SIZE_BTC} BTC "
+                f"→ 진입 스킵 (계좌 잔고 부족)"
+            )
             return None
 
         # 주문 실행 (진입만, 보호 주문은 별도)
@@ -134,11 +146,34 @@ class PositionManager:
         if not order:
             return None
 
-        fill_price = order.get("average") or order.get("price") or trade_request.get("entry_price", 0)
-        filled_size = order.get("filled", trade_request["size"])
+        direction = trade_request["direction"]
+        fill_price = float(order.get("average") or order.get("price") or 0)
+        filled_size = float(order.get("filled") or 0)
         fee = order.get("fee", {}).get("cost", 0) or 0
 
-        direction = trade_request["direction"]
+        # 🔒 fill_price/size 가 즉시 안 오는 경우 (ccxt OKX 시장가 응답 일부)
+        # → fetch_positions 로 정확한 entry 와 size 확보
+        if fill_price <= 0 or filled_size <= 0:
+            await asyncio.sleep(0.5)  # 거래소 반영 대기
+            ex_entry, ex_size = await self.executor.get_position_entry(symbol)
+            if ex_entry > 0 and ex_size > 0:
+                fill_price = ex_entry
+                filled_size = ex_size
+                logger.info(f"진입 정보 fetch 보정: entry=${fill_price:.1f} size={filled_size:.6f}")
+            else:
+                # 그래도 못 찾으면 진입 취소 (보호 없는 포지션 금지)
+                logger.error(
+                    f"🚨 진입 가격/사이즈 확인 실패 → 즉시 청산 시도 "
+                    f"(ccxt order={order})"
+                )
+                try:
+                    await self.executor.close_position(
+                        direction, float(trade_request["size"]), "fill_price_unknown"
+                    )
+                except Exception as e:
+                    logger.error(f"실패한 진입 청산 시도 에러: {e}")
+                return None
+
         sl_price = float(trade_request["sl_price"])
         tp1_price = float(trade_request["tp1_price"])
         tp2_price = float(trade_request["tp2_price"])
@@ -205,10 +240,18 @@ class PositionManager:
         if not algo_ids.get("tp1"):
             logger.warning("⚠️  TP1 등록 실패 → 봇 폴링이 가격 기반으로 백업")
 
+        # 검증용 상세 로그
+        notional = pos.size * pos.entry_price
+        margin = notional / pos.leverage
+        sl_pnl_pct = pos.pnl_pct(pos.sl_price)
+        tp1_pnl_pct = pos.pnl_pct(pos.tp1_price)
         logger.info(
             f"포지션 오픈: {pos.direction.upper()} {symbol} | "
-            f"진입 ${fill_price} | SL ${pos.sl_price:.0f} | TP1 ${pos.tp1_price:.0f} "
-            f"(이후 러너 트레일링) | {pos.leverage}x | 등급 {pos.grade} | "
+            f"진입 ${pos.entry_price:,.1f} | size {pos.size:.6f} BTC "
+            f"(노션 ${notional:,.0f}, 마진 ${margin:,.2f}, {pos.leverage}x) | "
+            f"SL ${pos.sl_price:,.1f} ({sl_pnl_pct:+.1f}% 계좌) | "
+            f"TP1 ${pos.tp1_price:,.1f} ({tp1_pnl_pct:+.1f}% 계좌, 50% 익절 후 러너) | "
+            f"등급 {pos.grade} | "
             f"algo: sl={algo_ids.get('sl')} tp1={algo_ids.get('tp1')}"
         )
 
@@ -247,25 +290,54 @@ class PositionManager:
             # 2. 거래소 사이즈 동기화 — 서버사이드 TP/SL 체결 감지
             try:
                 ex_size = await self.executor.get_position_size(symbol)
-                if ex_size == 0.0:
-                    # 외부에서 전량 청산됨 (TP3 hit, 강제청산, 수동 등)
+                # epsilon 비교 (float 정확비교 위험)
+                if 0 <= ex_size < 1e-8:
+                    # 외부에서 전량 청산됨 (서버 SL/TP, 강제청산, 수동 등)
                     logger.warning(
-                        f"포지션 외부 종료 감지 (사이즈=0) → 정리: {symbol}"
+                        f"포지션 외부 종료 감지 (사이즈≈0) → 정리: {symbol}"
                     )
                     await self._cancel_all_algos(pos)
                     await self._reconcile_external_close(pos, current_price)
                     continue
                 elif ex_size > 0 and ex_size < pos.remaining_size * 0.95:
-                    # 부분 체결 감지 (서버사이드 TP 발동)
+                    # 부분 체결 감지 (서버사이드 TP1 이 발동한 경우)
+                    closed_amount = pos.remaining_size - ex_size
+                    pct_closed = closed_amount / pos.remaining_size
                     logger.info(
-                        f"부분 체결 감지: 봇={pos.remaining_size:.4f} → "
-                        f"거래소={ex_size:.4f}"
+                        f"부분 체결 감지: 봇={pos.remaining_size:.6f} → "
+                        f"거래소={ex_size:.6f} ({pct_closed*100:.0f}%)"
                     )
                     pos.remaining_size = ex_size
+
+                    # 🔒 서버 TP1 이 발동한 것으로 간주 → 봇이 또 처리하지 않도록 마킹
+                    # 그리고 SL 본절 이동 + 러너 모드 활성화 (가격 기반 _handle_tp_progression 스킵)
+                    if not pos.tp1_filled:
+                        pos.tp1_filled = True
+                        # TP1 알고 ID 정리 (이미 체결됨)
+                        pos.algo_ids["tp1"] = None
+
+                        # SL 본절 이동
+                        fee_offset = pos.entry_price * 0.001
+                        new_sl = (pos.entry_price + fee_offset) if pos.direction == "long" \
+                            else (pos.entry_price - fee_offset)
+                        await self._move_sl(pos, new_sl, label="본절(서버TP)")
+
+                        # 러너 모드 활성화
+                        pos.runner_mode = True
+                        pos.best_price = current_price
+                        tp1_dist = abs(pos.tp1_price - pos.entry_price)
+                        pos.trail_distance = max(
+                            tp1_dist * self.RUNNER_TRAIL_RATIO,
+                            pos.entry_price * 0.003,  # 최소 0.3% 가격
+                        )
+                        logger.info(
+                            f"✅ 서버 TP1 자동 체결 감지 → SL 본전 ${new_sl:.0f} | "
+                            f"🏃 러너 모드 ON (트레일 ${pos.trail_distance:.1f})"
+                        )
             except Exception as e:
                 logger.error(f"포지션 사이즈 동기화 실패: {e}")
 
-            # 3. 가격 기반 TP 도달 처리 + 반익본절 SL 끌어올리기
+            # 3. 가격 기반 TP 도달 처리 + 반익본절 SL 끌어올리기 (이중 처리 방지: tp1_filled 체크)
             await self._handle_tp_progression(pos, current_price)
 
             # 종료된 포지션이면 다음 루프
@@ -303,7 +375,10 @@ class PositionManager:
             pos.runner_mode = True
             pos.best_price = current_price
             tp1_distance = abs(pos.tp1_price - pos.entry_price)
-            pos.trail_distance = tp1_distance * self.RUNNER_TRAIL_RATIO
+            pos.trail_distance = max(
+                tp1_distance * self.RUNNER_TRAIL_RATIO,
+                pos.entry_price * 0.003,  # 최소 0.3% 가격 — 노이즈 방어
+            )
 
             logger.info(
                 f"✅ TP1 익절 50% @ ${pos.tp1_price:.0f} → SL 본전 ${new_sl:.0f} | "
@@ -372,8 +447,17 @@ class PositionManager:
 
     async def _reconcile_external_close(self, pos: Position, last_price: float):
         """외부에서 포지션이 전량 청산된 경우 DB/콜백 정리"""
-        # tp3로 가정 (서버 TP3가 가장 마지막 발동)
-        reason = "tp3" if pos.tp2_filled else ("external_close")
+        # 어떤 사유로 청산됐는지 추론
+        if pos.runner_mode:
+            # 러너 모드 = TP1 이미 체결, 잔여가 trail SL 또는 서버 SL 에 닿음
+            pnl_now = pos.pnl_pct(last_price) if last_price > 0 else 0
+            reason = "runner_trail_hit" if pnl_now >= 0 else "runner_sl_hit"
+        elif pos.tp1_filled:
+            # 일반 흐름: TP1 후 본절 SL 에 닿음
+            reason = "breakeven_hit"
+        else:
+            # TP1 도 안 갔는데 청산: 원본 SL 또는 강제청산
+            reason = "external_close"
         # 가짜 close 처리 (이미 체결됐으므로 close_position 호출 안 함)
         pnl_pct = pos.pnl_pct(last_price) if last_price > 0 else 0
         pnl_usdt = (pos.size * pos.entry_price * pnl_pct / 100 / max(pos.leverage, 1)) \
