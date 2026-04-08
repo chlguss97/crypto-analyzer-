@@ -125,7 +125,10 @@ class ScalpEngine:
             trend_filter = "long" if candles_15m["close"].iloc[-1] > ema50 else "short"
 
         # ── 점수 계산 ──
-        max_possible = 41.5
+        # max_possible = 41.5 는 18 시그널 모두 한 방향 strength=1.0 가정 (비현실적)
+        # 실측: 한 방향 발동률 ~30%, strength 평균 ~0.4 → 한 방향 raw 평균 5~10
+        # 정규화 분모를 15.0 으로 낮춰 임계값(0.5~2.5) 대비 합리적 점수 분포 확보
+        max_possible = 15.0
         if score_long > score_short:
             direction = "long"
             raw = score_long
