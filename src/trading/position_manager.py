@@ -72,6 +72,9 @@ class Position:
         return self.price_pnl_pct(current_price) * self.leverage
 
     def to_dict(self) -> dict:
+        """
+        Redis hset 안전 형태 — 모든 값은 str/int/float (dict/bool 금지).
+        """
         return {
             "trade_id": self.trade_id,
             "symbol": self.symbol,
@@ -86,10 +89,15 @@ class Position:
             "tp3_price": self.tp3_price,
             "grade": self.grade,
             "entry_time": self.entry_time,
-            "tp1_filled": self.tp1_filled,
-            "tp2_filled": self.tp2_filled,
-            "tp3_filled": self.tp3_filled,
-            "algo_ids": self.algo_ids,
+            # bool → int (Redis hset 호환)
+            "tp1_filled": 1 if self.tp1_filled else 0,
+            "tp2_filled": 1 if self.tp2_filled else 0,
+            "tp3_filled": 1 if self.tp3_filled else 0,
+            "runner_mode": 1 if self.runner_mode else 0,
+            "best_price": self.best_price,
+            "trail_distance": self.trail_distance,
+            # dict → JSON 문자열
+            "algo_ids": json.dumps(self.algo_ids),
             "hold_minutes": self.hold_minutes,
         }
 
@@ -149,7 +157,8 @@ class PositionManager:
         direction = trade_request["direction"]
         fill_price = float(order.get("average") or order.get("price") or 0)
         filled_size = float(order.get("filled") or 0)
-        fee = order.get("fee", {}).get("cost", 0) or 0
+        # fee 가 None 일 수 있음 — null-safe
+        fee = (order.get("fee") or {}).get("cost", 0) or 0
 
         # 🔒 fill_price/size 가 즉시 안 오는 경우 (ccxt OKX 시장가 응답 일부)
         # → fetch_positions 로 정확한 entry 와 size 확보
@@ -180,9 +189,21 @@ class PositionManager:
         tp3_price = float(trade_request.get("tp3_price", tp2_price))
 
         # 🔒 진입 직후 SL + TP1 만 서버사이드 등록 (러너 트레일링 모드)
-        # TP1 hit 후 잔여 50% 는 트레일링 SL 로 추세 끝까지 따라감
+        # 단, 사이즈가 OKX 최소단위 × 2 미만이면 50% 분할 시 0.5 contract 가 되어 거부됨
+        # → 1 contract 만 가질 때는 TP1 = 100% 청산 (러너 모드 비활성)
+        tp1_fraction = self.TP1_CLOSE_PCT
+        will_runner = True
+        if filled_size < self.MIN_ORDER_SIZE_BTC * 2:
+            # 50% 분할 불가능 — TP1 에서 100% 청산
+            tp1_fraction = 1.0
+            will_runner = False
+            logger.warning(
+                f"⚠️  사이즈 {filled_size:.4f} BTC < {self.MIN_ORDER_SIZE_BTC*2} BTC "
+                f"→ TP1 에서 100% 청산 (러너 비활성)"
+            )
+
         tp_levels = [
-            (tp1_price, self.TP1_CLOSE_PCT),
+            (tp1_price, tp1_fraction),
         ]
         algo_ids = await self.executor.set_protection(
             direction=direction,
@@ -359,10 +380,23 @@ class PositionManager:
           - 러너 모드: 가격이 새 고/저 갱신할 때마다 트레일링 SL 끌어올림
         """
 
-        # TP1 도달 → 50% 익절 + SL 본절 + 러너 모드 활성화
+        # TP1 도달 처리
         if not pos.tp1_filled and self._tp_reached(pos, current_price, pos.tp1_price):
-            await self._on_tp_hit(pos, level=1, close_pct=self.TP1_CLOSE_PCT)
+            # 사이즈가 최소단위 × 2 미만이면 100% 청산 (분할 불가)
+            small_position = pos.size < self.MIN_ORDER_SIZE_BTC * 2
+            close_pct = 1.0 if small_position else self.TP1_CLOSE_PCT
+
+            await self._on_tp_hit(pos, level=1, close_pct=close_pct)
             if pos.symbol not in self.positions:
+                return
+            if not pos.tp1_filled:
+                return  # 부분청산 실패 → 다음 폴링 재시도
+
+            # 100% 청산했으면 포지션 종료 처리
+            if small_position or pos.remaining_size < 1e-8:
+                await self._cancel_all_algos(pos)
+                await self._full_close(pos, "tp1_full")
+                logger.info(f"✅ TP1 100% 청산 @ ${pos.tp1_price:.0f} (소형 포지션 — 러너 비활성)")
                 return
 
             # SL → 본전 + 수수료 보상
@@ -423,8 +457,25 @@ class PositionManager:
             pos.algo_ids[tp_key] = None
 
         # 부분 청산 (시장가 reduceOnly)
+        size_before = pos.remaining_size
         await self._partial_close(pos, close_pct, tp_key)
-        setattr(pos, f"{tp_key}_filled", True)
+
+        # 거래소 사이즈로 보정 (race / 부분 fail 대비)
+        try:
+            ex_size = await self.executor.get_position_size(pos.symbol)
+            if 0 <= ex_size < pos.remaining_size:
+                pos.remaining_size = max(0.0, ex_size)
+        except Exception as e:
+            logger.debug(f"_on_tp_hit 사이즈 동기화 실패: {e}")
+
+        # 청산이 실제로 일어난 경우만 filled 마킹
+        if pos.remaining_size < size_before * 0.95:
+            setattr(pos, f"{tp_key}_filled", True)
+        else:
+            logger.warning(
+                f"⚠️  TP{level} 부분 청산 실패 (size 변화 없음: {size_before}→{pos.remaining_size}) "
+                f"— 다음 폴링에서 재시도"
+            )
 
     async def _move_sl(self, pos: Position, new_sl: float, label: str):
         """SL 알고 cancel + 새로 등록 (잔여 사이즈 기준)"""
@@ -448,16 +499,19 @@ class PositionManager:
     async def _reconcile_external_close(self, pos: Position, last_price: float):
         """외부에서 포지션이 전량 청산된 경우 DB/콜백 정리"""
         # 어떤 사유로 청산됐는지 추론
+        pnl_now = pos.pnl_pct(last_price) if last_price > 0 else 0
+        small_position = pos.size < self.MIN_ORDER_SIZE_BTC * 2
+
         if pos.runner_mode:
-            # 러너 모드 = TP1 이미 체결, 잔여가 trail SL 또는 서버 SL 에 닿음
-            pnl_now = pos.pnl_pct(last_price) if last_price > 0 else 0
             reason = "runner_trail_hit" if pnl_now >= 0 else "runner_sl_hit"
         elif pos.tp1_filled:
-            # 일반 흐름: TP1 후 본절 SL 에 닿음
             reason = "breakeven_hit"
+        elif small_position and pnl_now > 0:
+            # 소형 포지션 — TP1 100% 청산이 서버에서 발동
+            reason = "tp1_full_server"
         else:
             # TP1 도 안 갔는데 청산: 원본 SL 또는 강제청산
-            reason = "external_close"
+            reason = "sl_or_forced"
         # 가짜 close 처리 (이미 체결됐으므로 close_position 호출 안 함)
         pnl_pct = pos.pnl_pct(last_price) if last_price > 0 else 0
         pnl_usdt = (pos.size * pos.entry_price * pnl_pct / 100 / max(pos.leverage, 1)) \
@@ -511,11 +565,16 @@ class PositionManager:
         # 2시간 → TP1 미체결 시 75% 청산
         if hours >= 2 and not pos.tp1_filled:
             await self._partial_close(pos, 0.75, "time_2h")
+            # 잔여 사이즈에 맞춰 OKX SL 알고도 갱신 (size mismatch 방지)
+            if pos.remaining_size > 0:
+                await self._move_sl(pos, pos.current_sl, label="time_2h_resize")
             return False
 
         # 1시간 → 수익 < 3% 시 50% 청산
         if hours >= 1 and not pos.tp1_filled and pnl < 3.0:
             await self._partial_close(pos, 0.5, "time_1h")
+            if pos.remaining_size > 0:
+                await self._move_sl(pos, pos.current_sl, label="time_1h_resize")
             return False
 
         return False
@@ -538,7 +597,7 @@ class PositionManager:
         )
         if order:
             pos.remaining_size -= close_size
-            fee = order.get("fee", {}).get("cost", 0) or 0
+            fee = (order.get("fee") or {}).get("cost", 0) or 0
             pos.total_fee += float(fee)
 
             logger.info(
@@ -565,7 +624,7 @@ class PositionManager:
         exit_price = 0
         if order:
             exit_price = order.get("average") or order.get("price") or 0
-            fee = order.get("fee", {}).get("cost", 0) or 0
+            fee = (order.get("fee") or {}).get("cost", 0) or 0
             pos.total_fee += float(fee)
 
         # P&L 계산 (계좌 기준 PnL %, 마진 기준 USDT)

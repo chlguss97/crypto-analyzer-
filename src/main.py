@@ -306,9 +306,10 @@ class CryptoAnalyzer:
             await self.redis.set(f"sig:aggregated:{self.symbol}",
                                  {"aggregated": swing_agg, "grade": swing_grade}, ttl=1800)
 
-            # 가상매매 전수 학습
+            # 가상매매 전수 학습 (학습 중엔 스킵 — CPU 절약 + 실거래 보호 우선)
             price_str = await self.redis.get("rt:price:BTC-USDT-SWAP")
-            if price_str:
+            learning = (await self.redis.get("sys:learning")) == "1"
+            if price_str and not learning:
                 agg = swing_agg.copy()
                 agg["atr_pct"] = self._last_fast.get("atr", {}).get("atr_pct", 0.3)
                 agg["signals_detail"] = {**self._last_fast, **self._last_slow}
@@ -357,8 +358,9 @@ class CryptoAnalyzer:
             "session": scalp_sig.get("session", "unknown"),
         }, ttl=30)
 
-        # 가상매매 전수 학습 (항상)
-        await self.paper_trader.try_entry(scalp_sig, "scalp", current_price)
+        # 가상매매 전수 학습 (학습 중엔 스킵)
+        if (await self.redis.get("sys:learning")) != "1":
+            await self.paper_trader.try_entry(scalp_sig, "scalp", current_price)
 
         # ── 진입 확인 대기 로직 ──
         # 1차: 시그널 발생 → 대기 상태로 저장
@@ -523,7 +525,13 @@ class CryptoAnalyzer:
         balance = risk_state.get("balance", 0)
         sl_dist = scalp_sig["sl_distance"]
         leverage = 25
+        if balance <= 0 or sl_dist <= 0 or price <= 0:
+            return
         margin = balance * 0.008 / (sl_dist / price)
+        # 잔고 30% 캡 (Swing 과 일관성, 슬리피지 여유)
+        margin = min(margin, balance * 0.3)
+        if margin <= 0:
+            return
 
         tp_dist = scalp_sig["tp_distance"]
         if direction == "long":
@@ -734,20 +742,27 @@ class CryptoAnalyzer:
         """
         포지션 체크 — 실거래 + 가상매매
         - 평상시: 15초 주기
-        - 학습 중 (sys:learning=1): 5초 주기 (TP1 후 SL 본절 이동 지연 최소화)
+        - 학습 중 (sys:learning=1) + 활성 실거래 포지션: 5초 주기 (SL 본절 이동 지연 최소화)
+        - 학습 중에는 paper_trader 폴링 스킵 (CPU 경합 방지, 실거래 보호 우선)
         """
         while self._running:
+            # 학습 상태 매 루프 확인
+            try:
+                learning = (await self.redis.get("sys:learning")) == "1"
+            except Exception:
+                learning = False
+
             try:
                 price_str = await self.redis.get("rt:price:BTC-USDT-SWAP")
                 if price_str:
                     price = float(price_str)
 
-                    # 실거래 포지션 체크
+                    # 실거래 포지션 체크 (항상)
                     if self.position_manager.positions:
                         await self.position_manager.check_positions(price)
 
-                    # 가상매매 포지션 체크
-                    if self.paper_trader.positions:
+                    # 가상매매 포지션 체크 — 학습 중엔 스킵 (CPU 절약, 실거래 우선)
+                    if self.paper_trader.positions and not learning:
                         await self.paper_trader.check_positions(price)
 
                 # 킬스위치 체크
@@ -759,12 +774,7 @@ class CryptoAnalyzer:
             except Exception as e:
                 logger.error(f"포지션 체크 에러: {e}")
 
-            # 학습 중이고 활성 포지션 있으면 5초 폴링 (SL 본절 이동 지연 최소화)
-            try:
-                learning = (await self.redis.get("sys:learning")) == "1"
-            except Exception:
-                learning = False
-
+            # 학습 중 + 활성 실거래 포지션 → 5초 폴링
             if learning and self.position_manager.positions:
                 await asyncio.sleep(5)
             else:
