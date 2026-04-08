@@ -759,14 +759,15 @@ class ScalpEngine:
             direction = "long"
             bos_type = "bullish_bos"
             overshoot = (current - last_swing_high) / last_swing_high
-            strength = min(1.0, overshoot * 100 + 0.5)
+            # 0.1% → 0.35, 0.5% → 0.55, 1% → 0.8, 2% → 1.0 (노이즈 돌파 과대평가 방지)
+            strength = min(1.0, max(0.3, overshoot * 50 + 0.3))
 
         # 하락 BOS
         elif current < last_swing_low and prev >= last_swing_low:
             direction = "short"
             bos_type = "bearish_bos"
             overshoot = (last_swing_low - current) / last_swing_low
-            strength = min(1.0, overshoot * 100 + 0.5)
+            strength = min(1.0, max(0.3, overshoot * 50 + 0.3))
 
         return {"type": "bos", "direction": direction, "strength": round(strength, 2),
                 "bos": bos_type, "swing_high": round(last_swing_high, 1),

@@ -132,6 +132,11 @@ class WebSocketStream:
         self._cvd_15m = max(-MAX_CVD, min(MAX_CVD, self._cvd_15m + delta))
         self._cvd_1h = max(-MAX_CVD, min(MAX_CVD, self._cvd_1h + delta))
 
+        # 진행 중인 윈도우의 CVD 도 즉시 캐시 — 시그널 엔진이 1봉 lag 없이 읽을 수 있게
+        # cvd:15m: (옛 키) 는 직전 윈도우 합계, cvd:15m:current 는 진행 중 누적값
+        await self.redis.set("cvd:15m:current:BTC-USDT-SWAP", str(self._cvd_15m), ttl=1000)
+        await self.redis.set("cvd:1h:current:BTC-USDT-SWAP", str(self._cvd_1h), ttl=4000)
+
         # 15m 리셋 체크 (900초)
         now = int(time.time())
         if now // 900 != self._cvd_reset_15m:

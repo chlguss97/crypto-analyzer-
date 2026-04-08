@@ -684,10 +684,14 @@ class CryptoAnalyzer:
         ls_val = await self.redis.get("rt:ls_ratio:BTC-USDT-SWAP")
         ctx["ls_ratio_account"] = float(ls_val) if ls_val else 1.0
         ctx["ls_history"] = oi_history
-        cvd_15m = await self.redis.get("cvd:15m:BTC-USDT-SWAP")
-        cvd_1h = await self.redis.get("cvd:1h:BTC-USDT-SWAP")
-        ctx["cvd_15m"] = float(cvd_15m) if cvd_15m else 0
-        ctx["cvd_1h"] = float(cvd_1h) if cvd_1h else 0
+        # CVD 는 진행 중 윈도우 (cvd:15m:current) 우선, 없으면 직전 윈도우 합계 (cvd:15m) fallback
+        # → 시그널 엔진이 1봉 lag 없이 현재 누적값을 본다 (BUG #1 fix)
+        cvd_15m_cur = await self.redis.get("cvd:15m:current:BTC-USDT-SWAP")
+        cvd_15m_prev = await self.redis.get("cvd:15m:BTC-USDT-SWAP")
+        cvd_1h_cur = await self.redis.get("cvd:1h:current:BTC-USDT-SWAP")
+        cvd_1h_prev = await self.redis.get("cvd:1h:BTC-USDT-SWAP")
+        ctx["cvd_15m"] = float(cvd_15m_cur) if cvd_15m_cur else (float(cvd_15m_prev) if cvd_15m_prev else 0)
+        ctx["cvd_1h"] = float(cvd_1h_cur) if cvd_1h_cur else (float(cvd_1h_prev) if cvd_1h_prev else 0)
         return ctx
 
     # ── ML 학습 기록 ──
@@ -830,7 +834,7 @@ class CryptoAnalyzer:
 
     async def periodic_scalp_eval(self):
         """스캘핑 시그널 평가 (5초마다) — 초고속 반응"""
-        await asyncio.sleep(20)
+        await asyncio.sleep(2)  # 캔들 backfill 짧게 대기 (재시작 직후 4 사이클 손실 방지)
         while self._running:
             try:
                 await self._evaluate_scalp()
