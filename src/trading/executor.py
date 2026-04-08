@@ -70,6 +70,26 @@ class OrderExecutor:
         if self.exchange:
             await self.exchange.close()
 
+    def _btc_to_contracts(self, size_btc: float) -> float:
+        """
+        BTC 단위 size → OKX contracts 수 변환.
+        ccxt OKX 의 create_order amount 는 contracts 단위로 그대로 전달됨.
+        BTC-USDT-SWAP contractSize = 0.01 BTC → amount=0.01 (BTC) 보내면
+        OKX 는 0.01 contracts = 0.0001 BTC 진입 (100배 작음).
+        → 명시적으로 contracts 수로 변환해서 전달해야 함.
+        """
+        if not hasattr(self, "_contract_size_cached") or self._contract_size_cached is None:
+            try:
+                self._contract_size_cached = float(
+                    self.exchange.market(self.symbol).get("contractSize", 0.01)
+                )
+            except Exception:
+                self._contract_size_cached = 0.01  # BTC-USDT-SWAP default
+        cs = self._contract_size_cached
+        if cs <= 0:
+            return size_btc
+        return size_btc / cs
+
     async def set_leverage(self, leverage: int, direction: str):
         """레버리지 설정"""
         try:
@@ -122,19 +142,20 @@ class OrderExecutor:
         return order
 
     async def _market_order(self, side: str, size: float, pos_side: str) -> dict | None:
-        """시장가 주문 (재시도 포함)"""
+        """시장가 주문 (재시도 포함). size 는 BTC 단위, ccxt 에는 contracts 로 변환 전달."""
+        contracts = self._btc_to_contracts(size)
         for attempt in range(1, MAX_RETRIES + 1):
             try:
                 order = await self.exchange.create_order(
                     symbol=self.symbol,
                     type="market",
                     side=side,
-                    amount=size,
+                    amount=contracts,
                     params={"tdMode": "isolated", "posSide": pos_side},
                 )
                 fill_price = order.get("average", order.get("price", 0))
                 logger.info(
-                    f"시장가 체결: {side.upper()} {size} @ ${fill_price} "
+                    f"시장가 체결: {side.upper()} {size} BTC ({contracts} ct) @ ${fill_price} "
                     f"(주문ID: {order.get('id')})"
                 )
                 return order
@@ -149,14 +170,15 @@ class OrderExecutor:
 
     async def _limit_order(self, side: str, size: float, price: float,
                            pos_side: str) -> dict | None:
-        """지정가 주문 (타임아웃 + 부분체결 처리)"""
+        """지정가 주문 (타임아웃 + 부분체결 처리). size BTC → contracts."""
+        contracts = self._btc_to_contracts(size)
         for attempt in range(1, MAX_RETRIES + 1):
             try:
                 order = await self.exchange.create_order(
                     symbol=self.symbol,
                     type="limit",
                     side=side,
-                    amount=size,
+                    amount=contracts,
                     price=price,
                     params={"tdMode": "isolated", "posSide": pos_side},
                 )
@@ -239,10 +261,11 @@ class OrderExecutor:
     async def _create_algo_order(
         self, direction: str, size: float, trigger_price: float, prefix: str
     ) -> str | None:
-        """SL/TP 공통 알고 주문 생성. 성공 시 algoClOrdId 반환, 실패 시 None."""
+        """SL/TP 공통 알고 주문 생성. size BTC → contracts."""
         if size <= 0 or trigger_price <= 0:
             logger.error(f"알고 주문 인자 무효 [{prefix}] size={size} trigger={trigger_price}")
             return None
+        contracts = self._btc_to_contracts(size)
         side = "sell" if direction == "long" else "buy"
         pos_side = "long" if direction == "long" else "short"
         algo_id = self._gen_algo_id(prefix)
@@ -252,7 +275,7 @@ class OrderExecutor:
                 symbol=self.symbol,
                 type="trigger",
                 side=side,
-                amount=size,
+                amount=contracts,
                 params={
                     "tdMode": "isolated",
                     "posSide": pos_side,
@@ -426,7 +449,8 @@ class OrderExecutor:
 
     async def close_position(self, direction: str, size: float,
                              reason: str = "manual") -> dict | None:
-        """포지션 청산 (시장가)"""
+        """포지션 청산 (시장가). size BTC → contracts."""
+        contracts = self._btc_to_contracts(size)
         side = "sell" if direction == "long" else "buy"
         pos_side = "long" if direction == "long" else "short"
 
@@ -436,7 +460,7 @@ class OrderExecutor:
                     symbol=self.symbol,
                     type="market",
                     side=side,
-                    amount=size,
+                    amount=contracts,
                     params={
                         "tdMode": "isolated",
                         "posSide": pos_side,
@@ -444,7 +468,7 @@ class OrderExecutor:
                     },
                 )
                 fill_price = order.get("average", order.get("price", 0))
-                logger.info(f"청산 완료 ({reason}): {side.upper()} {size} @ ${fill_price}")
+                logger.info(f"청산 완료 ({reason}): {side.upper()} {size} BTC ({contracts} ct) @ ${fill_price}")
                 return order
 
             except Exception as e:
