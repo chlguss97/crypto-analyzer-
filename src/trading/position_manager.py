@@ -38,10 +38,16 @@ class Position:
 
         # TP 체결 상태
         self.tp1_filled = False
-        self.tp2_filled = False
-        self.tp3_filled = False
+        self.tp2_filled = False  # 러너 모드에서는 미사용 (호환용)
+        self.tp3_filled = False  # 러너 모드에서는 미사용
+
+        # 러너 트레일링 (TP1 익절 후 활성화)
+        self.runner_mode = False
+        self.best_price = 0.0       # 러너 모드 진입 후 최고/최저가
+        self.trail_distance = 0.0   # 러너 트레일 거리 (가격 단위, 절대값)
 
         # OKX 알고 주문 ID 추적 (cancel/replace 용)
+        # 러너 모드에서는 tp2/tp3 사용 안 함 — 호환용으로만 유지
         self.algo_ids: dict[str, str | None] = {
             "sl": None, "tp1": None, "tp2": None, "tp3": None
         }
@@ -102,8 +108,10 @@ class PositionManager:
         self.positions: dict[str, Position] = {}  # symbol → Position
         self.on_trade_closed = None  # 콜백: async def(mode, signals, pnl_pct)
 
-    # 분할익절 비율 (전체 사이즈 대비)
-    TP_FRACTIONS = (0.5, 0.3, 0.2)  # TP1 50%, TP2 30%, TP3 20%
+    # 러너 트레일링: TP1 50% 익절 + 잔여 50% 는 트레일링 SL 로 추세 끝까지
+    TP1_CLOSE_PCT = 0.5
+    # 러너 트레일 거리 = TP1 거리 × 이 비율 (가격이 새 고/저 갱신 시 SL을 이만큼 뒤에 둠)
+    RUNNER_TRAIL_RATIO = 0.5
 
     async def open_position(self, trade_request: dict) -> Position | None:
         """새 포지션 진입 + SL/TP1/TP2/TP3 서버사이드 등록"""
@@ -136,11 +144,10 @@ class PositionManager:
         tp2_price = float(trade_request["tp2_price"])
         tp3_price = float(trade_request.get("tp3_price", tp2_price))
 
-        # 🔒 핵심: 진입 직후 SL + TP1/TP2/TP3 서버사이드 등록
+        # 🔒 진입 직후 SL + TP1 만 서버사이드 등록 (러너 트레일링 모드)
+        # TP1 hit 후 잔여 50% 는 트레일링 SL 로 추세 끝까지 따라감
         tp_levels = [
-            (tp1_price, self.TP_FRACTIONS[0]),
-            (tp2_price, self.TP_FRACTIONS[1]),
-            (tp3_price, self.TP_FRACTIONS[2]),
+            (tp1_price, self.TP1_CLOSE_PCT),
         ]
         algo_ids = await self.executor.set_protection(
             direction=direction,
@@ -156,10 +163,9 @@ class PositionManager:
                 f"({direction.upper()} {filled_size} @ ${fill_price})"
             )
             await self.executor.close_position(direction, float(filled_size), "sl_protect_failed")
-            # 등록된 TP들도 정리
-            for k in ("tp1", "tp2", "tp3"):
-                if algo_ids.get(k):
-                    await self.executor.cancel_algo_order(algo_ids[k])
+            # 등록된 TP1 도 정리
+            if algo_ids.get("tp1"):
+                await self.executor.cancel_algo_order(algo_ids["tp1"])
             return None
 
         # DB 기록
@@ -196,18 +202,14 @@ class PositionManager:
 
         await self.redis.hset(f"pos:active:{symbol}", pos.to_dict())
 
-        # TP 일부라도 등록 실패한 경우 경고
-        missing_tps = [k for k in ("tp1", "tp2", "tp3") if not algo_ids.get(k)]
-        if missing_tps:
-            logger.warning(f"⚠️  일부 TP 등록 실패: {missing_tps} (봇 폴링이 백업)")
+        if not algo_ids.get("tp1"):
+            logger.warning("⚠️  TP1 등록 실패 → 봇 폴링이 가격 기반으로 백업")
 
         logger.info(
             f"포지션 오픈: {pos.direction.upper()} {symbol} | "
-            f"진입 ${fill_price} | SL ${pos.sl_price:.0f} | "
-            f"TP1 ${pos.tp1_price:.0f} TP2 ${pos.tp2_price:.0f} TP3 ${pos.tp3_price:.0f} | "
-            f"{pos.leverage}x | 등급 {pos.grade} | "
-            f"algo: sl={algo_ids.get('sl')} tp1={algo_ids.get('tp1')} "
-            f"tp2={algo_ids.get('tp2')} tp3={algo_ids.get('tp3')}"
+            f"진입 ${fill_price} | SL ${pos.sl_price:.0f} | TP1 ${pos.tp1_price:.0f} "
+            f"(이후 러너 트레일링) | {pos.leverage}x | 등급 {pos.grade} | "
+            f"algo: sl={algo_ids.get('sl')} tp1={algo_ids.get('tp1')}"
         )
 
         return pos
@@ -279,38 +281,62 @@ class PositionManager:
         return current_price <= tp_price
 
     async def _handle_tp_progression(self, pos: Position, current_price: float):
-        """가격 기반 TP1/TP2/TP3 진행 — 반익본절 SL 이동의 핵심"""
+        """
+        러너 트레일링 진행:
+          - TP1 미체결: 가격이 TP1 닿으면 50% 익절 + SL 본절 + 러너 모드 활성화
+          - 러너 모드: 가격이 새 고/저 갱신할 때마다 트레일링 SL 끌어올림
+        """
 
-        # TP1 도달 → 50% 익절 + SL을 본전으로 이동
+        # TP1 도달 → 50% 익절 + SL 본절 + 러너 모드 활성화
         if not pos.tp1_filled and self._tp_reached(pos, current_price, pos.tp1_price):
-            await self._on_tp_hit(pos, level=1, close_pct=self.TP_FRACTIONS[0])
+            await self._on_tp_hit(pos, level=1, close_pct=self.TP1_CLOSE_PCT)
             if pos.symbol not in self.positions:
                 return
+
             # SL → 본전 + 수수료 보상
             fee_offset = pos.entry_price * 0.001
             new_sl = pos.entry_price + fee_offset if pos.direction == "long" \
                 else pos.entry_price - fee_offset
             await self._move_sl(pos, new_sl, label="본절")
+
+            # 러너 모드 활성화
+            pos.runner_mode = True
+            pos.best_price = current_price
+            tp1_distance = abs(pos.tp1_price - pos.entry_price)
+            pos.trail_distance = tp1_distance * self.RUNNER_TRAIL_RATIO
+
             logger.info(
-                f"✅ TP1 익절 50% @ ${pos.tp1_price:.0f} → "
-                f"SL을 본전 ${new_sl:.0f}로 이동 (반익본절)"
+                f"✅ TP1 익절 50% @ ${pos.tp1_price:.0f} → SL 본전 ${new_sl:.0f} | "
+                f"🏃 러너 모드 ON (트레일 ${pos.trail_distance:.1f})"
             )
+            return
 
-        # TP2 도달 → 30% 익절 + SL을 TP1 가격으로
-        if not pos.tp2_filled and self._tp_reached(pos, current_price, pos.tp2_price):
-            await self._on_tp_hit(pos, level=2, close_pct=self.TP_FRACTIONS[1])
-            if pos.symbol not in self.positions:
-                return
-            new_sl = pos.tp1_price
-            await self._move_sl(pos, new_sl, label="TP1잠금")
-            logger.info(f"✅ TP2 익절 30% @ ${pos.tp2_price:.0f} → SL을 TP1 ${new_sl:.0f}로 이동")
+        # 러너 모드 트레일링 — 가격이 새 고/저 갱신 시 SL 추격
+        if pos.runner_mode:
+            await self._update_runner_trail(pos, current_price)
 
-        # TP3 도달 → 잔량 전부 청산
-        if not pos.tp3_filled and self._tp_reached(pos, current_price, pos.tp3_price):
-            pos.tp3_filled = True
-            await self._cancel_all_algos(pos)
-            await self._full_close(pos, "tp3")
-            logger.info(f"✅ TP3 익절 → 포지션 전량 종료 @ ${pos.tp3_price:.0f}")
+    async def _update_runner_trail(self, pos: Position, current_price: float):
+        """러너 모드: 가격이 새 고/저 갱신 시 트레일링 SL 끌어올림"""
+        moved = False
+        if pos.direction == "long":
+            if current_price > pos.best_price:
+                pos.best_price = current_price
+                new_sl = current_price - pos.trail_distance
+                if new_sl > pos.current_sl:
+                    await self._move_sl(pos, new_sl, label="러너트레일")
+                    moved = True
+        else:
+            if current_price < pos.best_price:
+                pos.best_price = current_price
+                new_sl = current_price + pos.trail_distance
+                if new_sl < pos.current_sl:
+                    await self._move_sl(pos, new_sl, label="러너트레일")
+                    moved = True
+
+        if moved:
+            logger.info(
+                f"🏃 러너 트레일: 신고점 ${pos.best_price:.0f} → SL ${pos.current_sl:.0f}"
+            )
 
     async def _on_tp_hit(self, pos: Position, level: int, close_pct: float):
         """봇이 TP 가격 도달을 먼저 감지한 경우 — 부분 청산 + 해당 알고 취소"""
@@ -377,9 +403,20 @@ class PositionManager:
                 logger.error(f"ML 콜백 에러: {e}")
 
     async def _check_time_exit(self, pos: Position, current_price: float) -> bool:
-        """시간 기반 청산 (계좌 PnL % 기준)"""
+        """
+        시간 기반 청산 (계좌 PnL % 기준)
+        러너 모드 활성화 시 = 큰 추세 잡고 있는 중이므로 시간 청산 완화 (트레일링 SL 에 위임)
+        """
         hours = pos.hold_hours
         pnl = pos.pnl_pct(current_price)  # 계좌 PnL %
+
+        # 러너 모드: 추세가 살아있는 한 트레일링 SL 에 맡기고, 8시간 hard limit 만 적용
+        if pos.runner_mode:
+            if hours >= 8:
+                await self._cancel_all_algos(pos)
+                await self._full_close(pos, "time_8h_runner")
+                return True
+            return False
 
         # 6시간 → 무조건 전량 청산
         if hours >= 6:
@@ -387,18 +424,12 @@ class PositionManager:
             await self._full_close(pos, "time_6h")
             return True
 
-        # 4시간 → TP2 미체결 시 전량 청산
-        if hours >= 4 and not pos.tp2_filled:
-            await self._cancel_all_algos(pos)
-            await self._full_close(pos, "time_4h")
-            return True
-
         # 2시간 → TP1 미체결 시 75% 청산
         if hours >= 2 and not pos.tp1_filled:
             await self._partial_close(pos, 0.75, "time_2h")
             return False
 
-        # 1시간 → 손실(-3% 미만) 또는 수익 거의 없음(<3%) 시 50% 청산
+        # 1시간 → 수익 < 3% 시 50% 청산
         if hours >= 1 and not pos.tp1_filled and pnl < 3.0:
             await self._partial_close(pos, 0.5, "time_1h")
             return False
