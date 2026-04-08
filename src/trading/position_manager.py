@@ -1080,7 +1080,16 @@ class PositionManager:
         # (포지션이 있든 없든 옛 알고는 모두 stale 로 간주)
         if exchange_positions:
             try:
-                await self.executor.cancel_all_algos()
+                cleaned = await self.executor.cancel_all_algos()
+                if cleaned and self.telegram:
+                    types = ", ".join(set(c.get("ord_type", "?") for c in cleaned))
+                    try:
+                        await self.telegram.notify_warning(
+                            f"🧹 봇 재시작 — 옛 알고 {len(cleaned)}개 정리 ({types}). "
+                            f"새 SL/TP 가 self-heal 로 등록됩니다."
+                        )
+                    except Exception:
+                        pass
             except Exception as e:
                 logger.error(f"sync 시 알고 정리 실패: {e}")
 

@@ -1,9 +1,30 @@
+import json
 import logging
+import time
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from datetime import datetime, timezone
 
 LOG_DIR = Path(__file__).parent.parent.parent / "data" / "logs"
+TRADES_JSONL = LOG_DIR / "trades.jsonl"  # 영구 거래 이력 (DB 손상 무관)
+
+
+def _append_jsonl(record: dict):
+    """단일 JSON line 을 append — fsync 로 즉시 디스크 반영"""
+    try:
+        LOG_DIR.mkdir(parents=True, exist_ok=True)
+        record["ts"] = int(time.time())
+        record["ts_iso"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        with open(TRADES_JSONL, "a", encoding="utf-8") as f:
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+            f.flush()
+            try:
+                import os
+                os.fsync(f.fileno())
+            except Exception:
+                pass
+    except Exception:
+        pass  # 로그 실패가 매매를 막지 않게
 
 
 class TradeLogger:
@@ -56,6 +77,17 @@ class TradeLogger:
                 if v.get("strength", 0) > 0
             }
             self.logger.debug(f"SIGNALS | {active}")
+        # JSONL 영구 기록 (DB 손상 무관)
+        _append_jsonl({
+            "type": "entry",
+            "direction": direction,
+            "grade": grade,
+            "score": round(float(score), 2),
+            "entry_price": round(float(entry_price), 1),
+            "sl_price": round(float(sl_price), 1),
+            "leverage": int(leverage),
+            "margin": round(float(margin), 2),
+        })
 
     def log_exit(self, direction: str, exit_reason: str,
                  entry_price: float, exit_price: float,
@@ -67,6 +99,18 @@ class TradeLogger:
             f"{pnl_pct:+.2f}% (${pnl_usdt:+.2f}) | "
             f"{hold_min}min | fee ${fee:.2f}"
         )
+        # JSONL 영구 기록 (DB 손상 무관)
+        _append_jsonl({
+            "type": "exit",
+            "direction": direction,
+            "exit_reason": exit_reason,
+            "entry_price": round(float(entry_price), 1),
+            "exit_price": round(float(exit_price), 1),
+            "pnl_pct": round(float(pnl_pct), 2),
+            "pnl_usdt": round(float(pnl_usdt), 2),
+            "hold_min": int(hold_min),
+            "fee": round(float(fee), 2),
+        })
 
     def log_partial_close(self, direction: str, reason: str,
                           close_pct: float, price: float):
