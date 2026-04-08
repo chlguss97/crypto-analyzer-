@@ -25,7 +25,7 @@ risk:
   tp1_margin_gain_pct: 15.0     # TP1: 마진 +15% → 50% 익절 후 본절 SL + 러너 ON
   # 트레일링 (러너 모드 활성화 후)
   trail_margin_pct: 5.0         # 러너 SL 트레일 거리 = 마진 5% 만큼 뒤에 추격
-  trail_min_price_pct: 0.2      # 트레일 최소 가격 % (노이즈 방어, 마진 기준 미달 시)
+  trail_min_price_pct: 0.5      # 트레일 최소 가격 % — 25x 에서 floor (BTC 5m ATR 0.25% 의 2배, 노이즈 방어)
 
   # min_indicator_sl_pct: 매물대 SL 이 너무 가까우면 무시 (즉시 청산 방지)
   min_indicator_sl_price_pct: 0.05   # 진입가 기준 0.05% 미만 매물대 SL 은 무시

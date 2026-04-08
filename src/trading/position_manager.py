@@ -143,12 +143,29 @@ class PositionManager:
 
     def _get_trail_distance(self, pos: "Position", price: float) -> float:
         """
-        러너 트레일 거리 계산 — 마진 % 기반
-        config trail_margin_pct = 5 → 가격 거리 = 5% / leverage
+        러너 트레일 거리 계산 — 마진 % 기반 + 노이즈 floor
+
+        현재: 옵션 A — dist_min 0.5% (25x leverage 에선 항상 0.5% floor)
+              BTC 5분 ATR 활발 시간대 0.25% 의 2배 → 노이즈 방어 + 추세 추격 균형
+
+        ── 진화 backlog ──
+        옵션 C (ATR 기반 동적): 시장 변동성 자동 적응
+            atr_dist = price * (atr_pct / 100) * 0.8
+            return max(atr_dist, price * 0.003)
+            장점: 죽은 시간 작게, 활발 시간 크게
+            단점: ATR 폭주 시 trail 폭주 (cap 필요), 호출 경로에 atr_pct 전달 필요
+            발동 조건: 운영 데이터 1~2주 모인 후, trail SL 발동 패턴 분석 후 도입
+
+        옵션 D (ATR + margin + min/max cap): 가장 정교
+            atr_dist    = price * atr_pct/100 * 0.8
+            margin_dist = price * (10 / leverage / 100)  # 마진 10% 기반
+            dist        = max(atr_dist, margin_dist, price * 0.003)
+            dist        = min(dist, price * 0.012)  # 최대 1.2% (마진 30% cap)
+            발동 조건: 옵션 C 안정화 후
         """
         risk_cfg = self.config.get("risk", {})
         trail_margin_pct = risk_cfg.get("trail_margin_pct", 5.0)
-        min_price_pct = risk_cfg.get("trail_min_price_pct", 0.2)
+        min_price_pct = risk_cfg.get("trail_min_price_pct", 0.5)  # 옛 0.2 → 0.5
 
         # 마진 손실 % / leverage = 가격 변동 %
         dist_from_margin = price * (trail_margin_pct / pos.leverage / 100)
