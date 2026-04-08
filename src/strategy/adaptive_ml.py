@@ -44,7 +44,8 @@ class AdaptiveML:
         self.weights = self._default_weights()
 
         # 임계값
-        self.entry_threshold = 5.5 if mode == "swing" else 4.5
+        # 초기 임계값 — scalp 은 점수 분포 (~0.5-2) 에 맞춰 1.5 (옛 4.5는 너무 높음)
+        self.entry_threshold = 5.5 if mode == "swing" else 1.5
         self.min_trades_to_train = 30
         self.retrain_interval = 100  # 100거래마다 재학습 (모델 안정화)
 
@@ -448,8 +449,10 @@ class AdaptiveML:
         if len(recent) >= 10:
             recent_wr = sum(1 for r in recent[-10:] if self._get_pnl(r) > 0) / 10
             # 모드별 임계값 상한/하한
+            # scalp: ScalpEngine 점수 분포 (0~3 정도) 에 맞춰 min 1.0 으로 낮춤
+            #   - 옛 min 2.5 는 점수 분포 (0.5~2) 에 비해 4배 높아 진입 절대 불가였음
             if self.mode == "scalp":
-                max_threshold, min_threshold = 5.0, 2.5
+                max_threshold, min_threshold = 5.0, 1.0
             else:
                 max_threshold, min_threshold = 8.0, 4.0
 
@@ -588,6 +591,11 @@ class AdaptiveML:
                 }
 
         self.entry_threshold = data["entry_threshold"]
+        # 모드별 임계값 cap 적용 (옛 pkl 의 entry_threshold 가 새 cap 을 초과하면 cap)
+        if self.mode == "scalp":
+            self.entry_threshold = min(5.0, max(1.0, self.entry_threshold))
+        else:
+            self.entry_threshold = min(8.0, max(4.0, self.entry_threshold))
         self.trade_count = data["trade_count"]
 
         # 피처 변경 안 됐을 때만 버퍼 복원

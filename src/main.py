@@ -283,7 +283,8 @@ class CryptoAnalyzer:
         result = await self.scalp_engine.analyze(df_1m, df_5m, df_15m)
         self._last_scalp = result
 
-        # ML 조정
+        # ML 조정 (raw 점수 보존 — 디버깅용)
+        result["raw_score"] = result["score"]
         ml_enabled = (await self.redis.get("sys:ml_enabled") or "on") == "on"
         if ml_enabled:
             adjusted = self.ml_scalp.get_adjusted_score(result["score"], result["signals"])
@@ -353,10 +354,13 @@ class CryptoAnalyzer:
         now_ts = _t.time()
         if now_ts - getattr(self, "_last_scalp_log", 0) >= 60:
             self._last_scalp_log = now_ts
+            raw = scalp_sig.get("raw_score", scalp_sig.get("score", 0))
+            adj = scalp_sig.get("score", 0)
+            thr = getattr(self.ml_scalp, "entry_threshold", 0)
             logger.info(
-                f"[SCALP] 점수: {scalp_sig.get('score', 0):.2f} | "
+                f"[SCALP] raw: {raw:.2f} → ML조정: {adj:.2f} (Δ{adj-raw:+.2f}) | "
+                f"임계값: {thr:.2f} | "
                 f"방향: {scalp_sig.get('direction', 'neutral')} | "
-                f"임계값: {getattr(self.ml_scalp, 'entry_threshold', '?')} | "
                 f"SMC: {scalp_sig.get('smc_entry', False)} | "
                 f"급변동: {scalp_sig.get('explosive_mode', False)} | "
                 f"세션: {scalp_sig.get('session', '?')}"
