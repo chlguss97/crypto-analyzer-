@@ -63,7 +63,18 @@ class WebSocketStream:
             async for message in ws:
                 if not self._running:
                     break
-                await self._handle_message(json.loads(message))
+                # JSON parse 실패가 연결을 끊지 않게 (잘못된 메시지 1건은 skip)
+                try:
+                    data = json.loads(message)
+                except (json.JSONDecodeError, ValueError) as e:
+                    logger.warning(f"WS JSON parse 실패 (skip): {e} | msg[:120]={str(message)[:120]}")
+                    continue
+                # 메시지 처리 실패도 연결 유지
+                try:
+                    await self._handle_message(data)
+                except Exception as e:
+                    logger.error(f"WS 메시지 처리 에러 (skip): {e}", exc_info=True)
+                    continue
 
     async def _handle_message(self, data: dict):
         """수신 메시지 처리"""

@@ -146,6 +146,10 @@ class CryptoAnalyzer:
         self._current_day = 0
         self._running = False
 
+        # 학습-매매 격리 메모리 fallback (Redis 일시 끊김 대비)
+        # — sys:learning 키 set/get 실패 시에도 동일 프로세스 내에서는 차단 보장
+        self._learning_local = False
+
     async def initialize(self):
         logger.info("=" * 50)
         logger.info("CryptoAnalyzer v2.0 — Dual Model + AdaptiveML")
@@ -311,7 +315,7 @@ class CryptoAnalyzer:
 
             # 가상매매 전수 학습 (학습 중엔 스킵 — CPU 절약 + 실거래 보호 우선)
             price_str = await self.redis.get("rt:price:BTC-USDT-SWAP")
-            learning = (await self.redis.get("sys:learning")) == "1"
+            learning = self._learning_local or (await self.redis.get("sys:learning")) == "1"
             if price_str and not learning:
                 agg = swing_agg.copy()
                 agg["atr_pct"] = self._last_fast.get("atr", {}).get("atr_pct", 0.3)
@@ -362,7 +366,8 @@ class CryptoAnalyzer:
         }, ttl=30)
 
         # 가상매매 전수 학습 (학습 중엔 스킵)
-        if (await self.redis.get("sys:learning")) != "1":
+        learning = self._learning_local or (await self.redis.get("sys:learning")) == "1"
+        if not learning:
             await self.paper_trader.try_entry(scalp_sig, "scalp", current_price)
 
         # ── 진입 확인 대기 로직 ──
@@ -443,7 +448,7 @@ class CryptoAnalyzer:
     async def _execute_swing(self, grade_result, aggregated, risk_state):
         """Swing 매매 실행"""
         # 🔒 학습 중에는 신규 진입 스킵 (asyncio 블로킹 race 방지)
-        if await self.redis.get("sys:learning") == "1":
+        if self._learning_local or await self.redis.get("sys:learning") == "1":
             logger.info("[SWING] 학습 중 → 신규 진입 스킵")
             return
 
@@ -560,7 +565,7 @@ class CryptoAnalyzer:
     async def _execute_scalp(self, scalp_sig, risk_state):
         """Scalp 매매 실행"""
         # 🔒 학습 중에는 신규 진입 스킵
-        if await self.redis.get("sys:learning") == "1":
+        if self._learning_local or await self.redis.get("sys:learning") == "1":
             logger.info("[SCALP] 학습 중 → 신규 진입 스킵")
             return
 
@@ -708,6 +713,7 @@ class CryptoAnalyzer:
         """봇 시작 시 과거 데이터 학습 (백그라운드)"""
         await asyncio.sleep(30)  # 캔들 수집 완료 대기
         try:
+            self._learning_local = True
             await self.redis.set("sys:learning", "1", ttl=3600)
             logger.info("[HIST] 🔒 초기 역사 백필 학습 시작 (Swing) — 신규 진입 일시 정지")
             await self.hist_learner.run_backfill("15m", lookback=2000, step=5)
@@ -721,6 +727,7 @@ class CryptoAnalyzer:
         except Exception as e:
             logger.error(f"[HIST] 초기 학습 에러: {e}")
         finally:
+            self._learning_local = False
             await self.redis.delete("sys:learning")
             logger.info("[HIST] 🔓 초기 학습 종료 — 매매 재개")
 
@@ -737,12 +744,14 @@ class CryptoAnalyzer:
         _last_run = {}
 
         async def _guarded_study(label: str, coro):
-            """학습 작업을 redis flag 로 감싸서 실행 — 중간 예외도 안전하게 unset"""
+            """학습 작업을 메모리 + redis flag 로 감싸서 실행 — Redis 끊김에도 안전"""
             try:
+                self._learning_local = True
                 await self.redis.set("sys:learning", "1", ttl=3600)
                 logger.info(f"[SCHED] 🔒 학습 모드 ON ({label}) — 신규 진입 일시 정지")
                 await coro
             finally:
+                self._learning_local = False
                 await self.redis.delete("sys:learning")
                 logger.info(f"[SCHED] 🔓 학습 모드 OFF ({label}) — 매매 재개")
 
@@ -837,11 +846,11 @@ class CryptoAnalyzer:
         - 학습 중에는 paper_trader 폴링 스킵 (CPU 경합 방지, 실거래 보호 우선)
         """
         while self._running:
-            # 학습 상태 매 루프 확인
+            # 학습 상태 매 루프 확인 (메모리 fallback 우선)
             try:
-                learning = (await self.redis.get("sys:learning")) == "1"
+                learning = self._learning_local or (await self.redis.get("sys:learning")) == "1"
             except Exception:
-                learning = False
+                learning = self._learning_local
 
             try:
                 price_str = await self.redis.get("rt:price:BTC-USDT-SWAP")
@@ -933,15 +942,18 @@ class CryptoAnalyzer:
             await asyncio.sleep(30)
 
     async def periodic_heartbeat(self):
-        """헬스체크 (60초마다) — heartbeat + 잔고 캐시"""
+        """헬스체크 (60초마다) — heartbeat + 잔고 캐시 (timeout 방어)"""
         while self._running:
             await self.redis.set("sys:last_heartbeat", str(int(_time.time())))
             try:
-                bal = await self.executor.get_balance()
+                # OKX get_balance() 가 멈춰도 heartbeat 영향 없도록 5초 타임아웃
+                bal = await asyncio.wait_for(self.executor.get_balance(), timeout=5.0)
                 if bal and bal > 0:
                     await self.redis.set("sys:balance", f"{bal:.2f}")
+            except asyncio.TimeoutError:
+                logger.debug("잔고 캐시 timeout (이전 값 유지)")
             except Exception as e:
-                logger.warning(f"잔고 캐시 실패: {e}")
+                logger.debug(f"잔고 캐시 실패 (이전 값 유지): {e}")
             await asyncio.sleep(60)
 
     # ── 대시보드 서버 ──
