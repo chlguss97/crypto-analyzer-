@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import math
 import time
 import json
 from src.data.storage import Database, RedisClient
@@ -118,6 +119,13 @@ class PositionManager:
         self.on_trade_closed = None  # 콜백: async def(mode, signals, pnl_pct)
         self.telegram = None  # main.py 에서 주입 — 청산 알림용
         self.trade_logger = None  # main.py 에서 주입 — 청산 로그용
+        # 동일 심볼 동시 처리 방지 (check_positions vs signal_exit vs close_all)
+        self._symbol_locks: dict[str, asyncio.Lock] = {}
+
+    def _get_lock(self, symbol: str) -> asyncio.Lock:
+        if symbol not in self._symbol_locks:
+            self._symbol_locks[symbol] = asyncio.Lock()
+        return self._symbol_locks[symbol]
 
     # 러너 트레일링: TP1 50% 익절 + 잔여 50% 는 트레일링 SL 로 추세 끝까지
     TP1_CLOSE_PCT = 0.5
@@ -164,26 +172,58 @@ class PositionManager:
         fee = (order.get("fee") or {}).get("cost", 0) or 0
 
         # 🔒 fill_price/size 가 즉시 안 오는 경우 (ccxt OKX 시장가 응답 일부)
-        # → fetch_positions 로 정확한 entry 와 size 확보
+        # → fetch_positions 로 정확한 entry 와 size 확보 (재시도 포함)
         if fill_price <= 0 or filled_size <= 0:
-            await asyncio.sleep(0.5)  # 거래소 반영 대기
-            ex_entry, ex_size = await self.executor.get_position_entry(symbol)
-            if ex_entry > 0 and ex_size > 0:
-                fill_price = ex_entry
-                filled_size = ex_size
-                logger.info(f"진입 정보 fetch 보정: entry=${fill_price:.1f} size={filled_size:.6f}")
-            else:
-                # 그래도 못 찾으면 진입 취소 (보호 없는 포지션 금지)
+            for attempt in range(3):  # 최대 3회 재시도
+                await asyncio.sleep(0.5 * (attempt + 1))
+                try:
+                    ex_entry, ex_size = await self.executor.get_position_entry(symbol)
+                    if ex_entry > 0 and ex_size > 0:
+                        fill_price = ex_entry
+                        filled_size = ex_size
+                        logger.info(
+                            f"진입 정보 fetch 보정 (시도 {attempt+1}): "
+                            f"entry=${fill_price:.1f} size={filled_size:.6f}"
+                        )
+                        break
+                except Exception as e:
+                    logger.debug(f"fetch_positions 시도 {attempt+1} 실패: {e}")
+
+            if fill_price <= 0 or filled_size <= 0:
+                # 3회 재시도해도 못 찾으면 → 거래소엔 진입 됐을 가능성 ↑
+                # → close_position 으로 정리 시도, 실패 시 매매 일시 정지 (좀비 방지)
                 logger.error(
-                    f"🚨 진입 가격/사이즈 확인 실패 → 즉시 청산 시도 "
+                    f"🚨 진입 가격/사이즈 확인 3회 실패 → 강제 청산 시도 "
                     f"(ccxt order={order})"
                 )
-                try:
-                    await self.executor.close_position(
-                        direction, float(trade_request["size"]), "fill_price_unknown"
+                close_ok = False
+                for cattempt in range(3):
+                    try:
+                        close_order = await self.executor.close_position(
+                            direction, float(trade_request["size"]), "fill_price_unknown"
+                        )
+                        if close_order:
+                            close_ok = True
+                            break
+                    except Exception as e:
+                        logger.error(f"강제 청산 시도 {cattempt+1} 실패: {e}")
+                    await asyncio.sleep(1)
+
+                if not close_ok:
+                    # 좀비 위험 → 매매 차단 (사용자 수동 개입 필요)
+                    logger.critical(
+                        f"💀 강제 청산 3회 실패 — 거래소에 좀비 포지션 가능. "
+                        f"매매 자동 정지. 수동 확인 필요"
                     )
-                except Exception as e:
-                    logger.error(f"실패한 진입 청산 시도 에러: {e}")
+                    try:
+                        await self.redis.set("sys:autotrading", "off")
+                        if self.telegram:
+                            await self.telegram.notify_emergency(
+                                f"🚨 좀비 포지션 의심 — 매매 정지. "
+                                f"OKX 에서 {symbol} 포지션 수동 확인 필요"
+                            )
+                    except Exception:
+                        pass
                 return None
 
         sl_price = float(trade_request["sl_price"])
@@ -221,24 +261,54 @@ class PositionManager:
                 f"🚨 SL 알고 등록 실패 → 포지션 즉시 청산 "
                 f"({direction.upper()} {filled_size} @ ${fill_price})"
             )
-            await self.executor.close_position(direction, float(filled_size), "sl_protect_failed")
-            # 등록된 TP1 도 정리
+            # 등록된 TP1 부터 정리 (남기면 stale 알고가 됨)
             if algo_ids.get("tp1"):
                 await self.executor.cancel_algo_order(algo_ids["tp1"])
+
+            close_ok = False
+            for cattempt in range(3):
+                try:
+                    close_order = await self.executor.close_position(
+                        direction, float(filled_size), "sl_protect_failed"
+                    )
+                    if close_order:
+                        close_ok = True
+                        break
+                except Exception as e:
+                    logger.error(f"SL 보호 실패 강제 청산 시도 {cattempt+1} 에러: {e}")
+                await asyncio.sleep(1)
+
+            if not close_ok:
+                logger.critical(
+                    f"💀 SL 등록 실패 + 청산도 실패 — 좀비 위험. 매매 자동 정지"
+                )
+                try:
+                    await self.redis.set("sys:autotrading", "off")
+                    if self.telegram:
+                        await self.telegram.notify_emergency(
+                            f"🚨 SL 보호 실패 + 청산 실패 — 매매 정지. "
+                            f"OKX 에서 {symbol} 포지션 수동 확인"
+                        )
+                except Exception:
+                    pass
             return None
 
-        # DB 기록
-        trade_id = await self.db.insert_trade({
-            "symbol": symbol,
-            "direction": direction,
-            "grade": trade_request["grade"],
-            "score": trade_request["score"],
-            "entry_price": fill_price,
-            "entry_time": int(time.time() * 1000),
-            "leverage": trade_request["leverage"],
-            "position_size": filled_size * fill_price,
-            "signals_snapshot": json.dumps(trade_request.get("signals_snapshot", {})),
-        })
+        # DB 기록 (실패해도 메모리에는 기록 — 좀비 방지)
+        try:
+            trade_id = await self.db.insert_trade({
+                "symbol": symbol,
+                "direction": direction,
+                "grade": trade_request["grade"],
+                "score": trade_request["score"],
+                "entry_price": fill_price,
+                "entry_time": int(time.time() * 1000),
+                "leverage": trade_request["leverage"],
+                "position_size": filled_size * fill_price,
+                "signals_snapshot": json.dumps(trade_request.get("signals_snapshot", {})),
+            })
+        except Exception as e:
+            logger.error(f"DB insert_trade 실패: {e} → 임시 ID 로 진행")
+            trade_id = -int(time.time())  # 음수 임시 ID (DB 갱신 시도 안 함)
 
         pos = Position(
             trade_id=trade_id,
@@ -297,89 +367,140 @@ class PositionManager:
             if not pos.entry_price or pos.entry_price <= 0:
                 continue
 
-            # 1. SL failsafe — 가격이 봇 내부 SL을 넘었으면 즉시 청산
-            sl_breached = (
-                (pos.direction == "long" and current_price <= pos.current_sl) or
-                (pos.direction == "short" and current_price >= pos.current_sl)
-            )
-            if sl_breached:
-                logger.warning(
-                    f"🛑 SL failsafe 발동: {pos.direction.upper()} "
-                    f"가격 ${current_price:.0f} vs SL ${pos.current_sl:.0f}"
-                )
-                await self._cancel_all_algos(pos)
-                await self._full_close(pos, "sl_failsafe")
-                continue
+            # 동일 심볼 동시 처리 방지 (signal_exit/close_all 과 race 차단)
+            lock = self._get_lock(symbol)
+            if lock.locked():
+                continue  # 다른 코루틴이 처리 중 → 다음 폴링에서
+            async with lock:
+                # 락 획득 후 재확인 (그 사이 청산됐을 수 있음)
+                if symbol not in self.positions:
+                    continue
+                pos = self.positions[symbol]
+                await self._process_position(symbol, pos, current_price)
 
-            # 2. 거래소 사이즈 동기화 — 서버사이드 TP/SL 체결 감지
-            try:
-                ex_size = await self.executor.get_position_size(symbol)
-                # epsilon 비교 (float 정확비교 위험)
-                if 0 <= ex_size < 1e-8:
-                    # 외부에서 전량 청산됨 (서버 SL/TP, 강제청산, 수동 등)
+    async def _process_position(self, symbol: str, pos: "Position", current_price: float):
+        """단일 포지션 처리 — lock 안에서 호출됨"""
+        # 1. SL failsafe — 가격이 봇 내부 SL을 넘었으면 즉시 청산
+        sl_breached = (
+            (pos.direction == "long" and current_price <= pos.current_sl) or
+            (pos.direction == "short" and current_price >= pos.current_sl)
+        )
+        if sl_breached:
+            logger.warning(
+                f"🛑 SL failsafe 발동: {pos.direction.upper()} "
+                f"가격 ${current_price:.0f} vs SL ${pos.current_sl:.0f}"
+            )
+            await self._cancel_all_algos(pos)
+            await self._full_close(pos, "sl_failsafe")
+            return
+
+        # 2. 거래소 사이즈 동기화 — 서버사이드 TP/SL 체결 감지
+        try:
+            ex_size = await self.executor.get_position_size(symbol)
+            if 0 <= ex_size < 1e-8:
+                # 외부에서 전량 청산됨 (서버 SL/TP, 강제청산, 수동 등)
+                logger.warning(f"포지션 외부 종료 감지 (사이즈≈0) → 정리: {symbol}")
+                await self._cancel_all_algos(pos)
+                await self._reconcile_external_close(pos, current_price)
+                return
+            elif ex_size > 0 and ex_size < pos.remaining_size * 0.95:
+                # 부분 체결 감지 (서버사이드 TP1 이 발동한 경우)
+                closed_amount = pos.remaining_size - ex_size
+                pct_closed = closed_amount / pos.remaining_size
+                logger.info(
+                    f"부분 체결 감지: 봇={pos.remaining_size:.6f} → "
+                    f"거래소={ex_size:.6f} ({pct_closed*100:.0f}%)"
+                )
+                pos.remaining_size = ex_size
+
+                # 잔여가 최소 주문 미만이면 러너 모드 비활성 + 즉시 전체 청산
+                if ex_size < self.MIN_ORDER_SIZE_BTC:
                     logger.warning(
-                        f"포지션 외부 종료 감지 (사이즈≈0) → 정리: {symbol}"
+                        f"잔여 {ex_size:.6f} < 최소 {self.MIN_ORDER_SIZE_BTC} → "
+                        f"러너 비활성 + 잔여 청산"
                     )
                     await self._cancel_all_algos(pos)
-                    await self._reconcile_external_close(pos, current_price)
-                    continue
-                elif ex_size > 0 and ex_size < pos.remaining_size * 0.95:
-                    # 부분 체결 감지 (서버사이드 TP1 이 발동한 경우)
-                    closed_amount = pos.remaining_size - ex_size
-                    pct_closed = closed_amount / pos.remaining_size
-                    logger.info(
-                        f"부분 체결 감지: 봇={pos.remaining_size:.6f} → "
-                        f"거래소={ex_size:.6f} ({pct_closed*100:.0f}%)"
+                    await self._full_close(pos, "tp1_partial_residual")
+                    return
+
+                # 🔒 서버 TP1 발동 → 이중 처리 방지 마킹
+                if not pos.tp1_filled:
+                    pos.tp1_filled = True
+                    pos.algo_ids["tp1"] = None
+
+                    fee_offset = pos.entry_price * 0.001
+                    new_sl = (pos.entry_price + fee_offset) if pos.direction == "long" \
+                        else (pos.entry_price - fee_offset)
+                    await self._move_sl(pos, new_sl, label="본절(서버TP)")
+
+                    pos.runner_mode = True
+                    pos.best_price = current_price
+                    tp1_dist = abs(pos.tp1_price - pos.entry_price)
+                    pos.trail_distance = max(
+                        tp1_dist * self.RUNNER_TRAIL_RATIO,
+                        pos.entry_price * 0.003,
                     )
-                    pos.remaining_size = ex_size
+                    logger.info(
+                        f"✅ 서버 TP1 자동 체결 감지 → SL 본전 ${new_sl:.0f} | "
+                        f"🏃 러너 모드 ON (트레일 ${pos.trail_distance:.1f})"
+                    )
+        except Exception as e:
+            logger.error(f"포지션 사이즈 동기화 실패: {e}")
 
-                    # 🔒 서버 TP1 이 발동한 것으로 간주 → 봇이 또 처리하지 않도록 마킹
-                    # 그리고 SL 본절 이동 + 러너 모드 활성화 (가격 기반 _handle_tp_progression 스킵)
-                    if not pos.tp1_filled:
-                        pos.tp1_filled = True
-                        # TP1 알고 ID 정리 (이미 체결됨)
-                        pos.algo_ids["tp1"] = None
+        # 3. 가격 기반 TP 도달 처리 + 반익본절 SL 끌어올리기
+        await self._handle_tp_progression(pos, current_price)
 
-                        # SL 본절 이동
-                        fee_offset = pos.entry_price * 0.001
-                        new_sl = (pos.entry_price + fee_offset) if pos.direction == "long" \
-                            else (pos.entry_price - fee_offset)
-                        await self._move_sl(pos, new_sl, label="본절(서버TP)")
+        # 종료됐으면 종료
+        if symbol not in self.positions:
+            return
 
-                        # 러너 모드 활성화
-                        pos.runner_mode = True
-                        pos.best_price = current_price
-                        tp1_dist = abs(pos.tp1_price - pos.entry_price)
-                        pos.trail_distance = max(
-                            tp1_dist * self.RUNNER_TRAIL_RATIO,
-                            pos.entry_price * 0.003,  # 최소 0.3% 가격
-                        )
-                        logger.info(
-                            f"✅ 서버 TP1 자동 체결 감지 → SL 본전 ${new_sl:.0f} | "
-                            f"🏃 러너 모드 ON (트레일 ${pos.trail_distance:.1f})"
-                        )
-            except Exception as e:
-                logger.error(f"포지션 사이즈 동기화 실패: {e}")
+        # 4. 시간 청산
+        await self._check_time_exit(pos, current_price)
 
-            # 3. 가격 기반 TP 도달 처리 + 반익본절 SL 끌어올리기 (이중 처리 방지: tp1_filled 체크)
-            await self._handle_tp_progression(pos, current_price)
+        if symbol not in self.positions:
+            return
 
-            # 종료된 포지션이면 다음 루프
-            if symbol not in self.positions:
-                continue
+        # 5. Self-heal — SL/TP 알고가 None 이면 재등록 시도 (네트워크 복구 시 자동 복원)
+        await self._self_heal_algos(pos)
 
-            # 4. 시간 청산
-            await self._check_time_exit(pos, current_price)
+        # 6. Redis 상태 갱신 (대시보드 hold_minutes/current_sl 실시간 표시)
+        try:
+            await self.redis.hset(f"pos:active:{symbol}", pos.to_dict())
+        except Exception as e:
+            logger.debug(f"Redis 포지션 갱신 실패: {e}")
 
-            # 종료됐으면 다음 루프
-            if symbol not in self.positions:
-                continue
+    async def _self_heal_algos(self, pos: "Position"):
+        """SL/TP 알고가 등록 실패해서 None 이면 재등록 시도"""
+        if pos.remaining_size <= 0:
+            return
 
-            # 5. Redis 상태 갱신 (대시보드 hold_minutes/current_sl 실시간 표시)
+        # SL 자동 복구 (가장 중요)
+        if not pos.algo_ids.get("sl"):
             try:
-                await self.redis.hset(f"pos:active:{symbol}", pos.to_dict())
+                new_id = await self.executor.set_stop_loss(
+                    pos.direction, pos.remaining_size, pos.current_sl
+                )
+                if new_id:
+                    pos.algo_ids["sl"] = new_id
+                    logger.info(f"🔧 SL 알고 자동 복구: ${pos.current_sl:.0f} id={new_id}")
             except Exception as e:
-                logger.debug(f"Redis 포지션 갱신 실패: {e}")
+                logger.debug(f"SL 자동 복구 실패: {e}")
+
+        # TP1 자동 복구 (러너 모드 아니고 tp1_filled 아닐 때만)
+        if not pos.runner_mode and not pos.tp1_filled and not pos.algo_ids.get("tp1"):
+            try:
+                small = pos.size < self.MIN_ORDER_SIZE_BTC * 2
+                tp1_size = pos.remaining_size if small else (pos.remaining_size * self.TP1_CLOSE_PCT)
+                tp1_size = round(tp1_size, 6)
+                if tp1_size >= self.MIN_ORDER_SIZE_BTC:
+                    new_id = await self.executor.set_take_profit(
+                        pos.direction, tp1_size, pos.tp1_price, level=1
+                    )
+                    if new_id:
+                        pos.algo_ids["tp1"] = new_id
+                        logger.info(f"🔧 TP1 알고 자동 복구: ${pos.tp1_price:.0f} id={new_id}")
+            except Exception as e:
+                logger.debug(f"TP1 자동 복구 실패: {e}")
 
     def _tp_reached(self, pos: Position, current_price: float, tp_price: float) -> bool:
         if pos.direction == "long":
@@ -582,28 +703,50 @@ class PositionManager:
 
     async def signal_exit(self, symbol: str, reason: str):
         """시그널 기반 청산 (1H CHoCH, 반대 Grade A 등)"""
-        if symbol in self.positions:
-            pos = self.positions[symbol]
-            await self._cancel_all_algos(pos)
-            await self._full_close(pos, reason)
+        async with self._get_lock(symbol):
+            if symbol in self.positions:
+                pos = self.positions[symbol]
+                await self._cancel_all_algos(pos)
+                await self._full_close(pos, reason)
 
     async def _partial_close(self, pos: Position, close_pct: float, reason: str):
-        """부분 청산"""
-        close_size = pos.remaining_size * close_pct
+        """
+        부분 청산. close_size 는 OKX contract 단위 (0.01 BTC) 로 floor
+        → fractional contract 거부 방지 (예: 0.015 BTC = 1.5 contract X)
+        """
+        raw_close = pos.remaining_size * close_pct
+        # 0.01 BTC (1 contract) 단위로 floor
+        close_size = math.floor(raw_close / self.MIN_ORDER_SIZE_BTC) * self.MIN_ORDER_SIZE_BTC
+        close_size = round(close_size, 4)
+
         if close_size <= 0:
+            logger.warning(
+                f"부분 청산 스킵 ({reason}): close_size={close_size} (잔여 {pos.remaining_size})"
+            )
             return
+
+        # 잔여가 close 후 너무 작으면 (1 contract 미만) 전체 청산으로 변환
+        remaining_after = pos.remaining_size - close_size
+        if 0 < remaining_after < self.MIN_ORDER_SIZE_BTC:
+            logger.info(
+                f"부분 청산 → 전체 청산 변환 ({reason}): "
+                f"잔여 후 {remaining_after:.6f} < 최소"
+            )
+            close_size = pos.remaining_size
 
         order = await self.executor.close_partial(
             pos.direction, close_size, 1.0, reason
         )
         if order:
             pos.remaining_size -= close_size
+            if pos.remaining_size < 1e-8:
+                pos.remaining_size = 0.0
             fee = (order.get("fee") or {}).get("cost", 0) or 0
             pos.total_fee += float(fee)
 
             logger.info(
-                f"부분 청산 ({reason}): {close_pct*100:.0f}% | "
-                f"잔여: {pos.remaining_size:.4f}"
+                f"부분 청산 ({reason}): {close_pct*100:.0f}% req → "
+                f"실제 {close_size:.4f} | 잔여: {pos.remaining_size:.4f}"
             )
 
     async def _full_close(self, pos: Position, reason: str):
@@ -670,19 +813,20 @@ class PositionManager:
             margin = pos.size * pos.entry_price / pos.leverage
             pnl_usdt = margin * pnl_pct / 100
 
-        # DB 업데이트
-        try:
-            await self.db.update_trade_exit(pos.trade_id, {
-                "exit_price": exit_price,
-                "exit_time": int(time.time() * 1000),
-                "exit_reason": reason,
-                "pnl_usdt": round(pnl_usdt, 2),
-                "pnl_pct": round(pnl_pct, 4),
-                "fee_total": round(pos.total_fee, 4),
-                "funding_cost": round(pos.funding_cost, 4),
-            })
-        except Exception as e:
-            logger.error(f"DB 청산 기록 실패: {e}")
+        # DB 업데이트 (음수 trade_id = 임시 ID, DB 에 없으므로 스킵)
+        if pos.trade_id and pos.trade_id > 0:
+            try:
+                await self.db.update_trade_exit(pos.trade_id, {
+                    "exit_price": exit_price,
+                    "exit_time": int(time.time() * 1000),
+                    "exit_reason": reason,
+                    "pnl_usdt": round(pnl_usdt, 2),
+                    "pnl_pct": round(pnl_pct, 4),
+                    "fee_total": round(pos.total_fee, 4),
+                    "funding_cost": round(pos.funding_cost, 4),
+                })
+            except Exception as e:
+                logger.error(f"DB 청산 기록 실패: {e}")
 
         # Redis 정리
         try:
@@ -733,23 +877,123 @@ class PositionManager:
     async def close_all(self, reason: str = "kill_switch"):
         """전 포지션 청산 (킬 스위치)"""
         for symbol in list(self.positions.keys()):
-            pos = self.positions[symbol]
-            await self._cancel_all_algos(pos)
-            await self._full_close(pos, reason)
+            async with self._get_lock(symbol):
+                if symbol not in self.positions:
+                    continue
+                pos = self.positions[symbol]
+                await self._cancel_all_algos(pos)
+                await self._full_close(pos, reason)
         await self.executor.cancel_all_orders()
         logger.warning(f"전 포지션 청산 완료: {reason}")
 
     async def sync_positions(self):
-        """거래소 포지션과 동기화 (재시작 시)"""
-        exchange_positions = await self.executor.get_positions()
+        """
+        거래소 포지션과 동기화 (재시작 시).
+        - 거래소에 포지션 있는데 봇 메모리에 없으면 → Redis 에서 옛 상태 복원 시도
+        - Redis 에도 없으면 → 보호 알고만 재등록 (긴급 보호)
+        """
+        try:
+            exchange_positions = await self.executor.get_positions()
+        except Exception as e:
+            logger.error(f"sync_positions 거래소 조회 실패: {e}")
+            return
+
         for ep in exchange_positions:
             symbol = ep["symbol"]
-            if symbol not in self.positions:
-                logger.warning(
-                    f"거래소에 포지션 발견 (봇 미추적): {symbol} "
-                    f"{ep['direction']} {ep['size']} @ ${ep['entry_price']}"
-                )
-                # TODO: 복원 로직 (Redis에서 상태 조회 후 Position 객체 재생성)
+            if symbol in self.positions:
+                continue
+
+            ex_size = abs(float(ep.get("size") or 0))
+            ex_entry = float(ep.get("entry_price") or 0)
+            ex_dir = ep.get("direction", "long")
+            ex_lev = int(ep.get("leverage") or 10)
+
+            if ex_size <= 0 or ex_entry <= 0:
+                continue
+
+            logger.warning(
+                f"거래소 포지션 발견 (봇 미추적): {symbol} "
+                f"{ex_dir} {ex_size:.6f} @ ${ex_entry:.1f}"
+            )
+
+            # Redis 에서 옛 상태 복원 시도
+            redis_data = {}
+            try:
+                redis_data = await self.redis.hgetall(f"pos:active:{symbol}") or {}
+            except Exception:
+                pass
+
+            if redis_data:
+                logger.info(f"Redis 옛 상태 발견 → Position 복원 시도")
+                try:
+                    pos = Position(
+                        trade_id=int(redis_data.get("trade_id", -int(time.time()))),
+                        symbol=symbol,
+                        direction=ex_dir,
+                        entry_price=ex_entry,
+                        size=ex_size,
+                        leverage=ex_lev,
+                        sl_price=float(redis_data.get("sl_price", ex_entry * 0.99)),
+                        tp1_price=float(redis_data.get("tp1_price", ex_entry * 1.01)),
+                        tp2_price=float(redis_data.get("tp2_price", ex_entry * 1.02)),
+                        tp3_price=float(redis_data.get("tp3_price", ex_entry * 1.03)),
+                        grade=redis_data.get("grade", "RESTORED"),
+                        score=float(redis_data.get("score", 0) or 0),
+                        signals_snapshot={},
+                    )
+                    pos.remaining_size = float(redis_data.get("remaining_size", ex_size))
+                    pos.tp1_filled = bool(int(redis_data.get("tp1_filled", 0)))
+                    pos.runner_mode = bool(int(redis_data.get("runner_mode", 0)))
+                    pos.best_price = float(redis_data.get("best_price", ex_entry))
+                    pos.trail_distance = float(redis_data.get("trail_distance", 0))
+                    # algo_ids 는 모두 stale 로 간주 → self_heal 이 다음 폴링에서 재등록
+                    pos.algo_ids = {"sl": None, "tp1": None, "tp2": None, "tp3": None}
+                    self.positions[symbol] = pos
+                    logger.info(
+                        f"✅ 포지션 복원 완료: {symbol} "
+                        f"(tp1_filled={pos.tp1_filled}, runner={pos.runner_mode}). "
+                        f"SL/TP 알고는 다음 폴링에서 self-heal 이 재등록"
+                    )
+                except Exception as e:
+                    logger.error(f"Position 복원 실패: {e}")
+            else:
+                # Redis 도 없음 → 최소한의 보호 알고만 즉시 등록 (긴급)
+                logger.warning(f"Redis 상태 없음 → 긴급 보호 알고 등록 (현재가 ±2% SL)")
+                emergency_sl = ex_entry * (0.98 if ex_dir == "long" else 1.02)
+                try:
+                    sl_id = await self.executor.set_stop_loss(
+                        ex_dir, ex_size, round(emergency_sl, 1)
+                    )
+                    if sl_id:
+                        logger.info(f"긴급 SL 등록: ${emergency_sl:.0f} id={sl_id}")
+                        # 최소 Position 객체 생성 (메모리에 추적)
+                        pos = Position(
+                            trade_id=-int(time.time()),
+                            symbol=symbol,
+                            direction=ex_dir,
+                            entry_price=ex_entry,
+                            size=ex_size,
+                            leverage=ex_lev,
+                            sl_price=emergency_sl,
+                            tp1_price=ex_entry,  # placeholder
+                            tp2_price=ex_entry,
+                            tp3_price=ex_entry,
+                            grade="EMERGENCY_RESTORE",
+                            score=0,
+                            signals_snapshot={},
+                        )
+                        pos.algo_ids = {"sl": sl_id, "tp1": None, "tp2": None, "tp3": None}
+                        self.positions[symbol] = pos
+                        if self.telegram:
+                            try:
+                                await self.telegram.notify_warning(
+                                    f"🔧 미추적 포지션 복원: {symbol} {ex_dir} "
+                                    f"{ex_size} @ ${ex_entry:.0f} → 긴급 SL ${emergency_sl:.0f}"
+                                )
+                            except Exception:
+                                pass
+                except Exception as e:
+                    logger.error(f"긴급 SL 등록 실패: {e}")
 
     def _is_better_sl(self, pos: Position, new_sl: float) -> bool:
         """새 SL이 기존보다 유리한지 체크 (롱: 더 높으면 유리, 숏: 더 낮으면 유리)"""

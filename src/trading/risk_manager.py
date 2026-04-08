@@ -14,11 +14,13 @@ MAX_WEEKLY_LOSS_PCT = 20.0  # 주간 -20%
 class RiskManager:
     """리스크 관리: 일일/주간 한도, 드로다운, 연패 쿨다운"""
 
-    def __init__(self, redis_client: RedisClient):
+    def __init__(self, redis_client: RedisClient, executor=None):
         self.redis = redis_client
+        self.executor = executor  # OKX 잔고 실시간 동기화용
         self.config = load_config()
         self.risk_cfg = self.config["risk"]
         self.cooldown_cfg = self.config["cooldown"]
+        self._last_balance_sync = 0  # 잔고 동기화 throttle
 
         self._state = {
             "daily_pnl_pct": 0.0,
@@ -55,12 +57,25 @@ class RiskManager:
         )
 
     async def get_risk_state(self, open_positions: list = None) -> dict:
-        """현재 리스크 상태 조회"""
+        """현재 리스크 상태 조회 — 30초마다 OKX 실잔고 재동기화"""
         if open_positions is None:
             open_positions = []
 
         now = int(time.time())
         cooldown_active = now < self._state["cooldown_until"]
+
+        # OKX 실제 잔고 동기화 (외부 입금/출금/펀딩비/타거래 반영)
+        # throttle: 30초마다 1회 (rate limit + 호출 횟수 절약)
+        if self.executor and (now - self._last_balance_sync) >= 30:
+            try:
+                live_balance = await self.executor.get_balance()
+                if live_balance > 0:
+                    self._state["current_balance"] = live_balance
+                    if live_balance > self._state["peak_balance"]:
+                        self._state["peak_balance"] = live_balance
+                self._last_balance_sync = now
+            except Exception as e:
+                logger.debug(f"OKX 잔고 동기화 실패: {e}")
 
         # 드로다운 계산
         peak = self._state["peak_balance"]

@@ -11,8 +11,8 @@ set -uo pipefail
 
 FORMAT="${1:-text}"
 
-# docker compose 자동 감지
-if command -v docker compose &>/dev/null; then
+# docker compose 자동 감지 — 두 단어 명령 확인은 직접 실행 (command -v 는 단일 단어만)
+if docker compose version &>/dev/null; then
     DC="docker compose"
 elif command -v docker-compose &>/dev/null; then
     DC="docker-compose"
@@ -38,11 +38,13 @@ LAST_LOG=$($DC logs --tail 1 bot 2>&1 | grep -oE '202[0-9]-[0-9]{2}-[0-9]{2} [0-
 
 # 3. 마지막 heartbeat (Redis 에 저장됨)
 HEARTBEAT=$($DC exec -T redis redis-cli get sys:last_heartbeat 2>/dev/null | tr -d '\r\n')
+HB_AGO=-1
 if [ -n "$HEARTBEAT" ] && [ "$HEARTBEAT" != "(nil)" ]; then
-    NOW=$(date +%s)
-    HB_AGO=$((NOW - HEARTBEAT))
-else
-    HB_AGO=-1
+    # 정수인지 확인 (set -u 안전 + 음수 방어)
+    if [[ "$HEARTBEAT" =~ ^[0-9]+$ ]]; then
+        NOW=$(date +%s)
+        HB_AGO=$((NOW - HEARTBEAT))
+    fi
 fi
 
 # 4. 마지막 시그널 평가 시각

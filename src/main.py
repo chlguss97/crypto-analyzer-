@@ -92,10 +92,10 @@ class CryptoAnalyzer:
         self.ml_swing = AdaptiveML(mode="swing")
         self.ml_scalp = AdaptiveML(mode="scalp")
 
-        # 매매 엔진
+        # 매매 엔진 (executor 먼저 생성 → risk_manager 가 참조)
         self.leverage_calc = LeverageCalculator()
-        self.risk_manager = RiskManager(self.redis)
         self.executor = OrderExecutor()
+        self.risk_manager = RiskManager(self.redis, executor=self.executor)
         self.position_manager = PositionManager(self.executor, self.db, self.redis)
 
         # 모니터링
@@ -533,8 +533,12 @@ class CryptoAnalyzer:
         leverage = 25
         if balance <= 0 or sl_dist <= 0 or price <= 0:
             return
-        margin = balance * 0.008 / (sl_dist / price)
-        # 잔고 30% 캡 (Swing 과 일관성, 슬리피지 여유)
+        # 마진 공식: leverage 반드시 포함 (옛 공식은 leverage 미반영으로 손실 25배)
+        # 손실 = 마진 × leverage × sl_dist/price → 의도 0.8% = balance × risk
+        risk_per_trade = 0.008
+        sl_pct_decimal = sl_dist / price
+        margin = (balance * risk_per_trade) / (leverage * sl_pct_decimal)
+        # 잔고 30% 캡
         margin = min(margin, balance * 0.3)
         if margin <= 0:
             return

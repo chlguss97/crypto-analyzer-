@@ -103,10 +103,15 @@ class LeverageCalculator:
         """
         포지션 사이즈 (USDT) 계산.
 
+        손익 공식 (선물):
+            손실(USDT) = 마진 × leverage × (sl_pct/100)
+            의도: 손실 = 잔고 × risk_per_trade
+            → 마진 = 잔고 × risk_per_trade / (leverage × sl_pct/100)
+
         Args:
             balance: 계좌 잔고 (USDT)
-            leverage: 최종 레버리지
-            sl_pct: SL 거리 %
+            leverage: 최종 레버리지 (예: 25)
+            sl_pct: SL 거리 % (예: 0.5)
             size_pct: 등급별 사이즈 비율 (A=1.0, B+=0.75 등)
 
         Returns:
@@ -115,11 +120,13 @@ class LeverageCalculator:
         if sl_pct <= 0 or leverage <= 0:
             return 0
 
-        # 1회 리스크 금액
-        risk_amount = balance * self.risk_per_trade  # 계좌의 0.5%
+        # 1회 리스크 금액 (USDT)
+        risk_amount = balance * self.risk_per_trade
 
-        # 마진 = 리스크 / (SL% / 100)
-        margin = risk_amount / (sl_pct / 100)
+        # 마진 = 리스크 / (leverage × sl_pct/100)
+        # ⚠️ leverage 반드시 포함 — 빠뜨리면 손실이 leverage 배만큼 커짐
+        sl_decimal = sl_pct / 100  # % → decimal (0.5% → 0.005)
+        margin = risk_amount / (leverage * sl_decimal)
 
         # 등급별 사이즈 조절
         margin *= size_pct
@@ -128,9 +135,14 @@ class LeverageCalculator:
         max_margin = balance * 0.3
         margin = min(margin, max_margin)
 
+        # 음수/이상값 방어
+        if margin < 0:
+            margin = 0
+
         logger.info(
-            f"포지션 사이즈: 잔고 ${balance:.0f} × 리스크 0.5% = ${risk_amount:.2f} | "
-            f"SL {sl_pct:.2f}% | 마진 ${margin:.2f} × {leverage}x = ${margin * leverage:.0f}"
+            f"포지션 사이즈: 잔고 ${balance:.0f} × 리스크 {self.risk_per_trade*100:.2f}% "
+            f"= ${risk_amount:.2f} | SL {sl_pct:.2f}% × {leverage}x | "
+            f"마진 ${margin:.2f} → 노션 ${margin * leverage:.0f}"
         )
 
         return round(margin, 2)

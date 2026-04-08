@@ -40,7 +40,7 @@ fi
 echo
 
 # docker compose 또는 docker-compose 자동 감지
-if command -v docker compose &>/dev/null; then
+if docker compose version &>/dev/null; then
     DC="docker compose"
 elif command -v docker-compose &>/dev/null; then
     DC="docker-compose"
