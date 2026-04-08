@@ -85,12 +85,14 @@ class Database:
         DATA_DIR.mkdir(parents=True, exist_ok=True)
         self._db = await aiosqlite.connect(str(self.db_path))
         self._db.row_factory = aiosqlite.Row
-        # WAL 모드 — asyncio + 다중 코루틴 동시 read/write 안정성
-        await self._db.execute("PRAGMA journal_mode=WAL")
-        await self._db.execute("PRAGMA synchronous=NORMAL")
+        # WAL 모드 비활성 — docker volume + 강제 종료 환경에서 손상 발생
+        # (2026-04-08 사고 후 롤백). 봇 부하가 작아 동시성 이점 미미.
+        # synchronous=FULL 로 전환해 손상 방지 강화
+        await self._db.execute("PRAGMA journal_mode=DELETE")  # 기본 journal 모드
+        await self._db.execute("PRAGMA synchronous=FULL")     # 안전 우선
         await self._db.executescript(SCHEMA_SQL)
         await self._db.commit()
-        logger.info(f"SQLite 연결: {self.db_path} (WAL)")
+        logger.info(f"SQLite 연결: {self.db_path} (journal=DELETE, sync=FULL)")
 
     async def close(self):
         if self._db:
