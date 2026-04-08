@@ -933,9 +933,15 @@ class CryptoAnalyzer:
             await asyncio.sleep(30)
 
     async def periodic_heartbeat(self):
-        """헬스체크 (60초마다)"""
+        """헬스체크 (60초마다) — heartbeat + 잔고 캐시"""
         while self._running:
             await self.redis.set("sys:last_heartbeat", str(int(_time.time())))
+            try:
+                bal = await self.executor.get_balance()
+                if bal and bal > 0:
+                    await self.redis.set("sys:balance", f"{bal:.2f}")
+            except Exception as e:
+                logger.warning(f"잔고 캐시 실패: {e}")
             await asyncio.sleep(60)
 
     # ── 대시보드 서버 ──

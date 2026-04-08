@@ -58,9 +58,13 @@ ACTIVE_POS=$($DC exec -T redis redis-cli --scan --pattern "pos:active:*" 2>/dev/
 AUTOTRADING=$($DC exec -T redis redis-cli get sys:autotrading 2>/dev/null | tr -d '\r\n')
 [ -z "$AUTOTRADING" ] && AUTOTRADING="unknown"
 
-# 7. 잔고 (마지막 로그에서)
-BALANCE=$($DC logs --tail 500 bot 2>&1 | grep -oE '잔고 \$[0-9.]+' | tail -1 | grep -oE '\$[0-9.]+')
-[ -z "$BALANCE" ] && BALANCE="?"
+# 7. 잔고 (Redis 캐시 — main.py periodic_heartbeat 가 60초마다 갱신)
+BALANCE_RAW=$($DC exec -T redis redis-cli get sys:balance 2>/dev/null | tr -d '\r\n')
+if [ -n "$BALANCE_RAW" ] && [ "$BALANCE_RAW" != "(nil)" ]; then
+    BALANCE="\$$BALANCE_RAW"
+else
+    BALANCE="?"
+fi
 
 # 8. 학습 중 여부 (지난 5분 로그에서 [HIST] 또는 [SCHED])
 LEARNING=$($DC logs --since 5m bot 2>&1 | grep -E "\[HIST\]|\[SCHED\]" | tail -1)
