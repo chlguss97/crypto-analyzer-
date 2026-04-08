@@ -80,13 +80,14 @@ CONFLUENCE_BONUSES = [
     },
 ]
 
-# 정규화 기준: 한 방향 시그널 + 보너스 합의 현실적 최대값
-# WEIGHTS 합 = 26.0 (15 시그널). 한 방향 분산 = ~13. 보너스 합 = 9.5.
-# 이전 12.0 은 보너스 미고려 → 보너스 2~3개만으로 점수 천장(10/10) 도달 → A+ 등급 인플레이션
-# 18.0 = 분산 한 방향 ~13 + 합리적 보너스 ~5 (BUG #4)
-REALISTIC_MAX_SCORE = 18.0
-# 보너스 cap (이중 안전): 한 거래가 5개 이상의 보너스를 동시에 받지 않도록
-MAX_CONFLUENCE_BONUS = 5.0
+# 정규화 기준: 한 방향 시그널의 현실적 최대값
+# 12.0 = grader.GRADES 임계값 (A+=9.0, A=8.0, ..., 거부=6.0) 과 비례 호환
+# 이전에 18.0 으로 올렸다가 grader 임계값 6.0 과 호환성 깨져 모든 진입 거부 → 12.0 복원
+# 보너스 폭주 (점수 인플레이션) 는 MAX_CONFLUENCE_BONUS cap 으로만 제어
+REALISTIC_MAX_SCORE = 12.0
+# 보너스 cap — CONFLUENCE_BONUSES 합산 최대 9.5점이지만, 2~3개 동시 발동까지만 인정
+# (BUG #4 잠재 위험 — 보너스 폭주로 약한 raw 가 A+ 등급 트리거하는 것 방지)
+MAX_CONFLUENCE_BONUS = 3.0
 
 
 def _zones_overlap(signals: dict) -> bool:
