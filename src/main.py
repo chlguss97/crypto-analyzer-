@@ -991,6 +991,7 @@ class CryptoAnalyzer:
         dash_module.position_manager = self.position_manager
         dash_module.executor = self.executor
         dash_module.main_event_loop = asyncio.get_running_loop()
+        dash_module.telegram_bot = self.telegram  # 자동매매 토글 알림용
 
         def _run():
             config = uvicorn.Config(app, host="0.0.0.0", port=8000, log_level="warning")

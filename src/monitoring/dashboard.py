@@ -75,6 +75,7 @@ _bg_task = None
 # main.py 에서 주입 (다른 스레드에서 PositionManager 호출용)
 position_manager = None
 main_event_loop = None
+telegram_bot = None  # main.py 에서 주입 — 자동매매 토글 알림용
 
 
 # ── Request Models ──
@@ -689,11 +690,22 @@ async def get_live_positions():
 
 @app.post("/api/autotrading")
 async def toggle_autotrading():
-    """자동매매 ON/OFF 토글"""
+    """자동매매 ON/OFF 토글 + 텔레그램 알림"""
     current = await redis.get("sys:autotrading") or "off"
     new_state = "off" if current == "on" else "on"
     await redis.set("sys:autotrading", new_state)
     logger.info(f"자동매매: {new_state.upper()}")
+
+    # 텔레그램 알림 (다른 스레드 → main loop 안전 호출)
+    if telegram_bot is not None and main_event_loop is not None:
+        try:
+            _run_in_main_loop(
+                telegram_bot.notify_bot_status(f"자동매매 {new_state.upper()}"),
+                timeout=5.0,
+            )
+        except Exception as e:
+            logger.debug(f"자동매매 토글 텔레그램 알림 실패: {e}")
+
     return {"autotrading": new_state}
 
 
