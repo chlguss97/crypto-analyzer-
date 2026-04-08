@@ -57,6 +57,9 @@ class Position:
             "sl": None, "tp1": None, "tp2": None, "tp3": None
         }
 
+        # 청산 시도 횟수 (cap 으로 무한 보류 방지 — BUG #C2)
+        self.close_attempts = 0
+
     @property
     def hold_minutes(self) -> int:
         return (int(time.time()) - self.entry_time) // 60
@@ -350,7 +353,7 @@ class PositionManager:
         pos.algo_ids = algo_ids
         self.positions[symbol] = pos
 
-        await self.redis.hset(f"pos:active:{symbol}", pos.to_dict())
+        await self.redis.hset(f"pos:active:{symbol}", pos.to_dict(), ttl=86400)
 
         if not algo_ids.get("tp1"):
             logger.warning("⚠️  TP1 등록 실패 → 봇 폴링이 가격 기반으로 백업")
@@ -482,7 +485,7 @@ class PositionManager:
 
         # 6. Redis 상태 갱신 (대시보드 hold_minutes/current_sl 실시간 표시)
         try:
-            await self.redis.hset(f"pos:active:{symbol}", pos.to_dict())
+            await self.redis.hset(f"pos:active:{symbol}", pos.to_dict(), ttl=86400)
         except Exception as e:
             logger.debug(f"Redis 포지션 갱신 실패: {e}")
 
@@ -767,7 +770,7 @@ class PositionManager:
             await self._move_sl(pos, new_sl_price, label="manual")
             pos.manual_sl_override = True  # self_heal 이 안 덮음
             try:
-                await self.redis.hset(f"pos:active:{symbol}", pos.to_dict())
+                await self.redis.hset(f"pos:active:{symbol}", pos.to_dict(), ttl=86400)
             except Exception:
                 pass
             logger.info(
@@ -818,7 +821,7 @@ class PositionManager:
             pos.tp1_price = new_tp_price
             pos.manual_tp_override = True
             try:
-                await self.redis.hset(f"pos:active:{symbol}", pos.to_dict())
+                await self.redis.hset(f"pos:active:{symbol}", pos.to_dict(), ttl=86400)
             except Exception:
                 pass
             tp_gain_pct = abs(new_tp_price - pos.entry_price) / pos.entry_price * 100 * pos.leverage
@@ -894,8 +897,10 @@ class PositionManager:
 
         if not order:
             # 🚨 청산 실패 — 좀비 방지: SL 알고 긴급 재등록 + 메모리 유지
+            pos.close_attempts += 1
             logger.error(
-                f"🚨 청산 실패 ({reason}) → SL 긴급 재등록 + 다음 폴링 재시도"
+                f"🚨 청산 실패 ({reason}) {pos.close_attempts}/10 → "
+                f"SL 긴급 재등록 + 다음 폴링 재시도"
             )
             try:
                 # 호출자가 _cancel_all_algos 를 미리 불렀으므로 SL 다시 만들어야 함
@@ -910,6 +915,23 @@ class PositionManager:
                     )
             except Exception as e:
                 logger.critical(f"💀 SL 재등록 예외: {e}")
+
+            # 10회 연속 실패 시 자동매매 OFF + 텔레그램 emergency 알림 (BUG #C2)
+            if pos.close_attempts >= 10:
+                logger.critical(
+                    f"💀💀 청산 10회 연속 실패 ({pos.symbol}) → 자동매매 OFF + 수동 개입 필수"
+                )
+                try:
+                    await self.redis.set("sys:autotrading", "off")
+                except Exception:
+                    pass
+                if self.telegram:
+                    try:
+                        await self.telegram.notify_emergency(
+                            f"💀 {pos.symbol} 청산 10회 실패 — 자동매매 OFF, 수동 개입 필요"
+                        )
+                    except Exception:
+                        pass
             return  # 메모리 유지 → 다음 폴링에서 _full_close 재호출
 
         # 청산 성공 — fill 정보 추출
@@ -1010,11 +1032,31 @@ class PositionManager:
         거래소 포지션과 동기화 (재시작 시).
         - 거래소에 포지션 있는데 봇 메모리에 없으면 → Redis 에서 옛 상태 복원 시도
         - Redis 에도 없으면 → 보호 알고만 재등록 (긴급 보호)
+        - fetch 실패 시 3회 재시도 (BUG #H3 — 봇 시작 시 일시 장애 대비)
         """
-        try:
-            exchange_positions = await self.executor.get_positions()
-        except Exception as e:
-            logger.error(f"sync_positions 거래소 조회 실패: {e}")
+        exchange_positions = None
+        for attempt in range(3):
+            try:
+                exchange_positions = await self.executor.get_positions()
+                break
+            except Exception as e:
+                logger.error(
+                    f"sync_positions 거래소 조회 실패 ({attempt+1}/3): {e}"
+                )
+                if attempt < 2:
+                    await asyncio.sleep(2.0 * (attempt + 1))
+
+        if exchange_positions is None:
+            logger.critical(
+                "💀 sync_positions 3회 연속 실패 — 거래소 상태 모름. 수동 확인 필요!"
+            )
+            if self.telegram:
+                try:
+                    await self.telegram.notify_emergency(
+                        "💀 봇 재시작 후 거래소 포지션 조회 3회 실패 — 수동 확인 필요"
+                    )
+                except Exception:
+                    pass
             return
 
         for ep in exchange_positions:
@@ -1045,6 +1087,12 @@ class PositionManager:
             if redis_data:
                 logger.info(f"Redis 옛 상태 발견 → Position 복원 시도")
                 try:
+                    # direction 분기 — long: SL=entry-1%, TP=entry+1~3% / short: 반대 (BUG #C1)
+                    is_long = (ex_dir == "long")
+                    sl_default = ex_entry * (0.99 if is_long else 1.01)
+                    tp1_default = ex_entry * (1.01 if is_long else 0.99)
+                    tp2_default = ex_entry * (1.02 if is_long else 0.98)
+                    tp3_default = ex_entry * (1.03 if is_long else 0.97)
                     pos = Position(
                         trade_id=int(redis_data.get("trade_id", -int(time.time()))),
                         symbol=symbol,
@@ -1052,10 +1100,10 @@ class PositionManager:
                         entry_price=ex_entry,
                         size=ex_size,
                         leverage=ex_lev,
-                        sl_price=float(redis_data.get("sl_price", ex_entry * 0.99)),
-                        tp1_price=float(redis_data.get("tp1_price", ex_entry * 1.01)),
-                        tp2_price=float(redis_data.get("tp2_price", ex_entry * 1.02)),
-                        tp3_price=float(redis_data.get("tp3_price", ex_entry * 1.03)),
+                        sl_price=float(redis_data.get("sl_price", sl_default)),
+                        tp1_price=float(redis_data.get("tp1_price", tp1_default)),
+                        tp2_price=float(redis_data.get("tp2_price", tp2_default)),
+                        tp3_price=float(redis_data.get("tp3_price", tp3_default)),
                         grade=redis_data.get("grade", "RESTORED"),
                         score=float(redis_data.get("score", 0) or 0),
                         signals_snapshot={},

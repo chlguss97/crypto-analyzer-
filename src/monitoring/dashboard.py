@@ -708,10 +708,11 @@ class ManualTpRequest(BaseModel):
     price: float                   # 새 TP1 가격
 
 
-def _run_in_main_loop(coro, timeout: float = 8.0):
+def _run_in_main_loop(coro, timeout: float = 15.0):
     """
     다른 스레드(dashboard FastAPI)에서 main.py 이벤트 루프의 코루틴을 안전 실행.
     asyncio.run_coroutine_threadsafe → Future → result()
+    timeout=15s — check_positions 가 lock 점유 중일 때도 충분 (BUG #H4)
     """
     import asyncio as _aio
     if main_event_loop is None or position_manager is None:

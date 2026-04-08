@@ -272,12 +272,14 @@ class RedisClient:
             return json.loads(val)
         return None
 
-    async def hset(self, key: str, mapping: dict):
+    async def hset(self, key: str, mapping: dict, ttl: int = None):
         if not self._client:
             return
         try:
             for field, value in mapping.items():
                 await self._client.hset(key, field, value)
+            if ttl:
+                await self._client.expire(key, ttl)
         except Exception as e:
             logger.debug(f"Redis hset error ({key}): {e}")
 
