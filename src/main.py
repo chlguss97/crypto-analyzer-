@@ -333,7 +333,7 @@ class CryptoAnalyzer:
                         await self._execute_swing(swing_grade, swing_agg, risk_state)
 
     async def _evaluate_scalp(self):
-        """스캘핑 시그널 평가 + 자동매매 (15초 주기)"""
+        """스캘핑 시그널 평가 + 자동매매 (5초 주기)"""
         import time as _t
 
         # 일일 손실 한도 체크 (-10%)
@@ -346,7 +346,21 @@ class CryptoAnalyzer:
 
         scalp_sig = await self.run_scalp_signal()
         if not scalp_sig:
+            logger.debug("[SCALP] run_scalp_signal None — 캔들 부족 또는 ScalpEngine 오류")
             return
+
+        # 디버깅용 INFO 로그 (60초마다 한 번만 — INFO 폭주 방지)
+        now_ts = _t.time()
+        if now_ts - getattr(self, "_last_scalp_log", 0) >= 60:
+            self._last_scalp_log = now_ts
+            logger.info(
+                f"[SCALP] 점수: {scalp_sig.get('score', 0):.2f} | "
+                f"방향: {scalp_sig.get('direction', 'neutral')} | "
+                f"임계값: {getattr(self.ml_scalp, 'entry_threshold', '?')} | "
+                f"SMC: {scalp_sig.get('smc_entry', False)} | "
+                f"급변동: {scalp_sig.get('explosive_mode', False)} | "
+                f"세션: {scalp_sig.get('session', '?')}"
+            )
 
         price_str = await self.redis.get("rt:price:BTC-USDT-SWAP")
         current_price = float(price_str) if price_str else 0
