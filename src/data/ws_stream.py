@@ -97,6 +97,9 @@ class WebSocketStream:
                 await self._handle_trade(trade)
         elif channel.startswith("candle"):
             await self._handle_candle(items[0])
+        else:
+            # OKX 가 새 채널을 보내는 경우 감지 (운영 모니터링 강화)
+            logger.debug(f"WS unknown channel: {channel}")
 
     async def _handle_ticker(self, ticker: dict):
         """틱 데이터 → Redis"""

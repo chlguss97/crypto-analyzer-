@@ -85,9 +85,12 @@ class Database:
         DATA_DIR.mkdir(parents=True, exist_ok=True)
         self._db = await aiosqlite.connect(str(self.db_path))
         self._db.row_factory = aiosqlite.Row
+        # WAL 모드 — asyncio + 다중 코루틴 동시 read/write 안정성
+        await self._db.execute("PRAGMA journal_mode=WAL")
+        await self._db.execute("PRAGMA synchronous=NORMAL")
         await self._db.executescript(SCHEMA_SQL)
         await self._db.commit()
-        logger.info(f"SQLite 연결: {self.db_path}")
+        logger.info(f"SQLite 연결: {self.db_path} (WAL)")
 
     async def close(self):
         if self._db:
