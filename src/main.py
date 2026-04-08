@@ -462,30 +462,42 @@ class CryptoAnalyzer:
         leverage = lev["leverage"]
         sizing_mode = self.config["risk"].get("sizing_mode", "margin_loss_cap")
 
-        # ── 사이즈 + SL 계산 ──
+        # ── 사이즈 + SL/TP 계산 ──
+        risk_cfg = self.config["risk"]
+
         if sizing_mode == "margin_loss_cap":
-            # 사용자 의도: 마진 손실 = 마진 × max_loss% 가 SL
-            # → SL 가격 거리 = max_loss% / leverage
-            risk_cfg = self.config["risk"]
+            # 사용자 의도: SL/TP 모두 마진 손익 % 기준
+            # 가격 거리 = 마진 % / leverage
             max_loss_pct = risk_cfg.get("max_margin_loss_pct", 10.0)
+            tp1_gain_pct = risk_cfg.get("tp1_margin_gain_pct", 15.0)
             margin_pct = risk_cfg.get("margin_pct", 0.95)
             use_indicator = risk_cfg.get("use_indicator_sl", True)
+            min_ind_pct = risk_cfg.get("min_indicator_sl_price_pct", 0.05)
 
+            # SL 거리: 마진 한도
             margin_limit_dist = price * (max_loss_pct / leverage / 100)
-
             if use_indicator:
-                # 매물대(ATR/지표) 기반 SL 과 마진 손실 한도 중 더 가까운 것 사용
                 indicator_dist = self._last_fast.get("atr", {}).get("sl_distance", margin_limit_dist)
+                # 매물대가 너무 가까우면 (즉시 청산 위험) 무시
+                if indicator_dist < price * (min_ind_pct / 100):
+                    indicator_dist = margin_limit_dist
                 sl_dist = min(indicator_dist, margin_limit_dist)
             else:
                 sl_dist = margin_limit_dist
 
+            # TP 거리: 마진 손익 % / leverage
+            tp1_dist = price * (tp1_gain_pct / leverage / 100)
+            # TP2/TP3 는 러너 모드에서 미사용 (호환용으로 약간 큰 값)
+            tp2_dist = tp1_dist * 2
+            tp3_dist = tp1_dist * 4
+
             margin = balance * margin_pct
             logger.info(
                 f"[SWING-SIZING] balance ${balance:.2f} × {margin_pct*100:.0f}% = "
-                f"margin ${margin:.2f} | leverage {leverage}x | "
-                f"SL dist ${sl_dist:.2f} ({sl_dist/price*100:.3f}% 가격, "
-                f"{sl_dist/price*100*leverage:.1f}% 마진 손실)"
+                f"margin ${margin:.2f} | {leverage}x | "
+                f"SL ${sl_dist:.1f} ({sl_dist/price*100:.3f}% 가격 = "
+                f"{sl_dist/price*100*leverage:.1f}% 마진 손실) | "
+                f"TP1 ${tp1_dist:.1f} ({tp1_dist/price*100*leverage:.1f}% 마진 익절)"
             )
         else:
             # 옛 방식: risk_per_trade 기반
@@ -496,14 +508,12 @@ class CryptoAnalyzer:
             sl_dist = price * lev["sl_pct"] / 100
             if sl_dist <= 0:
                 sl_dist = price * 0.003
-
-        # TP 거리 (config R-multiple)
-        tp1_rr = self.config["risk"].get("tp1_rr", 1.5)
-        tp2_rr = self.config["risk"].get("tp2_rr", 2.5)
-        tp3_rr = self.config["risk"].get("tp3_rr", 4.0)
-        tp1_dist = sl_dist * tp1_rr
-        tp2_dist = sl_dist * tp2_rr
-        tp3_dist = sl_dist * tp3_rr
+            tp1_rr = risk_cfg.get("tp1_rr", 1.5)
+            tp2_rr = risk_cfg.get("tp2_rr", 2.5)
+            tp3_rr = risk_cfg.get("tp3_rr", 4.0)
+            tp1_dist = sl_dist * tp1_rr
+            tp2_dist = sl_dist * tp2_rr
+            tp3_dist = sl_dist * tp3_rr
 
         if direction == "long":
             sl = price - sl_dist
@@ -574,17 +584,30 @@ class CryptoAnalyzer:
 
         if sizing_mode == "margin_loss_cap":
             max_loss_pct = risk_cfg.get("max_margin_loss_pct", 10.0)
+            tp1_gain_pct = risk_cfg.get("tp1_margin_gain_pct", 15.0)
             margin_pct = risk_cfg.get("margin_pct", 0.95)
             use_indicator = risk_cfg.get("use_indicator_sl", True)
+            min_ind_pct = risk_cfg.get("min_indicator_sl_price_pct", 0.05)
 
             margin_limit_dist = price * (max_loss_pct / leverage / 100)
-            sl_dist = min(sl_dist_indicator, margin_limit_dist) if use_indicator else margin_limit_dist
+            if use_indicator:
+                ind_dist = sl_dist_indicator
+                if ind_dist < price * (min_ind_pct / 100):
+                    ind_dist = margin_limit_dist
+                sl_dist = min(ind_dist, margin_limit_dist)
+            else:
+                sl_dist = margin_limit_dist
+
+            tp1_dist = price * (tp1_gain_pct / leverage / 100)
+            tp2_dist = tp1_dist * 2
+            tp3_dist = tp1_dist * 4
+
             margin = balance * margin_pct
             logger.info(
                 f"[SCALP-SIZING] balance ${balance:.2f} × {margin_pct*100:.0f}% = "
-                f"margin ${margin:.2f} | leverage {leverage}x | "
-                f"SL dist ${sl_dist:.2f} ({sl_dist/price*100:.3f}% 가격, "
-                f"{sl_dist/price*100*leverage:.1f}% 마진 손실)"
+                f"margin ${margin:.2f} | {leverage}x | "
+                f"SL ${sl_dist:.1f} ({sl_dist/price*100*leverage:.1f}% 마진 손실) | "
+                f"TP1 ${tp1_dist:.1f} ({tp1_dist/price*100*leverage:.1f}% 마진 익절)"
             )
         else:
             risk_per_trade = 0.008
@@ -592,17 +615,15 @@ class CryptoAnalyzer:
             margin = (balance * risk_per_trade) / (leverage * sl_pct_decimal)
             margin = min(margin, balance * 0.3)
             sl_dist = sl_dist_indicator
+            tp1_rr = risk_cfg.get("tp1_rr_scalp", 1.0)
+            tp2_rr = risk_cfg.get("tp2_rr_scalp", 1.6)
+            tp3_rr = risk_cfg.get("tp3_rr_scalp", 2.5)
+            tp1_dist = sl_dist * tp1_rr
+            tp2_dist = sl_dist * tp2_rr
+            tp3_dist = sl_dist * tp3_rr
 
         if margin <= 0:
             return
-
-        # TP 거리 — sl_dist 기반 R-multiple (스캘핑은 좀 작은 R)
-        tp1_rr = risk_cfg.get("tp1_rr_scalp", 1.0)
-        tp2_rr = risk_cfg.get("tp2_rr_scalp", 1.6)
-        tp3_rr = risk_cfg.get("tp3_rr_scalp", 2.5)
-        tp1_dist = sl_dist * tp1_rr
-        tp2_dist = sl_dist * tp2_rr
-        tp3_dist = sl_dist * tp3_rr
 
         if direction == "long":
             sl = price - sl_dist
@@ -923,7 +944,13 @@ class CryptoAnalyzer:
         """uvicorn 대시보드를 별도 스레드로 실행 (메인 루프 블로킹 방지)"""
         import uvicorn
         import threading
+        import src.monitoring.dashboard as dash_module
         from src.monitoring.dashboard import app
+
+        # 다른 스레드에서 PositionManager 호출용 — 이벤트 루프 + 인스턴스 주입
+        dash_module.position_manager = self.position_manager
+        dash_module.executor = self.executor
+        dash_module.main_event_loop = asyncio.get_running_loop()
 
         def _run():
             config = uvicorn.Config(app, host="0.0.0.0", port=8000, log_level="warning")
@@ -946,7 +973,8 @@ class CryptoAnalyzer:
         await self.redis.set("sys:bot_status", "running")
         await self.redis.set("sys:autotrading", "off")  # 초기 OFF (웹에서 켜기)
         await self.redis.set("sys:ml_enabled", "on")
-        await self.redis.set("sys:active_model", "both")
+        # 사용자 의도: 스캘핑 중점
+        await self.redis.set("sys:active_model", "scalp")
         await self.telegram.notify_bot_status("running")
 
         tasks = [

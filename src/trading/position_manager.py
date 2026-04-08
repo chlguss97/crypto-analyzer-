@@ -47,6 +47,10 @@ class Position:
         self.best_price = 0.0       # 러너 모드 진입 후 최고/최저가
         self.trail_distance = 0.0   # 러너 트레일 거리 (가격 단위, 절대값)
 
+        # 사용자 수동 SL/TP 수정 → self_heal/트레일이 안 덮음
+        self.manual_sl_override = False
+        self.manual_tp_override = False
+
         # OKX 알고 주문 ID 추적 (cancel/replace 용)
         # 러너 모드에서는 tp2/tp3 사용 안 함 — 호환용으로만 유지
         self.algo_ids: dict[str, str | None] = {
@@ -98,6 +102,8 @@ class Position:
             "runner_mode": 1 if self.runner_mode else 0,
             "best_price": self.best_price,
             "trail_distance": self.trail_distance,
+            "manual_sl_override": 1 if self.manual_sl_override else 0,
+            "manual_tp_override": 1 if self.manual_tp_override else 0,
             # dict → JSON 문자열
             "algo_ids": json.dumps(self.algo_ids),
             "hold_minutes": self.hold_minutes,
@@ -129,8 +135,23 @@ class PositionManager:
 
     # 러너 트레일링: TP1 50% 익절 + 잔여 50% 는 트레일링 SL 로 추세 끝까지
     TP1_CLOSE_PCT = 0.5
-    # 러너 트레일 거리 = TP1 거리 × 이 비율 (가격이 새 고/저 갱신 시 SL을 이만큼 뒤에 둠)
+    # 옛 ratio (호환용) — config 의 trail_margin_pct 가 우선
     RUNNER_TRAIL_RATIO = 0.5
+
+    def _get_trail_distance(self, pos: "Position", price: float) -> float:
+        """
+        러너 트레일 거리 계산 — 마진 % 기반
+        config trail_margin_pct = 5 → 가격 거리 = 5% / leverage
+        """
+        risk_cfg = self.config.get("risk", {})
+        trail_margin_pct = risk_cfg.get("trail_margin_pct", 5.0)
+        min_price_pct = risk_cfg.get("trail_min_price_pct", 0.2)
+
+        # 마진 손실 % / leverage = 가격 변동 %
+        dist_from_margin = price * (trail_margin_pct / pos.leverage / 100)
+        # 최소 노이즈 보호
+        dist_min = price * (min_price_pct / 100)
+        return max(dist_from_margin, dist_min)
 
     # OKX BTC-USDT-SWAP 최소 주문: 1 contract = 0.01 BTC
     MIN_ORDER_SIZE_BTC = 0.01
@@ -435,11 +456,7 @@ class PositionManager:
 
                     pos.runner_mode = True
                     pos.best_price = current_price
-                    tp1_dist = abs(pos.tp1_price - pos.entry_price)
-                    pos.trail_distance = max(
-                        tp1_dist * self.RUNNER_TRAIL_RATIO,
-                        pos.entry_price * 0.003,
-                    )
+                    pos.trail_distance = self._get_trail_distance(pos, current_price)
                     logger.info(
                         f"✅ 서버 TP1 자동 체결 감지 → SL 본전 ${new_sl:.0f} | "
                         f"🏃 러너 모드 ON (트레일 ${pos.trail_distance:.1f})"
@@ -470,11 +487,11 @@ class PositionManager:
             logger.debug(f"Redis 포지션 갱신 실패: {e}")
 
     async def _self_heal_algos(self, pos: "Position"):
-        """SL/TP 알고가 등록 실패해서 None 이면 재등록 시도"""
+        """SL/TP 알고가 등록 실패해서 None 이면 재등록 시도 (수동 override 도 존중)"""
         if pos.remaining_size <= 0:
             return
 
-        # SL 자동 복구 (가장 중요)
+        # SL 자동 복구 — 사용자 수동 수정한 경우에도 None 이면 그 가격으로 재등록
         if not pos.algo_ids.get("sl"):
             try:
                 new_id = await self.executor.set_stop_loss(
@@ -491,7 +508,9 @@ class PositionManager:
             try:
                 small = pos.size < self.MIN_ORDER_SIZE_BTC * 2
                 tp1_size = pos.remaining_size if small else (pos.remaining_size * self.TP1_CLOSE_PCT)
-                tp1_size = round(tp1_size, 6)
+                # 0.01 floor
+                tp1_size = math.floor(tp1_size / self.MIN_ORDER_SIZE_BTC) * self.MIN_ORDER_SIZE_BTC
+                tp1_size = round(tp1_size, 4)
                 if tp1_size >= self.MIN_ORDER_SIZE_BTC:
                     new_id = await self.executor.set_take_profit(
                         pos.direction, tp1_size, pos.tp1_price, level=1
@@ -537,24 +556,22 @@ class PositionManager:
                 await self._full_close(pos, "tp1_residual")
                 return
 
-            # SL → 본전 + 수수료 보상
+            # SL → 본전 + 수수료 보상 (manual override 도 본절은 봇이 진행 — 안전)
             fee_offset = pos.entry_price * 0.001
             new_sl = pos.entry_price + fee_offset if pos.direction == "long" \
                 else pos.entry_price - fee_offset
             await self._move_sl(pos, new_sl, label="본절")
+            pos.manual_sl_override = False  # TP1 후 본절은 봇 자동 진행
 
-            # 러너 모드 활성화
+            # 러너 모드 활성화 — 트레일 거리는 마진 % 기반
             pos.runner_mode = True
             pos.best_price = current_price
-            tp1_distance = abs(pos.tp1_price - pos.entry_price)
-            pos.trail_distance = max(
-                tp1_distance * self.RUNNER_TRAIL_RATIO,
-                pos.entry_price * 0.003,  # 최소 0.3% 가격 — 노이즈 방어
-            )
+            pos.trail_distance = self._get_trail_distance(pos, current_price)
 
             logger.info(
                 f"✅ TP1 익절 50% @ ${pos.tp1_price:.0f} → SL 본전 ${new_sl:.0f} | "
-                f"🏃 러너 모드 ON (트레일 ${pos.trail_distance:.1f})"
+                f"🏃 러너 모드 ON (트레일 ${pos.trail_distance:.1f} = "
+                f"{pos.trail_distance/current_price*100*pos.leverage:.1f}% 마진)"
             )
             return
 
@@ -563,7 +580,20 @@ class PositionManager:
             await self._update_runner_trail(pos, current_price)
 
     async def _update_runner_trail(self, pos: Position, current_price: float):
-        """러너 모드: 가격이 새 고/저 갱신 시 트레일링 SL 끌어올림"""
+        """
+        러너 모드: 가격이 새 고/저 갱신 시 트레일링 SL 끌어올림
+        - 사용자가 SL 수동 수정한 경우 (manual_sl_override) 트레일 OFF
+        """
+        if pos.manual_sl_override:
+            # 수동 SL 우선 — 단지 best_price 만 업데이트
+            if pos.direction == "long":
+                if current_price > pos.best_price:
+                    pos.best_price = current_price
+            else:
+                if current_price < pos.best_price or pos.best_price == 0:
+                    pos.best_price = current_price
+            return
+
         moved = False
         if pos.direction == "long":
             if current_price > pos.best_price:
@@ -573,7 +603,7 @@ class PositionManager:
                     await self._move_sl(pos, new_sl, label="러너트레일")
                     moved = True
         else:
-            if current_price < pos.best_price:
+            if current_price < pos.best_price or pos.best_price == 0:
                 pos.best_price = current_price
                 new_sl = current_price + pos.trail_distance
                 if new_sl < pos.current_sl:
@@ -708,6 +738,95 @@ class PositionManager:
                 pos = self.positions[symbol]
                 await self._cancel_all_algos(pos)
                 await self._full_close(pos, reason)
+
+    # ── 사용자 수동 SL/TP 수정 (대시보드에서 호출) ──
+
+    async def manual_update_sl(self, symbol: str, new_sl_price: float) -> dict:
+        """
+        사용자가 대시보드에서 SL 가격 직접 수정.
+        - sanity check: 방향 일치 (long: SL < entry, short: SL > entry)
+        - cancel old SL algo + 새 SL 등록
+        - manual_override 플래그 set → self_heal 이 덮어쓰지 않음
+        """
+        async with self._get_lock(symbol):
+            if symbol not in self.positions:
+                return {"ok": False, "reason": "no_position"}
+            pos = self.positions[symbol]
+
+            # sanity: SL 가격이 방향에 맞는지
+            if pos.direction == "long" and new_sl_price >= pos.entry_price:
+                return {"ok": False, "reason": "long_sl_must_be_below_entry"}
+            if pos.direction == "short" and new_sl_price <= pos.entry_price:
+                return {"ok": False, "reason": "short_sl_must_be_above_entry"}
+
+            # 너무 먼 SL (마진 50% 이상 손실 위험) 거부
+            sl_loss_pct = abs(new_sl_price - pos.entry_price) / pos.entry_price * 100 * pos.leverage
+            if sl_loss_pct > 50:
+                return {"ok": False, "reason": f"sl_too_far ({sl_loss_pct:.0f}% margin loss)"}
+
+            await self._move_sl(pos, new_sl_price, label="manual")
+            pos.manual_sl_override = True  # self_heal 이 안 덮음
+            try:
+                await self.redis.hset(f"pos:active:{symbol}", pos.to_dict())
+            except Exception:
+                pass
+            logger.info(
+                f"📝 사용자 SL 수정: {symbol} {pos.direction.upper()} → ${new_sl_price:.1f} "
+                f"({sl_loss_pct:.1f}% 마진 손실)"
+            )
+            return {"ok": True, "new_sl": new_sl_price, "margin_loss_pct": sl_loss_pct}
+
+    async def manual_update_tp(self, symbol: str, new_tp_price: float) -> dict:
+        """
+        사용자가 대시보드에서 TP1 가격 직접 수정.
+        - sanity check + cancel old TP1 + 새 TP1 등록
+        """
+        async with self._get_lock(symbol):
+            if symbol not in self.positions:
+                return {"ok": False, "reason": "no_position"}
+            pos = self.positions[symbol]
+
+            if pos.tp1_filled:
+                return {"ok": False, "reason": "tp1_already_filled"}
+
+            # sanity: TP 가격이 방향에 맞는지
+            if pos.direction == "long" and new_tp_price <= pos.entry_price:
+                return {"ok": False, "reason": "long_tp_must_be_above_entry"}
+            if pos.direction == "short" and new_tp_price >= pos.entry_price:
+                return {"ok": False, "reason": "short_tp_must_be_below_entry"}
+
+            # 옛 TP1 알고 cancel
+            old_id = pos.algo_ids.get("tp1")
+            if old_id:
+                await self.executor.cancel_algo_order(old_id)
+                pos.algo_ids["tp1"] = None
+
+            # 새 TP1 등록 (사이즈 계산)
+            small = pos.size < self.MIN_ORDER_SIZE_BTC * 2
+            tp1_size = pos.remaining_size if small else (pos.remaining_size * self.TP1_CLOSE_PCT)
+            tp1_size = round(math.floor(tp1_size / self.MIN_ORDER_SIZE_BTC) * self.MIN_ORDER_SIZE_BTC, 4)
+            if tp1_size <= 0:
+                return {"ok": False, "reason": "size_too_small"}
+
+            new_id = await self.executor.set_take_profit(
+                pos.direction, tp1_size, new_tp_price, level=1
+            )
+            if not new_id:
+                return {"ok": False, "reason": "tp_register_failed"}
+
+            pos.algo_ids["tp1"] = new_id
+            pos.tp1_price = new_tp_price
+            pos.manual_tp_override = True
+            try:
+                await self.redis.hset(f"pos:active:{symbol}", pos.to_dict())
+            except Exception:
+                pass
+            tp_gain_pct = abs(new_tp_price - pos.entry_price) / pos.entry_price * 100 * pos.leverage
+            logger.info(
+                f"📝 사용자 TP1 수정: {symbol} {pos.direction.upper()} → ${new_tp_price:.1f} "
+                f"({tp_gain_pct:.1f}% 마진 익절)"
+            )
+            return {"ok": True, "new_tp": new_tp_price, "margin_gain_pct": tp_gain_pct}
 
     async def _partial_close(self, pos: Position, close_pct: float, reason: str):
         """

@@ -72,6 +72,10 @@ collector: CandleCollector | None = None
 executor: OrderExecutor | None = None
 _bg_task = None
 
+# main.py 에서 주입 (다른 스레드에서 PositionManager 호출용)
+position_manager = None
+main_event_loop = None
+
 
 # ── Request Models ──
 
@@ -691,6 +695,56 @@ async def toggle_autotrading():
     await redis.set("sys:autotrading", new_state)
     logger.info(f"자동매매: {new_state.upper()}")
     return {"autotrading": new_state}
+
+
+# ── 사용자 수동 SL/TP 수정 (대시보드에서 호출) ──
+
+class ManualSlRequest(BaseModel):
+    symbol: Optional[str] = None  # 기본: config 심볼
+    price: float                   # 새 SL 가격
+
+class ManualTpRequest(BaseModel):
+    symbol: Optional[str] = None
+    price: float                   # 새 TP1 가격
+
+
+def _run_in_main_loop(coro, timeout: float = 8.0):
+    """
+    다른 스레드(dashboard FastAPI)에서 main.py 이벤트 루프의 코루틴을 안전 실행.
+    asyncio.run_coroutine_threadsafe → Future → result()
+    """
+    import asyncio as _aio
+    if main_event_loop is None or position_manager is None:
+        return {"ok": False, "reason": "main_loop_not_injected"}
+    try:
+        future = _aio.run_coroutine_threadsafe(coro, main_event_loop)
+        return future.result(timeout=timeout)
+    except Exception as e:
+        return {"ok": False, "reason": f"exec_error: {e}"}
+
+
+@app.post("/api/position/sl")
+async def manual_update_sl(req: ManualSlRequest):
+    """사용자가 활성 포지션의 SL 가격 수동 수정"""
+    if position_manager is None:
+        raise HTTPException(503, "position_manager 미주입")
+    sym = req.symbol or config["exchange"]["symbol"]
+    result = _run_in_main_loop(position_manager.manual_update_sl(sym, float(req.price)))
+    if not result.get("ok"):
+        raise HTTPException(400, result.get("reason", "unknown"))
+    return result
+
+
+@app.post("/api/position/tp")
+async def manual_update_tp(req: ManualTpRequest):
+    """사용자가 활성 포지션의 TP1 가격 수동 수정 (TP1 미체결 시만)"""
+    if position_manager is None:
+        raise HTTPException(503, "position_manager 미주입")
+    sym = req.symbol or config["exchange"]["symbol"]
+    result = _run_in_main_loop(position_manager.manual_update_tp(sym, float(req.price)))
+    if not result.get("ok"):
+        raise HTTPException(400, result.get("reason", "unknown"))
+    return result
 
 
 # ── 모델/ML 엔드포인트 ──

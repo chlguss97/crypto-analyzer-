@@ -15,12 +15,20 @@ risk:
   sizing_mode: "margin_loss_cap"
 
   # ── mode_b: margin_loss_cap (사용자 의도) ──
-  # 한 번 진입에 마진의 X% 까지만 손실 허용 → SL = max(매물대SL, 마진손실한도)
-  # 잔고 마진 비율은 margin_pct 로 설정
-  margin_pct: 0.95              # 잔고의 95% 를 마진으로 사용 (작은 계좌)
-  max_margin_loss_pct: 10.0     # 마진 손실 한도 (= 잔고의 margin_pct × max_loss/100)
-                                 # 예: $30 × 0.95 × 0.10 = $2.85 손실
+  # SL/TP 모두 "마진 손익 %" 기준으로 결정 → 가격 거리 = % / leverage
+  # 매물대 SL 은 더 가까울 때만 보호 차원에서 사용
+  margin_pct: 0.95              # 잔고의 95% 를 마진으로 사용
+  max_margin_loss_pct: 10.0     # SL: 마진 손실 한도 % (= 잔고의 ~9.5% 손실)
   use_indicator_sl: true        # true 면 매물대 SL 과 마진 한도 SL 중 가까운 것 사용
+
+  # TP 마진 손익 % (TP1 만 등록, TP2/TP3 는 러너 트레일에 위임)
+  tp1_margin_gain_pct: 15.0     # TP1: 마진 +15% → 50% 익절 후 본절 SL + 러너 ON
+  # 트레일링 (러너 모드 활성화 후)
+  trail_margin_pct: 5.0         # 러너 SL 트레일 거리 = 마진 5% 만큼 뒤에 추격
+  trail_min_price_pct: 0.2      # 트레일 최소 가격 % (노이즈 방어, 마진 기준 미달 시)
+
+  # min_indicator_sl_pct: 매물대 SL 이 너무 가까우면 무시 (즉시 청산 방지)
+  min_indicator_sl_price_pct: 0.05   # 진입가 기준 0.05% 미만 매물대 SL 은 무시
 
   # ── mode_a: risk_per_trade (옛, backtest 호환) ──
   risk_per_trade: 0.005
