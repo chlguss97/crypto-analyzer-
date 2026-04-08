@@ -1,6 +1,96 @@
 # 변경 이력 (CHANGELOG)
 
 대화 기반으로 수정한 모든 사항을 기록합니다.
+전체 커밋 raw 인덱스는 [`COMMIT_LOG.md`](COMMIT_LOG.md) 참조 (자동 생성).
+
+---
+
+## 2026-04-08
+
+### 보호 주문 파이프라인 전면 재구성 (실거래 -90% 사고 후) ★★★
+- **`4832098`** 진입 시 SL+TP1/TP2/TP3 OKX 서버사이드 일괄 등록
+  - `algoClOrdId` underscore 제거 (OKX 영숫자만 허용) — SL/TP 알고 등록 정상화
+  - `check_positions` SL failsafe — 가격이 SL 넘으면 강제 청산
+  - `pnl_pct` 를 leveraged 계좌 PnL로 변경, raw는 `price_pnl_pct` 분리
+  - `_update_trailing` 가격% 트리거 → 가격 기반 TP 도달 감지
+  - 진입 직후 50%/30%/20% TP1/2/3 등록, TP1 → 본전+0.1% 이동(반익본절), TP2 → SL TP1 가격 잠금, TP3 → 잔량 종료
+  - SL 등록 실패 시 진입 즉시 되돌림 (보호 없는 포지션 금지)
+  - `cancel_algo_order` 다중 fallback, `OKX_DEMO=1` 데모 트레이딩 지원
+  - `scripts/test_protection_orders.py` 검증 스크립트 추가
+- **`95192d3`** TP2/TP3 → 러너 트레일링 (옵션 A) 전환
+  - TP1만 50% 고정 익절, 잔여 50%는 트레일링 SL로 추세 끝까지
+  - `Position.runner_mode/best_price/trail_distance` 필드 추가
+  - `_update_runner_trail` — 가격이 새 고/저 갱신 시 SL을 `best_price ± trail_distance`로 추격
+  - 러너 모드는 시간 청산 8시간 hard limit만 적용
+- **`349ac21`** 러너 모드 정밀 검수 — 7개 critical
+  - `get_position_size` 단위 불일치 (contracts → BTC 정규화)
+  - 진입 직후 `fill_price=0` 가능성 → `fetch_positions` 보정, 그래도 실패 시 즉시 청산
+  - TP1 이중 처리 race (서버 자동 + 봇 폴링) → 사이즈 동기화로 즉시 마킹
+  - 알고 주문 `ordType="trigger"` 명시
+  - float 비교 → epsilon (`< 1e-8`)
+  - 러너 trail 최소 거리 `max(tp1_dist*0.5, entry*0.003)` — 노이즈 방어
+  - `_reconcile_external_close` reason 분류 갱신
+
+### 매매 안정성 정밀 분석 ★★★
+- **`baae27b`** 20-pass 정밀 분석 — 8 critical
+  - **leverage 마진 공식 버그** (사용자 -90% 사고 근본 원인): `margin = risk / sl_pct` → `margin = risk / (leverage × sl_pct/100)`
+  - `_execute_scalp` 동일 마진 공식 수정
+  - `RiskManager.current_balance` OKX 30초 throttle 자동 동기화 (`executor` 주입)
+  - 좀비 포지션 방지 강화 — fill/SL 실패 + 청산 실패 → 자동매매 정지 + 텔레그램 emergency
+  - DB `insert_trade` 실패 시 음수 임시 ID로 진행
+  - `_partial_close` fractional contract 거부 방어 (`math.floor`)
+  - **PositionManager `_symbol_locks`** — 동일 symbol 동시 처리 방지
+  - **`_self_heal_algos`** — SL/TP 알고가 None이면 매 폴링마다 자동 재등록
+  - **`sync_positions` 실제 구현** — 거래소 포지션 발견 시 Redis에서 복원, 없으면 긴급 SL + 텔레그램
+- **`6ca4b4e`** 5+회 정밀 분석 — 8 critical/high
+  - `_full_close` 가 close 실패 시 좀비 → SL 긴급 재등록 + 메모리 유지 + 다음 폴링 재시도
+  - `_finalize_position()` 신설 — DB/Redis/메모리/텔레그램/ML 일관 처리 (small position TP1 100% 케이스 정상 정리)
+  - `notify_exit` 누락 → `PositionManager.telegram` 주입
+- **`4b64866`** 8개 추가 정밀 검수
+  - `Position.to_dict()` Redis hset 호환 (`algo_ids` json.dumps + bool→int)
+  - `order.fee=None` AttributeError 방어 (3곳)
+  - `_execute_scalp` 마진 캡 (`min(margin, balance*0.3)`)
+  - 학습 중 `paper_trader.try_entry` + `check_positions` 스킵 (CPU 경합 방지)
+  - `_check_time_exit` 부분 청산 후 SL 알고 사이즈 명시적 갱신
+  - `_on_tp_hit` partial_close 실패 시 race 보정 (서버 사이즈 재확인)
+  - **소형 포지션 (1 contract) TP1 100% 분기** — `filled_size < MIN_ORDER_SIZE × 2` 면 TP1 100% 청산, 러너 모드 비활성 (계좌 $28 케이스 직접 해결)
+  - `_reconcile_external_close` reason 분류 (runner_trail/breakeven/tp1_full_server)
+
+### 사이즈/SL 정책 — 마진 손익% 기반 통일
+- **`361604f`** **margin_loss_cap 모드 신설**
+  - `sizing_mode: margin_loss_cap` (vs 옛 `risk_per_trade`)
+  - SL 가격 거리 = `max_margin_loss_pct / leverage` (10x+10% → 1.0%, 25x+10% → 0.4%)
+  - 매물대 SL이 더 가까우면 매물대 사용 (보수적), 멀면 마진 한도 사용
+  - `margin_pct` (잔고 대비 마진 비율, 기본 95%)
+  - 작은 계좌 ($30) 진입 가능 — 잔고 $28.5 마진 → 0.01 BTC + SL 0.4% (마진 -10%) + TP1 1.5R (마진 +15%)
+- **`fbb6985`** TP/트레일도 마진 % 기준으로 통일
+  - `tp1_margin_gain_pct` (기본 +15%) — 가격 거리 = `% / leverage`
+  - `trail_margin_pct` (기본 5%) + `trail_min_price_pct` (기본 0.2%) 노이즈 방어
+  - `min_indicator_sl_price_pct` (기본 0.05%) — 매물대 SL이 너무 가까우면 마진 한도 사용
+  - **사용자 수동 SL/TP 수정** — `PositionManager.manual_update_sl/tp(symbol, price)` + 대시보드 `POST /api/position/sl|tp`
+  - sanity check (방향 일치, 마진 손실 50% 이하), `manual_sl_override`/`manual_tp_override` 플래그 — 트레일/self_heal이 사용자 수정 존중
+  - **`sys:active_model` 기본값 `both` → `scalp`** (스캘핑 중점)
+
+### 운영 인프라
+- **`097143f`** 클라우드 로그 자동 디지스트 + GitHub logs 브랜치 푸시
+  - `scripts/log_digest.sh` — 트레이딩 핵심 이벤트만 추출 (진입/청산/TP/러너/ERROR/WARNING/거부 통계)
+  - `scripts/log_push.sh` — `digests/{ts}.txt` + `latest.txt` 갱신, 7일 초과 자동 삭제
+  - cron: `*/15 * * * * cd ~/crypto-bot && ./scripts/log_push.sh 20`
+  - `logs` 브랜치에 분리 저장 → main 브랜치 오염 없음
+- **`883abff`** 헬스체크 + 학습-매매 격리
+  - `scripts/health_check.sh` — 컨테이너/heartbeat/시그널/포지션/잔고/학습 상태 한 줄 (text/json)
+  - 종합 판정 OK/DOWN/STALE
+  - log_digest에 헬스체크 결과 자동 포함
+  - **학습-매매 격리** — `_guarded_study()` 헬퍼로 `redis sys:learning=1` set/unset, 학습 중 신규 진입 차단
+  - **IO 블로킹 해결** — `ml.save()` 를 `asyncio.to_thread()` 로 래핑 (sklearn pickle dump가 이벤트 루프 막던 문제)
+- **`cb1758a`** 학습 중 폴링 5초 + 스케줄 조용한 시간대 이동
+  - `periodic_position_check` 가 학습 중 + 활성 포지션 있으면 5초 폴링 (TP1 본절 이동 지연 30~45초 → 5초)
+  - 학습 스케줄: `UTC 02/10/18` → **`UTC 22 (KST 07:00) / UTC 04 (KST 13:00) / UTC 11 (KST 20:00)`** — EU 피크/한국 출근 회피, 글로벌 최저 활동 시간
+
+### 데이터 수집
+- **`af1b0f6`** 캔들 조회 1회 재시도 + 에러 본문 명확
+  - ccxt `fetch_ohlcv` 일시 오류 시 1초 후 재시도
+  - 에러 type + repr 300자까지 로깅 (URL만 잘리던 문제 해결)
 
 ---
 

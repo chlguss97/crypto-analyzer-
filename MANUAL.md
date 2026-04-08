@@ -5,7 +5,10 @@
 2. [새 PC에서 로컬 설치 (개발/테스트)](#2-새-pc에서-로컬-설치)
 3. [클라우드 서버 새로 구축](#3-클라우드-서버-새로-구축)
 4. [자주 쓰는 명령어](#4-자주-쓰는-명령어)
-5. [문제 해결](#5-문제-해결)
+5. [운영 자동화 (헬스체크/로그 디지스트/Commit Log)](#5-운영-자동화)
+6. [사이즈/SL 설정 (margin_loss_cap)](#6-사이즈-sl-설정)
+7. [수동 SL/TP 변경 (대시보드)](#7-수동-sltp-변경)
+8. [문제 해결](#8-문제-해결)
 
 ---
 
@@ -50,6 +53,27 @@ git pull
 docker compose up -d --build
 ```
 
+> ⚠️ 빌드 없이 코드만 반영하면 되는 경우 `docker compose restart bot` 으로 충분.
+
+### 헬스체크 (한 줄 상태)
+```bash
+cd /root/crypto-bot
+./scripts/health_check.sh         # 텍스트 출력
+./scripts/health_check.sh json    # JSON
+```
+출력 항목: 컨테이너 상태 / heartbeat 경과 / 마지막 시그널 평가 / 활성 포지션 / 자동매매 / 잔고 / 학습 상태  
+종합 판정: ✅ OK / 🚨 DOWN / ⚠️ STALE (heartbeat 3분 이상 멈춤)
+
+### 로그 디지스트 푸시 (cron)
+```bash
+crontab -e
+# 15분마다 logs 브랜치에 디지스트 푸시:
+*/15 * * * * cd /root/crypto-bot && ./scripts/log_push.sh 20 >> /tmp/log_push.log 2>&1
+```
+- `digests/latest.txt` 가 항상 최신, `digests/{ts}.txt` 에 이력 (7일 자동 삭제)
+- 헬스체크 결과가 디지스트 맨 위에 자동 포함 — 봇 다운 즉시 감지 가능
+- main 브랜치 오염 없음 (logs 브랜치 분리)
+
 ### ML 모델 백업/복원
 ```bash
 # 백업 (서버 → 로컬 PC)
@@ -75,6 +99,9 @@ docker compose restart bot
 ```bash
 git clone https://github.com/chlguss97/crypto-analyzer-.git
 cd crypto-analyzer-
+
+# 필수: post-commit hook 활성화 (COMMIT_LOG.md 자동 갱신)
+git config core.hooksPath .githooks
 ```
 
 **2. Python 의존성 설치**
@@ -177,6 +204,9 @@ systemctl enable docker
 cd /root
 git clone https://github.com/chlguss97/crypto-analyzer-.git crypto-bot
 cd crypto-bot
+
+# 필수: post-commit hook 활성화 (COMMIT_LOG.md 자동 갱신)
+git config core.hooksPath .githooks
 ```
 
 ### Step 5: docker-compose.yml 생성
@@ -297,7 +327,121 @@ docker compose exec redis redis-cli  # Redis CLI
 
 ---
 
-## 5. 문제 해결
+## 5. 운영 자동화
+
+### 헬스체크 스크립트
+- `scripts/health_check.sh` — 봇 상태 한 줄 요약 (text/json)
+- `digests/latest.txt` 의 첫 블록에 자동 포함됨
+- 텔레그램/모니터링 통합 시 json 모드 활용
+
+### 로그 디지스트 (logs 브랜치 자동 푸시)
+- `scripts/log_digest.sh N` — 최근 N분 로그를 카테고리별 요약 (트레이딩 이벤트, 알고 주문, ERROR/WARNING, 진입 거부 통계)
+- `scripts/log_push.sh N` — 위 결과를 GitHub `logs` 브랜치 `digests/` 에 자동 push
+- cron 권장: `*/15 * * * * cd /root/crypto-bot && ./scripts/log_push.sh 20`
+- Claude 가 다른 PC에서 작업할 때 `git show origin/logs:digests/latest.txt` 로 즉시 최신 상태 확인
+
+### COMMIT_LOG.md (자동 갱신)
+- `scripts/update_commit_log.sh` — `git log` 에서 전체 커밋을 날짜별로 정리해 `COMMIT_LOG.md` 생성
+- `.githooks/post-commit` 가 매 커밋 후 자동 실행 (PC 당 1회 `git config core.hooksPath .githooks` 필요)
+- **lag-by-1 허용** — 자기 커밋은 자기 안에 못 들어감, 다음 커밋이 따라잡음
+- 수동 편집 금지 — `git log` 의 단일 미러
+- 새 PC/서버 셋업 직후 한 번 수동 실행해서 초기 생성: `bash scripts/update_commit_log.sh`
+
+### 학습 스케줄 (현재)
+| 시간 (UTC) | 시간 (KST) | 종류 |
+|---|---|---|
+| 22:00 | 07:00 (다음날) | 일일 대량 학습 + 백테스트 (+ 일요일 메타 학습) |
+| 04:00 | 13:00 | 세션 경량 학습 (Asia 점심) |
+| 11:00 | 20:00 | 세션 경량 학습 (EU 피크 직후) |
+
+**학습 중 보호**: `redis sys:learning=1` 동안 신규 진입 차단, 활성 포지션은 5초 폴링으로 가속화 (`cb1758a`)
+
+---
+
+## 6. 사이즈/SL 설정
+
+### sizing_mode (config/config.yaml)
+두 가지 모드 중 하나 선택:
+
+#### `margin_loss_cap` (기본값, 작은 계좌 권장)
+```yaml
+sizing_mode: margin_loss_cap
+margin_pct: 0.95              # 잔고 대비 마진 비율 (작은 계좌 95%)
+max_margin_loss_pct: 10.0     # SL 손실 한도 (마진의 %)
+use_indicator_sl: true        # 매물대 SL 우선 사용
+tp1_margin_gain_pct: 15.0     # TP1 마진 +15% 익절
+trail_margin_pct: 5.0         # 러너 트레일 마진 5% 거리
+trail_min_price_pct: 0.2      # 트레일 최소 가격 거리 (노이즈 방어)
+min_indicator_sl_price_pct: 0.05  # 매물대 SL 최소 가격 거리 (즉시청산 방지)
+```
+
+작동:
+- SL 가격 거리 = `max_margin_loss_pct / leverage` (예: 25x + 10% → 가격 0.4%)
+- 매물대 SL 이 더 가까우면 매물대 사용 (보수적), 더 멀면 마진 한도 사용
+- TP/트레일도 모두 마진 % 기준 → 가격 거리 = `% / leverage`
+
+예시 — 잔고 $30, 25x 레버리지:
+- 마진 = $30 × 0.95 = $28.5
+- 사이즈 = floor($28.5 × 25 / $70k / 0.01) × 0.01 = 0.01 BTC
+- SL 가격 거리 = 0.4% (마진 -10% = -$2.85)
+- TP1 가격 거리 = 0.6% (마진 +15% = +$4.27)
+
+#### `risk_per_trade` (옛 모드, 큰 계좌 권장)
+```yaml
+sizing_mode: risk_per_trade
+risk_per_trade: 0.005   # 잔고의 0.5%
+```
+
+### 활성 모델 (Swing/Scalp)
+```bash
+# 현재 설정 확인
+docker compose exec redis redis-cli get sys:active_model
+
+# 변경
+docker compose exec redis redis-cli set sys:active_model scalp   # scalp 만
+docker compose exec redis redis-cli set sys:active_model swing   # swing 만
+docker compose exec redis redis-cli set sys:active_model both    # 둘 다
+```
+**기본값: `scalp`** (스캘핑 중점, `fbb6985` 변경)
+
+### 자동매매 ON/OFF
+```bash
+docker compose exec redis redis-cli set sys:autotrading on
+docker compose exec redis redis-cli set sys:autotrading off
+```
+대시보드 토글로도 가능. 봇 시작 시 기본 OFF.
+
+---
+
+## 7. 수동 SL/TP 변경
+
+대시보드(또는 API)에서 활성 포지션의 SL/TP 가격을 직접 수정 가능. 봇의 트레일/self-heal 이 사용자 수정을 존중함 (덮어쓰지 않음).
+
+### API
+```bash
+# SL 변경
+curl -u admin:PASS -X POST http://207.148.120.103:8000/api/position/sl \
+  -H "Content-Type: application/json" \
+  -d '{"symbol": "BTC/USDT:USDT", "price": 71200}'
+
+# TP 변경
+curl -u admin:PASS -X POST http://207.148.120.103:8000/api/position/tp \
+  -H "Content-Type: application/json" \
+  -d '{"symbol": "BTC/USDT:USDT", "price": 73500}'
+```
+
+### Sanity Check (자동)
+- SL/TP 방향이 포지션 방향과 일치하는지 (롱이면 SL<entry<TP)
+- 마진 손실이 50% 이하인지
+- 위반 시 거부 + 사유 반환
+
+### Override 동작
+- `manual_sl_override` 플래그 — 트레일/self-heal 이 이 SL 을 덮어쓰지 않음
+- TP1 hit 후 본전 이동(반익본절)은 봇이 자동으로 override 리셋
+
+---
+
+## 8. 문제 해결
 
 ### 대시보드 접속 안 됨
 ```bash

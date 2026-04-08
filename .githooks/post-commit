@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+#
+# post-commit hook — COMMIT_LOG.md 자동 갱신
+#
+# 활성화 (PC 당 1회):
+#   git config core.hooksPath .githooks
+#
+# 동작:
+#   1. 매 커밋 직후 update_commit_log.sh 실행
+#   2. COMMIT_LOG.md 가 변경되면 안내만 출력 (자동 amend/commit 안 함 — 무한 루프 방지)
+#   3. 다음 커밋이 자연스럽게 따라잡음 (lag-by-1 허용)
+#
+
+set -uo pipefail
+
+# 무한 루프 방지: 이 훅이 만든 후속 작업이 재귀하지 않도록 가드
+if [ -n "${SKIP_POST_COMMIT_HOOK:-}" ]; then
+    exit 0
+fi
+
+REPO_DIR="$(git rev-parse --show-toplevel)"
+SCRIPT="$REPO_DIR/scripts/update_commit_log.sh"
+
+if [ ! -x "$SCRIPT" ] && [ ! -f "$SCRIPT" ]; then
+    echo "[post-commit] update_commit_log.sh 없음 — 스킵"
+    exit 0
+fi
+
+bash "$SCRIPT" >/dev/null 2>&1 || {
+    echo "[post-commit] COMMIT_LOG 갱신 실패 (무시)"
+    exit 0
+}
+
+# 변경 여부만 알림
+if ! git diff --quiet COMMIT_LOG.md 2>/dev/null; then
+    echo "[post-commit] COMMIT_LOG.md 갱신됨 — 다음 커밋에 함께 포함됨 (lag-by-1)"
+fi
+
+exit 0
