@@ -65,25 +65,36 @@ class CandleCollector:
     async def fetch_candles(
         self, timeframe: str, since: int = None, limit: int = 300
     ) -> list[dict]:
-        """캔들 조회 (최대 300개씩)"""
-        try:
-            ohlcv = await self.exchange.fetch_ohlcv(
-                self.symbol, timeframe, since=since, limit=limit
-            )
-            return [
-                {
-                    "timestamp": c[0],
-                    "open": c[1],
-                    "high": c[2],
-                    "low": c[3],
-                    "close": c[4],
-                    "volume": c[5],
-                }
-                for c in ohlcv
-            ]
-        except Exception as e:
-            logger.error(f"캔들 조회 실패 [{timeframe}]: {e}")
-            return []
+        """캔들 조회 (최대 300개씩) — 일시 오류 시 1회 재시도"""
+        last_err = None
+        for attempt in range(2):  # 0, 1 (총 2회 시도)
+            try:
+                ohlcv = await self.exchange.fetch_ohlcv(
+                    self.symbol, timeframe, since=since, limit=limit
+                )
+                return [
+                    {
+                        "timestamp": c[0],
+                        "open": c[1],
+                        "high": c[2],
+                        "low": c[3],
+                        "close": c[4],
+                        "volume": c[5],
+                    }
+                    for c in ohlcv
+                ]
+            except Exception as e:
+                last_err = e
+                if attempt < 1:
+                    await asyncio.sleep(1)  # 1초 후 재시도
+
+        # 2회 실패 — 에러 타입 + 본문 자세히 로깅
+        err_type = type(last_err).__name__
+        err_msg = str(last_err) or repr(last_err)
+        logger.error(
+            f"캔들 조회 실패 [{timeframe}] {err_type}: {err_msg[:300]}"
+        )
+        return []
 
     async def backfill(self, timeframe: str, days: int = None):
         """과거 캔들 데이터 백필"""
