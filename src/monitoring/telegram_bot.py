@@ -108,14 +108,18 @@ class TelegramNotifier:
         elif cmd == "/close":
             await self._cmd_close()
 
+        elif cmd == "/clear":
+            await self._cmd_clear()
+
         elif cmd == "/help":
             await self._send(
                 "\U0001f4cb <b>명령어</b>\n\n"
-                "/on — 자동매매 ON\n"
+                "/on — 자��매매 ON\n"
                 "/off — 자동매매 OFF\n"
                 "/status — 봇 상태\n"
                 "/balance — 잔고\n"
-                "/close — 전 포지션 청산\n"
+                "/close — 전 포지션 청산 (거래소)\n"
+                "/clear — 좀비 포지션 강제 정리 (메모리만)\n"
                 "/help — 명령어 목록"
             )
 
@@ -168,6 +172,66 @@ class TelegramNotifier:
             await self._send(f"\u2705 <b>{count}개 포지션 청산 완료</b>")
         except Exception as e:
             await self._send(f"\u26a0\ufe0f 청산 에러: {e}")
+
+    async def _cmd_clear(self):
+        """
+        좀비 포지션 강제 정리 — 거래소 close 안 함, 봇 메모리/Redis만 정리.
+        어제 같은 "포지션 없는데 close 무한루프" 사고 시 사용.
+        """
+        if not self.position_manager:
+            await self._send("\u26a0\ufe0f position_manager 미주입")
+            return
+
+        positions = dict(self.position_manager.positions)
+        if not positions:
+            await self._send("\u2705 활성 포지션 없음 (정리할 것 없음)")
+            return
+
+        count = len(positions)
+        cleared = []
+
+        for symbol, pos in positions.items():
+            try:
+                # 알고 주문 cancel 시도 (실패해도 OK)
+                try:
+                    await self.position_manager._cancel_all_algos(pos)
+                except Exception:
+                    pass
+
+                # 메모리 + Redis + DB 정리 (거래소 close 안 함)
+                reason = "force_clear_telegram"
+                await self.position_manager._finalize_position(pos, reason, exit_price=0)
+                cleared.append(f"{symbol} {pos.direction} {pos.size:.4f} BTC")
+
+                logger.warning(
+                    f"[TG-CMD] /clear 강제 정리: {symbol} {pos.direction} "
+                    f"{pos.size:.4f} BTC @ ${pos.entry_price:.0f} → "
+                    f"메모리/Redis/DB 정리 (거래소 close X)"
+                )
+            except Exception as e:
+                cleared.append(f"{symbol} 정리 실패: {e}")
+                # 최소한 메모리에서 삭제
+                if symbol in self.position_manager.positions:
+                    del self.position_manager.positions[symbol]
+
+        # Redis stale 키도 정리
+        if self.redis:
+            try:
+                stale_keys = await self.redis.keys("pos:active:*")
+                for key in stale_keys:
+                    key_str = key.decode() if isinstance(key, bytes) else key
+                    await self.redis.delete(key_str)
+            except Exception:
+                pass
+
+        result = "\n".join(cleared)
+        await self._send(
+            f"\U0001f9f9 <b>/clear 강제 정리 완료 ({count}건)</b>\n\n"
+            f"{result}\n\n"
+            f"거래소 close 안 함 (이미 없는 포지션용)\n"
+            f"OKX 직접 확인 권장"
+        )
+        logger.info(f"[TG-CMD] /clear 완료: {count}건 강제 정리")
 
     # ── 진입 알림 ──
 
