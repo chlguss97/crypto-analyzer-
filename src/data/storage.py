@@ -326,6 +326,16 @@ class RedisClient:
             logger.debug(f"Redis hgetall error ({key}): {e}")
             return {}
 
+    async def keys(self, pattern: str) -> list[str]:
+        """패턴 매칭 키 목록 — sync 단계 stale 정리용"""
+        if not self._client:
+            return []
+        try:
+            return await self._client.keys(pattern)
+        except Exception as e:
+            logger.debug(f"Redis keys error ({pattern}): {e}")
+            return []
+
     async def delete(self, key: str):
         if not self._client:
             return

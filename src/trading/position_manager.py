@@ -1196,6 +1196,22 @@ class PositionManager:
                 except Exception as e:
                     logger.error(f"긴급 SL 등록 실패: {e}")
 
+        # 거래소에 없는 옛 Redis pos:active:* 키 정리 (stale 데이터 → 대시보드 환상 포지션 방지)
+        try:
+            exchange_symbols = {ep["symbol"] for ep in exchange_positions}
+            stale_keys = await self.redis.keys("pos:active:*")
+            for key in stale_keys:
+                # bytes 또는 str
+                key_str = key.decode() if isinstance(key, bytes) else key
+                sym = key_str.replace("pos:active:", "")
+                if sym not in exchange_symbols and sym not in self.positions:
+                    await self.redis.delete(key_str)
+                    logger.warning(
+                        f"옛 Redis 포지션 키 정리: {key_str} (거래소+메모리 모두 없음)"
+                    )
+        except Exception as e:
+            logger.debug(f"sync 시 Redis stale 정리 실패: {e}")
+
     def _is_better_sl(self, pos: Position, new_sl: float) -> bool:
         """새 SL이 기존보다 유리한지 체크 (롱: 더 높으면 유리, 숏: 더 낮으면 유리)"""
         if pos.direction == "long":
