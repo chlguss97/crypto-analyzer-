@@ -119,6 +119,44 @@ class TelegramNotifier:
         text = f"{icon} <b>봇 상태: {status.upper()}</b>"
         await self._send(text)
 
+    # ── TP1 hit + 본절 이동 알림 (러너 모드 진입 순간) ──
+
+    async def notify_tp1_hit(self, direction: str, tp1_price: float,
+                             new_sl: float, runner_active: bool,
+                             trail_distance: float = 0):
+        icon = "\U0001f3af"  # 🎯
+        runner_line = ""
+        if runner_active:
+            runner_line = f"\n🏃 러너 모드 ON (trail ${trail_distance:.1f})"
+        text = (
+            f"{icon} <b>TP1 hit | {direction.upper()}</b>\n"
+            f"\n"
+            f"50% 익절 @ ${tp1_price:,.1f}\n"
+            f"SL → 본절 ${new_sl:,.1f}{runner_line}\n"
+            f"\n"
+            f"잔여 50% 추세 끝까지"
+        )
+        await self._send(text)
+
+    # ── 레짐 변경 알림 ──
+
+    async def notify_regime_change(self, old_regime: str, new_regime: str,
+                                   confidence: float = 0):
+        icons = {
+            "trending_up": "\U0001f4c8",
+            "trending_down": "\U0001f4c9",
+            "ranging": "\u2194\ufe0f",
+            "volatile": "\U0001f30a",
+        }
+        icon = icons.get(new_regime, "\U0001f4ca")
+        text = (
+            f"{icon} <b>레짐 변경</b>\n"
+            f"\n"
+            f"{old_regime} → {new_regime}\n"
+            f"신뢰도: {confidence*100:.0f}%"
+        )
+        await self._send(text)
+
     # ── 일일 리포트 ──
 
     async def notify_daily_report(self, date: str, total_trades: int,

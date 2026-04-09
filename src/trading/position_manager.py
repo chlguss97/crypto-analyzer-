@@ -481,6 +481,16 @@ class PositionManager:
                         f"✅ 서버 TP1 자동 체결 감지 → SL 본전 ${new_sl:.0f} | "
                         f"🏃 러너 모드 ON (트레일 ${pos.trail_distance:.1f})"
                     )
+                    # 텔레그램 알림 — TP1 hit + 본절 이동 + 러너 ON
+                    if self.telegram:
+                        try:
+                            await self.telegram.notify_tp1_hit(
+                                pos.direction, pos.tp1_price, new_sl,
+                                runner_active=True,
+                                trail_distance=pos.trail_distance,
+                            )
+                        except Exception:
+                            pass
         except Exception as e:
             logger.error(f"포지션 사이즈 동기화 실패: {e}")
 
@@ -593,6 +603,16 @@ class PositionManager:
                 f"🏃 러너 모드 ON (트레일 ${pos.trail_distance:.1f} = "
                 f"{pos.trail_distance/current_price*100*pos.leverage:.1f}% 마진)"
             )
+            # 텔레그램 알림 — TP1 hit + 본절 이동 + 러너 ON
+            if self.telegram:
+                try:
+                    await self.telegram.notify_tp1_hit(
+                        pos.direction, pos.tp1_price, new_sl,
+                        runner_active=True,
+                        trail_distance=pos.trail_distance,
+                    )
+                except Exception:
+                    pass
             return
 
         # 러너 모드 트레일링 — 가격이 새 고/저 갱신 시 SL 추격

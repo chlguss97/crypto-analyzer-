@@ -235,11 +235,24 @@ class CryptoAnalyzer:
         self._last_fast = fast
         self._last_slow = slow
 
-        # 레짐 감지
+        # 레짐 감지 + 변경 알림
+        prev_regime = self._current_regime["regime"] if self._current_regime else None
         regime_result = self.regime_detector.detect(df)
         self._current_regime = regime_result
         await self.redis.set("sys:regime", regime_result["regime"], ttl=300)
         await self.redis.set("sys:regime_detail", regime_result, ttl=300)
+        # 레짐 변경 시 텔레그램 알림 (안정화는 regime_detector 내부에서 처리)
+        new_regime = regime_result.get("regime")
+        if prev_regime and new_regime and prev_regime != new_regime:
+            logger.info(f"📊 레짐 변경: {prev_regime} → {new_regime}")
+            if self.telegram:
+                try:
+                    await self.telegram.notify_regime_change(
+                        prev_regime, new_regime,
+                        confidence=regime_result.get("confidence", 0),
+                    )
+                except Exception:
+                    pass
 
         # 합산
         aggregated = self.aggregator.aggregate(fast, slow)
@@ -444,24 +457,44 @@ class CryptoAnalyzer:
                 await self._execute_scalp(scalp_sig, risk_state)
 
     def _scalp_record_result(self, pnl_pct: float):
-        """스캘핑 결과 기록 → 일일 P&L + 연패 관리"""
+        """스캘핑 결과 기록 → 일일 P&L + 연패 관리 + 텔레그램 알림"""
         import time as _t
         self._scalp_daily_pnl += pnl_pct
 
         if pnl_pct <= 0:
             self._scalp_streak += 1
-            # 쿨다운 설정
+            # 쿨다운 설정 + 텔레그램 알림 (3연패+, 5연패+)
             if self._scalp_streak >= 5:
                 self._scalp_cooldown_until = _t.time() + 1800  # 30분
                 logger.warning(f"[SCALP] 5연패 → 30분 쿨다운")
+                if self.telegram:
+                    asyncio.create_task(self.telegram.notify_cooldown(self._scalp_streak, 30))
             elif self._scalp_streak >= 3:
                 self._scalp_cooldown_until = _t.time() + 300  # 5분
                 logger.warning(f"[SCALP] 3연패 → 5분 쿨다운")
+                if self.telegram:
+                    asyncio.create_task(self.telegram.notify_cooldown(self._scalp_streak, 5))
         else:
             self._scalp_streak = 0
 
+        # 일일 손실 -8% 임박 경고 (한도 -10% 도달 전 사전 알림, 1일 1회만)
+        if self._scalp_daily_pnl <= -8.0 and not getattr(self, "_loss_warning_sent", False):
+            self._loss_warning_sent = True
+            logger.warning(f"[SCALP] 일일 손실 -8% 임박 ({self._scalp_daily_pnl:.1f}%)")
+            if self.telegram:
+                remaining = abs(self._scalp_daily_pnl + 10)
+                asyncio.create_task(self.telegram.notify_warning(
+                    f"일일 손실 {self._scalp_daily_pnl:.1f}% 도달 — "
+                    f"한도(-10%)까지 {remaining:.1f}% 남음\n"
+                    f"연패: {self._scalp_streak}회"
+                ))
+
         if self._scalp_daily_pnl <= -10.0:
             logger.warning(f"[SCALP] 일일 손실 한도 도달 ({self._scalp_daily_pnl:.1f}%) → 스캘핑 중단")
+            if self.telegram:
+                asyncio.create_task(self.telegram.notify_emergency(
+                    f"일일 손실 -10% 도달 ({self._scalp_daily_pnl:.1f}%) → 스캘핑 자동 중단"
+                ))
 
     async def _execute_swing(self, grade_result, aggregated, risk_state):
         """Swing 매매 실행"""
@@ -930,14 +963,36 @@ class CryptoAnalyzer:
                 self._scalp_daily_pnl = 0.0
                 self._scalp_streak = 0
                 self._scalp_cooldown_until = 0
+                self._loss_warning_sent = False  # 일일 손실 임박 알림 플래그 리셋
 
-                # 일일 리포트
+                # 일일 리포트 — DB에서 어제 거래 집계 (정확)
+                try:
+                    import time as _t
+                    yesterday_start = int((_t.time() - 86400) * 1000)
+                    cursor = await self.db._db.execute(
+                        "SELECT COUNT(*), "
+                        "SUM(CASE WHEN pnl_pct > 0 THEN 1 ELSE 0 END), "
+                        "SUM(CASE WHEN pnl_pct <= 0 THEN 1 ELSE 0 END), "
+                        "SUM(pnl_usdt) "
+                        "FROM trades "
+                        "WHERE entry_time >= ? AND exit_time IS NOT NULL "
+                        "AND grade NOT LIKE 'PAPER_%'",
+                        (yesterday_start,)
+                    )
+                    row = await cursor.fetchone()
+                    total_t = (row[0] or 0) if row else 0
+                    wins = (row[1] or 0) if row else 0
+                    losses = (row[2] or 0) if row else 0
+                    total_pnl = (row[3] or 0.0) if row else 0.0
+                except Exception as e:
+                    logger.debug(f"일일 리포트 DB 집계 실패: {e}")
+                    total_t, wins, losses, total_pnl = 0, 0, 0, 0.0
+
                 risk = await self.risk_manager.get_risk_state()
                 await self.telegram.notify_daily_report(
                     now.strftime("%Y-%m-%d"),
-                    risk.get("trade_count_today", 0),
-                    0, 0,  # wins/losses는 DB에서 계산 필요
-                    risk.get("daily_pnl_pct", 0) * risk.get("balance", 0) / 100,
+                    total_t, wins, losses,
+                    float(total_pnl),
                     risk.get("balance", 0),
                 )
 
