@@ -984,6 +984,52 @@ class PositionManager:
         청산된 포지션의 모든 정리 작업 — DB / Redis / 메모리 / 텔레그램 / ML 콜백.
         _full_close 와 외부 청산 감지 양쪽에서 호출.
         """
+        # ── exit_price 정확화 (BUG #1~3 fix) ──
+        # 외부 청산 (서버 SL/TP 자동 발동) 또는 close 응답에 가격 없는 경우
+        # OKX fetch_my_trades 로 실제 청산 가격 받아옴 → PnL 정확
+        needs_fetch = exit_price <= 0 or reason in (
+            "sl_or_forced", "tp1_full_server",
+            "runner_trail_hit", "runner_sl_hit",
+            "breakeven_hit",
+        )
+        if needs_fetch:
+            try:
+                trades = await self.executor.exchange.fetch_my_trades(
+                    pos.symbol, limit=10
+                )
+                # 진입 시각 이후 + 포지션 방향과 반대 (청산) 거래 가격 평균
+                entry_ms = pos.entry_time * 1000
+                opp_side = "sell" if pos.direction == "long" else "buy"
+                close_trades = [
+                    t for t in trades
+                    if (t.get("timestamp", 0) >= entry_ms
+                        and t.get("side") == opp_side)
+                ]
+                if close_trades:
+                    # 사이즈 가중 평균 가격
+                    total_amt = sum(float(t.get("amount", 0) or 0) for t in close_trades)
+                    if total_amt > 0:
+                        weighted = sum(
+                            float(t.get("price", 0) or 0) * float(t.get("amount", 0) or 0)
+                            for t in close_trades
+                        )
+                        fetched_price = weighted / total_amt
+                        if fetched_price > 0:
+                            old_price = exit_price
+                            exit_price = fetched_price
+                            # 수수료도 합산
+                            fetched_fee = sum(
+                                float((t.get("fee") or {}).get("cost", 0) or 0)
+                                for t in close_trades
+                            )
+                            pos.total_fee += abs(fetched_fee)
+                            logger.info(
+                                f"📊 OKX 실제 청산가 fetch: ${old_price:.1f} → ${exit_price:.1f} "
+                                f"(reason={reason}, {len(close_trades)}건 평균)"
+                            )
+            except Exception as e:
+                logger.debug(f"실제 청산가 fetch 실패: {e}")
+
         # P&L 계산
         pnl_pct = pos.pnl_pct(exit_price) if exit_price > 0 else 0
         pnl_usdt = 0.0
