@@ -631,13 +631,24 @@ class CryptoAnalyzer:
         if direction == "neutral":
             return
 
-        # 🔒 ranging 레짐 차단 — 박스권에서 양방향 진입 손실 패턴 방지 (04-09)
-        # 페이퍼 16% 승률 + 100/0 shadow 패턴 → 박스권 매매 비효율
-        if self._current_regime and self._current_regime.get("regime") == "ranging":
-            score = scalp_sig.get("score", 0)
-            if score < 8.0:  # ranging 에선 매우 강한 신호만
+        # ── 모드 분기: explosive (변동성 폭발) vs ranging (박스권) vs 일반 ──
+        regime = self._current_regime.get("regime") if self._current_regime else None
+        is_ranging = (regime == "ranging")
+        is_explosive = bool(scalp_sig.get("explosive_mode", False))
+        is_smc = bool(scalp_sig.get("smc_entry", False))
+        score = scalp_sig.get("score", 0)
+
+        # 🚀 EXPLOSIVE MODE: 박스권에서도 변동성 폭발 시 빠른 스캘핑 진입
+        # vol_explosion / range_breakout / rapid_momentum 중 하나 strength > 0.5
+        # → ranging 차단 우회, Quick Mode (TP +5%, SL -3%, 5분 timeout)
+        if is_explosive:
+            logger.info(f"[SCALP-EXPLOSIVE] 🚀 변동성 폭발 감지 → Quick Mode 진입 시도")
+        elif is_ranging:
+            # ranging + 일반 시그널: 점수 8.0 미만은 차단, 그 외는 사이즈 40% 축소
+            if score < 8.0:
                 logger.info(f"[SCALP] ranging 레짐 → 점수 {score:.1f} < 8.0 차단")
                 return
+            # 점수 8.0+ 통과지만 사이즈 축소 적용
 
         price_str = await self.redis.get("rt:price:BTC-USDT-SWAP")
         price = float(price_str) if price_str else 0
@@ -654,32 +665,53 @@ class CryptoAnalyzer:
         sizing_mode = risk_cfg.get("sizing_mode", "margin_loss_cap")
 
         if sizing_mode == "margin_loss_cap":
-            max_loss_pct = risk_cfg.get("max_margin_loss_pct", 10.0)
-            tp1_gain_pct = risk_cfg.get("tp1_margin_gain_pct", 15.0)
             margin_pct = risk_cfg.get("margin_pct", 0.95)
-            use_indicator = risk_cfg.get("use_indicator_sl", True)
-            min_ind_pct = risk_cfg.get("min_indicator_sl_price_pct", 0.05)
 
-            margin_limit_dist = price * (max_loss_pct / leverage / 100)
-            if use_indicator:
-                ind_dist = sl_dist_indicator
-                if ind_dist < price * (min_ind_pct / 100):
-                    ind_dist = margin_limit_dist
-                sl_dist = min(ind_dist, margin_limit_dist)
+            # ── EXPLOSIVE Quick Mode: 짧은 SL/TP + 5분 timeout ──
+            if is_explosive:
+                # SL: 마진 -3% (가격 0.12% @ 25x), TP1: 마진 +5% (가격 0.20%)
+                # 수수료 (-2.5%) 고려: 순 익절 +2.5% / 순 손실 -5.5% / BE 68%
+                sl_dist = price * (3.0 / leverage / 100)  # 마진 3% / 25x
+                tp1_dist = price * (5.0 / leverage / 100)  # 마진 5% / 25x
+                tp2_dist = tp1_dist * 1.5
+                tp3_dist = tp1_dist * 2
+                margin = balance * margin_pct  # 정상 사이즈 (explosive 신뢰)
+                logger.info(
+                    f"[SCALP-EXPLOSIVE-QUICK] SL 마진-3% (${sl_dist:.1f}) | "
+                    f"TP1 마진+5% (${tp1_dist:.1f}) | 5분 timeout"
+                )
             else:
-                sl_dist = margin_limit_dist
+                # ── 일반 Mode (옛 방식) ──
+                max_loss_pct = risk_cfg.get("max_margin_loss_pct", 10.0)
+                tp1_gain_pct = risk_cfg.get("tp1_margin_gain_pct", 15.0)
+                use_indicator = risk_cfg.get("use_indicator_sl", True)
+                min_ind_pct = risk_cfg.get("min_indicator_sl_price_pct", 0.30)
 
-            tp1_dist = price * (tp1_gain_pct / leverage / 100)
-            tp2_dist = tp1_dist * 2
-            tp3_dist = tp1_dist * 4
+                margin_limit_dist = price * (max_loss_pct / leverage / 100)
+                if use_indicator:
+                    ind_dist = sl_dist_indicator
+                    if ind_dist < price * (min_ind_pct / 100):
+                        ind_dist = margin_limit_dist
+                    sl_dist = min(ind_dist, margin_limit_dist)
+                else:
+                    sl_dist = margin_limit_dist
 
-            margin = balance * margin_pct
-            logger.info(
-                f"[SCALP-SIZING] balance ${balance:.2f} × {margin_pct*100:.0f}% = "
-                f"margin ${margin:.2f} | {leverage}x | "
-                f"SL ${sl_dist:.1f} ({sl_dist/price*100*leverage:.1f}% 마진 손실) | "
-                f"TP1 ${tp1_dist:.1f} ({tp1_dist/price*100*leverage:.1f}% 마진 익절)"
-            )
+                tp1_dist = price * (tp1_gain_pct / leverage / 100)
+                tp2_dist = tp1_dist * 2
+                tp3_dist = tp1_dist * 4
+
+                margin = balance * margin_pct
+                # ranging 사이즈 축소 (옵션 B): 학습 데이터 확보 + 손실 cap
+                if is_ranging:
+                    margin *= 0.4
+                    logger.info(f"[SCALP-RANGING] 사이즈 40% 축소 (학습 데이터 확보)")
+
+                logger.info(
+                    f"[SCALP-SIZING] balance ${balance:.2f} × {margin_pct*100:.0f}% = "
+                    f"margin ${margin:.2f} | {leverage}x | "
+                    f"SL ${sl_dist:.1f} ({sl_dist/price*100*leverage:.1f}% 마진 손실) | "
+                    f"TP1 ${tp1_dist:.1f} ({tp1_dist/price*100*leverage:.1f}% 마진 익절)"
+                )
         else:
             risk_per_trade = 0.008
             sl_pct_decimal = sl_dist_indicator / price
