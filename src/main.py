@@ -503,6 +503,13 @@ class CryptoAnalyzer:
             logger.info("[SWING] 학습 중 → 신규 진입 스킵")
             return
 
+        # 🔒 ranging 레짐 차단 — 박스권에서 양방향 진입 손실 패턴 방지 (04-09)
+        if self._current_regime and self._current_regime.get("regime") == "ranging":
+            score = grade_result.get("score", 0)
+            if score < 8.0:  # ranging 에선 매우 강한 신호만
+                logger.info(f"[SWING] ranging 레짐 → 점수 {score:.1f} < 8.0 차단")
+                return
+
         direction = grade_result["direction"]
         atr_pct = self._last_fast.get("atr", {}).get("atr_pct", 0.3)
         lev = self.leverage_calc.calculate(grade_result["grade"], atr_pct, risk_state.get("streak", 0))
@@ -623,6 +630,14 @@ class CryptoAnalyzer:
         direction = scalp_sig["direction"]
         if direction == "neutral":
             return
+
+        # 🔒 ranging 레짐 차단 — 박스권에서 양방향 진입 손실 패턴 방지 (04-09)
+        # 페이퍼 16% 승률 + 100/0 shadow 패턴 → 박스권 매매 비효율
+        if self._current_regime and self._current_regime.get("regime") == "ranging":
+            score = scalp_sig.get("score", 0)
+            if score < 8.0:  # ranging 에선 매우 강한 신호만
+                logger.info(f"[SCALP] ranging 레짐 → 점수 {score:.1f} < 8.0 차단")
+                return
 
         price_str = await self.redis.get("rt:price:BTC-USDT-SWAP")
         price = float(price_str) if price_str else 0

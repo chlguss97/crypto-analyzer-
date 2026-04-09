@@ -28,7 +28,9 @@ risk:
   trail_min_price_pct: 0.5      # 트레일 최소 가격 % — 25x 에서 floor (BTC 5m ATR 0.25% 의 2배, 노이즈 방어)
 
   # min_indicator_sl_pct: 매물대 SL 이 너무 가까우면 무시 (즉시 청산 방지)
-  min_indicator_sl_price_pct: 0.05   # 진입가 기준 0.05% 미만 매물대 SL 은 무시
+  # 04-09 노이즈 SL 즉사 패턴 발견 후 0.05 → 0.30 상향
+  # BTC 5분 ATR(활발 시간) ~0.25%, 1분 ATR ~0.05~0.1% → 0.3% 미만 SL 은 노이즈
+  min_indicator_sl_price_pct: 0.30   # 진입가 기준 0.30% 미만 매물대 SL 은 무시
 
   # ── mode_a: risk_per_trade (옛, backtest 호환) ──
   risk_per_trade: 0.005

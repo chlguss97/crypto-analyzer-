@@ -65,8 +65,31 @@ cp "$DIGEST_FILE" "digests/latest.txt"
 # 7. 오래된 디지스트 정리 (7일 초과)
 find digests/ -name "20*.txt" -mtime +7 -delete 2>/dev/null || true
 
+# 7-1. 거래 영구 이력 (trades.jsonl) 복사 — Claude 가 직접 분석 가능하게
+mkdir -p trade_history
+TRADES_SRC="$REPO_DIR/data/logs/trades.jsonl"
+if [ -f "$TRADES_SRC" ]; then
+    cp "$TRADES_SRC" "trade_history/trades.jsonl"
+    # 마지막 100건만 latest 로 (빠른 분석)
+    tail -100 "$TRADES_SRC" > "trade_history/trades_latest.jsonl" 2>/dev/null || true
+fi
+
+# 7-2. 봇 핵심 로그 마지막 500줄 (거래/에러 추적용)
+mkdir -p bot_logs
+# docker compose 자동 감지
+if docker compose version &>/dev/null; then
+    DC_LP="docker compose"
+elif command -v docker-compose &>/dev/null; then
+    DC_LP="docker-compose"
+else
+    DC_LP=""
+fi
+if [ -n "$DC_LP" ]; then
+    $DC_LP logs --tail 500 bot 2>&1 | grep -E "진입|청산|finalize|sl_hit|TP1|러너|ERROR|🚨|💀" > "bot_logs/recent_events.log" 2>/dev/null || true
+fi
+
 # 8. 커밋 + 푸시
-git add digests/
+git add digests/ trade_history/ bot_logs/
 if git diff --cached --quiet; then
     echo "$(date '+%H:%M:%S') 변경 없음"
 else
