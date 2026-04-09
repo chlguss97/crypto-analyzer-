@@ -267,6 +267,17 @@ class AdaptiveML:
         features = self.extract_features(signals, meta)
         regime = (meta or {}).get("regime", "ranging")
 
+        # 피처 차원 검증 — 버퍼에 다른 길이의 벡터가 섞이면 train() 에서 numpy 에러
+        # (04-09 "inhomogeneous shape" 에러 root cause)
+        if not hasattr(self, "_expected_dim"):
+            self._expected_dim = len(self.extract_features({}, {}))
+        if len(features) != self._expected_dim:
+            logger.warning(
+                f"[{self.mode}] record_trade 피처 차원 불일치: "
+                f"{len(features)} vs {self._expected_dim} → 스킵"
+            )
+            return
+
         if pnl_pct <= -0.05:
             label = 0
         elif pnl_pct < 1.0:
@@ -319,8 +330,24 @@ class AdaptiveML:
         if len(self.X_buffer) < self.min_trades_to_train:
             return
 
-        X_all = np.array(list(self.X_buffer))
-        y_all = np.array(list(self.y_buffer))
+        # numpy 차원 불일치 방어 — 잘못된 레코드 자동 제거 (04-09 inhomogeneous fix)
+        try:
+            X_all = np.array(list(self.X_buffer))
+            y_all = np.array(list(self.y_buffer))
+        except ValueError as e:
+            logger.warning(f"[{self.mode}] train() 피처 차원 불일치 → 정리: {e}")
+            expected = len(self.extract_features({}, {}))
+            clean_pairs = [
+                (x, y) for x, y in zip(self.X_buffer, self.y_buffer) if len(x) == expected
+            ]
+            if len(clean_pairs) < self.min_trades_to_train:
+                logger.warning(f"[{self.mode}] 정리 후 {len(clean_pairs)}건 → 학습 스킵")
+                return
+            self.X_buffer = deque([p[0] for p in clean_pairs], maxlen=50000)
+            self.y_buffer = deque([p[1] for p in clean_pairs], maxlen=50000)
+            X_all = np.array(list(self.X_buffer))
+            y_all = np.array(list(self.y_buffer))
+            logger.info(f"[{self.mode}] 버퍼 정리 완료: {len(clean_pairs)}건 유지")
 
         if len(set(y_all)) < 2:
             return
