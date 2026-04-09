@@ -472,7 +472,12 @@ class OrderExecutor:
                 return order
 
             except Exception as e:
+                err_str = str(e)
                 logger.error(f"청산 실패 ({attempt}/{MAX_RETRIES}): {e}")
+                # OKX "포지션 없음" (51169) → 이미 청산됨 → 재시도 무의미
+                if "51169" in err_str or "no position" in err_str.lower():
+                    logger.warning(f"📌 포지션 이미 청산됨 (51169) → 재시도 스킵")
+                    return {"already_closed": True, "average": 0, "price": 0}
                 if attempt < MAX_RETRIES:
                     await asyncio.sleep(RETRY_DELAY)
 

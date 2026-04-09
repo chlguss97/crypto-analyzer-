@@ -440,7 +440,7 @@ class HistoricalLearner:
 
     async def _regime_focused_learn(self, symbol: str = "BTC/USDT:USDT"):
         """부족한 레짐 집중 학습 — 데이터 적은 레짐의 과거 구간을 찾아서 학습"""
-        from src.engine.regime_detector import REGIMES
+        from src.strategy.adaptive_ml import REGIMES
 
         logger.info("[HIST] 레짐 집중 학습 시작...")
 

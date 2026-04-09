@@ -935,6 +935,17 @@ class PositionManager:
         if not order:
             # 🚨 청산 실패 — 좀비 방지: SL 알고 긴급 재등록 + 메모리 유지
             pos.close_attempts += 1
+
+        # OKX "포지션 이미 없음" (51169) 응답 → 메모리 정리만 (close 재시도 불필요)
+        if order and order.get("already_closed"):
+            logger.info(
+                f"📌 포지션 이미 청산됨 ({reason}) → 메모리 정리만 (close 재시도 없음)"
+            )
+            # 거래소에서 실제 가격 fetch
+            await self._finalize_position(pos, reason, exit_price=0)
+            return
+
+        if not order:
             logger.error(
                 f"🚨 청산 실패 ({reason}) {pos.close_attempts}/10 → "
                 f"SL 긴급 재등록 + 다음 폴링 재시도"
