@@ -90,13 +90,13 @@ class TelegramNotifier:
         if cmd == "/on":
             if self.redis:
                 await self.redis.set("sys:autotrading", "on")
-            await self._send("\U0001f7e2 <b>자동매매 ON</b>")
+            await self._send("\u2705 <b>자동매매 ON</b>")
             logger.info("[TG-CMD] /on → 자동매매 ON")
 
         elif cmd == "/off":
             if self.redis:
                 await self.redis.set("sys:autotrading", "off")
-            await self._send("\U0001f534 <b>자동매매 OFF</b>")
+            await self._send("\u274c <b>자동매매 OFF</b>")
             logger.info("[TG-CMD] /off → 자동매매 OFF")
 
         elif cmd == "/status":
