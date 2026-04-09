@@ -9,6 +9,7 @@ import time
 import json
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from src.monitoring.trade_logger import _append_jsonl
 
 logger = logging.getLogger(__name__)
 
@@ -393,6 +394,27 @@ class PaperTrader:
             f"누적 {self._stats['total']}건 승률 {win_rate:.0f}% | "
             f"Shadow 놓침:{self._stats['shadow_missed']} 올바름:{self._stats['shadow_correct']}"
         )
+
+        # JSONL 영구 기록 — Claude 가 logs 브랜치에서 직접 분석
+        _append_jsonl({
+            "type": "paper_exit",
+            "paper": True,
+            "mode": pos.mode,
+            "direction": pos.direction,
+            "exit_reason": reason,
+            "entry_price": round(pos.entry_price, 1),
+            "exit_price": round(exit_price, 1),
+            "pnl_pct": round(net_pnl_pct, 2),
+            "pnl_usdt": round(pnl_usdt, 2),
+            "score": round(pos.score, 2),
+            "grade": pos.grade,
+            "hold_min": round((exit_time / 1000 - pos.entry_time / 1000) / 60),
+            "regime": regime,
+            "stats_total": self._stats["total"],
+            "stats_win_rate": round(win_rate, 1),
+            "shadow_missed": self._stats["shadow_missed"],
+            "shadow_correct": self._stats["shadow_correct"],
+        })
 
         if self._stats["total"] % 10 == 0:
             logger.info(
