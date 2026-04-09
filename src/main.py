@@ -1114,10 +1114,17 @@ class CryptoAnalyzer:
         logger.info("봇 시작 — Swing + Scalp 듀얼 모델 + AdaptiveML + PaperTrading")
         self.start_dashboard_thread()  # 대시보드 별도 스레드
         await self.redis.set("sys:bot_status", "running")
-        await self.redis.set("sys:autotrading", "off")  # 초기 OFF (웹에서 켜기)
+        await self.redis.set("sys:autotrading", "off")  # 초기 OFF (텔레그램 /on 으로 켜기)
         await self.redis.set("sys:ml_enabled", "on")
         # 사용자 의도: 스캘핑 중점
         await self.redis.set("sys:active_model", "scalp")
+
+        # 텔레그램 명령어 처리용 주입 (양방향 통신)
+        self.telegram.redis = self.redis
+        self.telegram.executor = self.executor
+        self.telegram.position_manager = self.position_manager
+        self.telegram.risk_manager = self.risk_manager
+
         await self.telegram.notify_bot_status("running")
 
         tasks = [
@@ -1130,6 +1137,7 @@ class CryptoAnalyzer:
             asyncio.create_task(self.periodic_study_scheduler()),
             asyncio.create_task(self.periodic_heartbeat()),
             asyncio.create_task(self.ws_stream.start()),
+            asyncio.create_task(self.telegram.poll_commands()),  # 텔레그램 명령어 polling
         ]
 
         try:

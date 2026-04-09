@@ -9,13 +9,19 @@ logger = logging.getLogger(__name__)
 
 
 class TelegramNotifier:
-    """텔레그램 알림 발송"""
+    """텔레그램 알림 발송 + 명령어 수신"""
 
     def __init__(self):
         self.config = load_config()
         self.enabled = self.config.get("telegram", {}).get("enabled", False)
         self.bot: Bot | None = None
         self.chat_id: str = ""
+        self._last_update_id = 0
+        # main.py 에서 주입 — 명령어 처리용
+        self.redis = None
+        self.executor = None
+        self.position_manager = None
+        self.risk_manager = None
 
     async def initialize(self):
         if not self.enabled:
@@ -47,6 +53,121 @@ class TelegramNotifier:
             )
         except Exception as e:
             logger.error(f"텔레그램 발송 실패: {e}")
+
+    # ── 명령어 polling (5초마다) ──
+
+    async def poll_commands(self):
+        """
+        텔레그램 명령어 수신 (getUpdates polling).
+        main.py 에서 asyncio.create_task 로 실행.
+        보안: chat_id 일치하는 사용자만 처리.
+        """
+        if not self.enabled or not self.bot:
+            return
+
+        logger.info("텔레그램 명령어 polling 시작")
+
+        while True:
+            try:
+                updates = await self.bot.get_updates(
+                    offset=self._last_update_id + 1, timeout=3
+                )
+                for update in updates:
+                    self._last_update_id = update.update_id
+                    if not update.message or not update.message.text:
+                        continue
+                    # 보안: chat_id 일치 확인
+                    if str(update.message.chat.id) != str(self.chat_id):
+                        continue
+                    cmd = update.message.text.strip().lower()
+                    await self._handle_command(cmd)
+            except Exception as e:
+                logger.debug(f"텔레그램 명령 polling 에러: {e}")
+            await asyncio.sleep(5)
+
+    async def _handle_command(self, cmd: str):
+        """명령어 처리"""
+        if cmd == "/on":
+            if self.redis:
+                await self.redis.set("sys:autotrading", "on")
+            await self._send("\U0001f7e2 <b>자동매매 ON</b>")
+            logger.info("[TG-CMD] /on → 자동매매 ON")
+
+        elif cmd == "/off":
+            if self.redis:
+                await self.redis.set("sys:autotrading", "off")
+            await self._send("\U0001f534 <b>자동매매 OFF</b>")
+            logger.info("[TG-CMD] /off → 자동매매 OFF")
+
+        elif cmd == "/status":
+            await self._cmd_status()
+
+        elif cmd == "/balance":
+            await self._cmd_balance()
+
+        elif cmd == "/close":
+            await self._cmd_close()
+
+        elif cmd == "/help":
+            await self._send(
+                "\U0001f4cb <b>명령어</b>\n\n"
+                "/on — 자동매매 ON\n"
+                "/off — 자동매매 OFF\n"
+                "/status — 봇 상태\n"
+                "/balance — 잔고\n"
+                "/close — 전 포지션 청산\n"
+                "/help — 명령어 목록"
+            )
+
+    async def _cmd_status(self):
+        """봇 상태 조회"""
+        try:
+            autotrading = "ON" if self.redis and (await self.redis.get("sys:autotrading")) == "on" else "OFF"
+            regime = (await self.redis.get("sys:regime")) if self.redis else "?"
+            balance = (await self.redis.get("sys:balance")) if self.redis else "?"
+            positions = len(self.position_manager.positions) if self.position_manager else 0
+            learning = "YES" if self.redis and (await self.redis.get("sys:learning")) == "1" else "NO"
+
+            text = (
+                "\U0001f4ca <b>봇 상태</b>\n\n"
+                f"자동매매: {autotrading}\n"
+                f"잔고: ${balance}\n"
+                f"활성 포지션: {positions}개\n"
+                f"레짐: {regime}\n"
+                f"학습 중: {learning}"
+            )
+            await self._send(text)
+        except Exception as e:
+            await self._send(f"\u26a0\ufe0f 상태 조회 실패: {e}")
+
+    async def _cmd_balance(self):
+        """잔고 조회"""
+        try:
+            if self.executor:
+                bal = await self.executor.get_balance()
+                await self._send(f"\U0001f4b0 <b>잔고: ${bal:,.2f}</b>")
+            else:
+                cached = (await self.redis.get("sys:balance")) if self.redis else "?"
+                await self._send(f"\U0001f4b0 <b>잔고: ${cached}</b> (캐시)")
+        except Exception as e:
+            await self._send(f"\u26a0\ufe0f 잔고 조회 실패: {e}")
+
+    async def _cmd_close(self):
+        """전 포지션 청산"""
+        if not self.position_manager:
+            await self._send("\u26a0\ufe0f position_manager 미주입")
+            return
+        positions = self.position_manager.positions
+        if not positions:
+            await self._send("\u2705 활성 포지션 없음")
+            return
+        count = len(positions)
+        await self._send(f"\U0001f6d1 <b>전 포지션 청산 시작 ({count}개)</b>")
+        try:
+            await self.position_manager.close_all("telegram_cmd")
+            await self._send(f"\u2705 <b>{count}개 포지션 청산 완료</b>")
+        except Exception as e:
+            await self._send(f"\u26a0\ufe0f 청산 에러: {e}")
 
     # ── 진입 알림 ──
 
