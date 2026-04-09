@@ -865,8 +865,13 @@ class ScalpEngine:
                 if (close[i] > close[i-1]) != (close[i+1] > close[i]):
                     direction_changes += 1
 
-        # 첩 판단 완화: ADX < 18 + 방향 전환 7회+ (하나만 만족하면 첩 아님)
-        is_chop = adx < 18 and direction_changes >= 6
+        # 첩 판단 — OR 조건으로 강화 (04-09 박스권 미감지 패턴 fix)
+        # (1) ADX < 18 + 방향 전환 6회+ (옛 AND 조건)
+        # (2) ADX 매우 낮음 (< 14) → 즉시 chop (확실한 횡보)
+        # (3) 방향 전환 8회+ (강한 진동) → 즉시 chop
+        is_chop = (adx < 18 and direction_changes >= 6) \
+                  or (adx < 14) \
+                  or (direction_changes >= 8)
 
         return {"type": "anti_chop", "is_chop": is_chop, "adx": round(adx, 1),
                 "direction_changes": direction_changes}
