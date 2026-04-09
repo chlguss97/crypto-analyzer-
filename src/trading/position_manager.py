@@ -964,10 +964,13 @@ class PositionManager:
             except Exception as e:
                 logger.critical(f"💀 SL 재등록 예외: {e}")
 
-            # 10회 연속 실패 시 자동매매 OFF + 텔레그램 emergency 알림 (BUG #C2)
+            # 10회 연속 실패 시 강제 포지션 정리 (04-09 무한루프 fix)
+            # 옛 동작: autotrading OFF + return (메모리 유지) → 다음 폴링 또 _full_close → 무한
+            # 새 동작: 10회 이상이면 포지션 메모리 강제 삭제 + finalize (0 가격)
             if pos.close_attempts >= 10:
                 logger.critical(
-                    f"💀💀 청산 10회 연속 실패 ({pos.symbol}) → 자동매매 OFF + 수동 개입 필수"
+                    f"💀💀 청산 {pos.close_attempts}회 연속 실패 ({pos.symbol}) → "
+                    f"포지션 메모리 강제 정리 + 자동매매 OFF"
                 )
                 try:
                     await self.redis.set("sys:autotrading", "off")
@@ -976,11 +979,16 @@ class PositionManager:
                 if self.telegram:
                     try:
                         await self.telegram.notify_emergency(
-                            f"💀 {pos.symbol} 청산 10회 실패 — 자동매매 OFF, 수동 개입 필요"
+                            f"💀 {pos.symbol} 청산 {pos.close_attempts}회 실패 → "
+                            f"포지션 메모리 강제 정리. OKX 수동 확인 필요"
                         )
                     except Exception:
                         pass
-            return  # 메모리 유지 → 다음 폴링에서 _full_close 재호출
+                # 포지션 메모리 강제 정리 — 무한루프 탈출
+                # (거래소엔 이미 없을 가능성 높음 — 51169 = "no position")
+                await self._finalize_position(pos, f"{reason}_force_cleanup", exit_price=0)
+                return
+            return  # 메모리 유지 → 다음 폴링에서 _full_close 재호출 (10회 미만)
 
         # 청산 성공 — fill 정보 추출
         exit_price = order.get("average") or order.get("price") or 0
