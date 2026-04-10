@@ -1126,6 +1126,15 @@ class CryptoAnalyzer:
         self.telegram.risk_manager = self.risk_manager
 
         await self.telegram.notify_bot_status("running")
+        try:
+            bal = await self.executor.get_balance()
+            await self.telegram._send(
+                "\U0001f7e2 <b>Autotrading ON</b>\n"
+                "Mode: Both (Swing + Scalp)\n"
+                f"Balance: ${bal:,.2f}"
+            )
+        except Exception:
+            await self.telegram._send("\U0001f7e2 <b>Autotrading ON</b>")
 
         tasks = [
             asyncio.create_task(self.periodic_candle_update()),
