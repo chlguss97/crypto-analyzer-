@@ -113,14 +113,14 @@ class TelegramNotifier:
 
         elif cmd == "/help":
             await self._send(
-                "\U0001f4d6 <b>Commands</b>\n\n"
-                "\u25b6\ufe0f /on — Autotrading ON\n"
-                "\u23f9\ufe0f /off — Autotrading OFF\n"
-                "\U0001f4ca /status — Bot Status\n"
-                "\U0001f4b0 /balance — Check Balance\n"
-                "\U0001f6d1 /close — Close All Positions\n"
-                "\U0001f9f9 /clear — Force Clear Zombie\n"
-                "\u2753 /help — Command List"
+                "<b>Commands</b>\n\n"
+                "/on — Autotrading ON\n"
+                "/off — Autotrading OFF\n"
+                "/status — Bot Status\n"
+                "/balance — Check Balance\n"
+                "/close — Close All Positions\n"
+                "/clear — Force Clear Zombie\n"
+                "/help — Command List"
             )
 
     async def _cmd_status(self):
@@ -240,12 +240,12 @@ class TelegramNotifier:
                            tp1_price: float, tp2_price: float,
                            leverage: int, margin: float,
                            tp3_price: float | None = None):
-        icon = "\U0001f7e2" if direction == "long" else "\U0001f534"
+        icon = "\U0001f4c8" if direction == "long" else "\U0001f4c9"
         tp_line = f"TP1: ${tp1_price:,.1f} | TP2: ${tp2_price:,.1f}"
         if tp3_price:
             tp_line += f" | TP3: ${tp3_price:,.1f}"
         text = (
-            f"{icon} <b>진입 | {grade} {direction.upper()}</b>\n"
+            f"{icon} <b>Entry | {grade} {direction.upper()}</b>\n"
             f"\n"
             f"점수: {score:.1f}/10\n"
             f"진입가: ${entry_price:,.1f}\n"
@@ -264,9 +264,9 @@ class TelegramNotifier:
                           entry_price: float, exit_price: float,
                           pnl_pct: float, pnl_usdt: float,
                           hold_minutes: int):
-        icon = "\U0001f4b0" if pnl_usdt > 0 else "\U0001f4a5"
+        icon = "\U0001f4b5" if pnl_usdt > 0 else "\u2716\ufe0f"
         text = (
-            f"{icon} <b>청산 | {direction.upper()} | {exit_reason}</b>\n"
+            f"{icon} <b>Exit | {direction.upper()} | {exit_reason}</b>\n"
             f"\n"
             f"진입: ${entry_price:,.1f} -> 청산: ${exit_price:,.1f}\n"
             f"수익률: {pnl_pct:+.2f}%\n"
@@ -280,12 +280,12 @@ class TelegramNotifier:
     # ── 경고 알림 ──
 
     async def notify_warning(self, message: str):
-        text = f"\u26a0\ufe0f <b>경고</b>\n\n{message}"
+        text = f"\u26a0\ufe0f <b>Warning</b>\n\n{message}"
         await self._send(text)
 
     async def notify_cooldown(self, streak: int, cooldown_min: int):
         text = (
-            f"\u26a0\ufe0f <b>쿨다운 진입</b>\n"
+            f"\u23f8\ufe0f <b>Cooldown</b>\n"
             f"\n"
             f"연패: {streak}회\n"
             f"쿨다운: {cooldown_min}분\n"
@@ -295,13 +295,13 @@ class TelegramNotifier:
     # ── 긴급 알림 ──
 
     async def notify_emergency(self, message: str):
-        text = f"\U0001f6d1 <b>긴급</b>\n\n{message}"
+        text = f"\U0001f198 <b>EMERGENCY</b>\n\n{message}"
         await self._send(text)
 
     async def notify_bot_status(self, status: str):
-        icons = {"running": "\u2705", "paused": "\u23f8", "stopped": "\U0001f6d1"}
+        icons = {"running": "\u26a1", "paused": "\u23f8\ufe0f", "stopped": "\u26d4"}
         icon = icons.get(status, "\u2753")
-        text = f"{icon} <b>봇 상태: {status.upper()}</b>"
+        text = f"{icon} <b>Bot: {status.upper()}</b>"
         await self._send(text)
 
     # ── TP1 hit + 본절 이동 알림 (러너 모드 진입 순간) ──
@@ -309,17 +309,16 @@ class TelegramNotifier:
     async def notify_tp1_hit(self, direction: str, tp1_price: float,
                              new_sl: float, runner_active: bool,
                              trail_distance: float = 0):
-        icon = "\U0001f3af"  # 🎯
         runner_line = ""
         if runner_active:
-            runner_line = f"\n🏃 러너 모드 ON (trail ${trail_distance:.1f})"
+            runner_line = f"\nRunner ON (trail ${trail_distance:.1f})"
         text = (
-            f"{icon} <b>TP1 hit | {direction.upper()}</b>\n"
+            f"\U0001f3af <b>TP1 Hit | {direction.upper()}</b>\n"
             f"\n"
-            f"50% 익절 @ ${tp1_price:,.1f}\n"
-            f"SL → 본절 ${new_sl:,.1f}{runner_line}\n"
+            f"50% closed @ ${tp1_price:,.1f}\n"
+            f"SL \u2192 BE ${new_sl:,.1f}{runner_line}\n"
             f"\n"
-            f"잔여 50% 추세 끝까지"
+            f"Remaining 50% trailing"
         )
         await self._send(text)
 
@@ -335,10 +334,10 @@ class TelegramNotifier:
         }
         icon = icons.get(new_regime, "\U0001f4ca")
         text = (
-            f"{icon} <b>레짐 변경</b>\n"
+            f"{icon} <b>Regime Change</b>\n"
             f"\n"
-            f"{old_regime} → {new_regime}\n"
-            f"신뢰도: {confidence*100:.0f}%"
+            f"{old_regime} \u2192 {new_regime}\n"
+            f"Confidence: {confidence*100:.0f}%"
         )
         await self._send(text)
 
@@ -350,7 +349,7 @@ class TelegramNotifier:
         win_rate = wins / total_trades * 100 if total_trades > 0 else 0
         icon = "\U0001f4c8" if total_pnl >= 0 else "\U0001f4c9"
         text = (
-            f"\U0001f4ca <b>일일 리포트 | {date}</b>\n"
+            f"\U0001f4ca <b>Daily Report | {date}</b>\n"
             f"\n"
             f"매매: {total_trades}회\n"
             f"승리: {wins} | 패배: {losses} ({win_rate:.0f}%)\n"
