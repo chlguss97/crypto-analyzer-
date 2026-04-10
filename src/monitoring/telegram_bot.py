@@ -123,6 +123,9 @@ class TelegramNotifier:
                 "/help — Command List"
             )
 
+        elif cmd == "/\uba70\ub2c8":
+            await self._send("\U0001f436 \uc608\ubed0\uc694!! \uba4d\uba4d! \U0001f43e")
+
     async def _cmd_status(self):
         """봇 상태 조회"""
         try:
