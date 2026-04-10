@@ -138,6 +138,8 @@ class CryptoAnalyzer:
         self._scalp_daily_pnl = 0.0         # 일일 스캘핑 P&L (%)
         self._scalp_streak = 0               # 연패 카운터
         self._scalp_cooldown_until = 0       # 쿨다운 종료 시각 (timestamp)
+        self._last_sl_direction = None       # 마지막 SL 방향
+        self._last_sl_time = 0               # 마지막 SL 시각
         self._scalp_pending_signal = None    # 진입 확인 대기 시그널
         self._scalp_pending_price = 0.0
 
@@ -481,17 +483,20 @@ class CryptoAnalyzer:
 
         if pnl_pct <= 0:
             self._scalp_streak += 1
-            # 쿨다운 설정 + 텔레그램 알림 (3연패+, 5연패+)
+            # 쿨다운 강화 (04-10: 연속 SL → 즉시 재진입 방지)
             if self._scalp_streak >= 5:
+                self._scalp_cooldown_until = _t.time() + 7200  # 120분
+                logger.warning(f"[SCALP] 5연패 → 120분 쿨다운")
+                if self.telegram:
+                    asyncio.create_task(self.telegram.notify_cooldown(self._scalp_streak, 120))
+            elif self._scalp_streak >= 3:
                 self._scalp_cooldown_until = _t.time() + 1800  # 30분
-                logger.warning(f"[SCALP] 5연패 → 30분 쿨다운")
+                logger.warning(f"[SCALP] 3연패 → 30분 쿨다운")
                 if self.telegram:
                     asyncio.create_task(self.telegram.notify_cooldown(self._scalp_streak, 30))
-            elif self._scalp_streak >= 3:
-                self._scalp_cooldown_until = _t.time() + 300  # 5분
-                logger.warning(f"[SCALP] 3연패 → 5분 쿨다운")
-                if self.telegram:
-                    asyncio.create_task(self.telegram.notify_cooldown(self._scalp_streak, 5))
+            elif self._scalp_streak >= 2:
+                self._scalp_cooldown_until = _t.time() + 600  # 10분
+                logger.warning(f"[SCALP] 2연패 → 10분 쿨다운")
         else:
             self._scalp_streak = 0
 
@@ -532,6 +537,14 @@ class CryptoAnalyzer:
             return
 
         direction = grade_result["direction"]
+
+        # 🔒 SL 후 같은 방향 60분 차단 (04-10)
+        import time as _t
+        if (self._last_sl_direction == direction
+                and _t.time() - self._last_sl_time < 3600):
+            logger.info(f"[SWING] {direction} SL 후 60분 미경과 → 같은 방향 재진입 차단")
+            return
+
         atr_pct = self._last_fast.get("atr", {}).get("atr_pct", 0.3)
         lev = self.leverage_calc.calculate(grade_result["grade"], atr_pct, risk_state.get("streak", 0))
         balance = risk_state.get("balance", 0)
@@ -655,6 +668,13 @@ class CryptoAnalyzer:
 
         direction = scalp_sig["direction"]
         if direction == "neutral":
+            return
+
+        # 🔒 SL 후 같은 방향 60분 차단 (04-10: 연속 SL 방지)
+        import time as _t
+        if (self._last_sl_direction == direction
+                and _t.time() - self._last_sl_time < 3600):
+            logger.info(f"[SCALP] {direction} SL 후 60분 미경과 → 같은 방향 재진입 차단")
             return
 
         # ── 모드 분기: explosive (변동성 폭발) vs ranging (박스권) vs 일반 ──
@@ -825,14 +845,25 @@ class CryptoAnalyzer:
     # ── ML 학습 기록 ──
 
     async def record_ml_trade(self, mode: str, signals: dict, pnl_pct: float,
-                             fee_pct: float = 0.0):
-        """실거래 결과 → ML 학습 + 시그널 기여도 추적"""
+                             fee_pct: float = 0.0, direction: str = "",
+                             exit_reason: str = ""):
+        """실거래 결과 → ML 학습 + 연패 관리 + 시그널 기여도 추적"""
         ml = self.ml_swing if mode == "swing" else self.ml_scalp
         regime = self._current_regime["regime"] if self._current_regime else "ranging"
         meta = {"atr_pct": self._last_fast.get("atr", {}).get("atr_pct", 0.3),
                 "hour": datetime.now(timezone.utc).hour,
                 "regime": regime}
         ml.record_trade(signals, meta, pnl_pct, fee_pct=fee_pct)
+
+        # 스캘핑 연패/쿨다운 관리 (04-10: 호출 누락 수정)
+        if mode == "scalp":
+            self._scalp_record_result(pnl_pct)
+
+        # SL 후 같은 방향 재진입 차단 기록 (04-10)
+        import time as _t
+        if "sl" in exit_reason and pnl_pct < 0 and direction:
+            self._last_sl_direction = direction
+            self._last_sl_time = _t.time()
 
         # 시그널 기여도 추적
         if self.signal_tracker:
