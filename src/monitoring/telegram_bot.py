@@ -113,14 +113,14 @@ class TelegramNotifier:
 
         elif cmd == "/help":
             await self._send(
-                "\U0001f4cb <b>명령어</b>\n\n"
-                "/on - autotrading ON\n"
-                "/off - autotrading OFF\n"
-                "/status - bot status\n"
-                "/balance - check balance\n"
-                "/close - close all positions\n"
-                "/clear - force clear zombie positions\n"
-                "/help — 명령어 목록"
+                "\U0001f4d6 <b>Commands</b>\n\n"
+                "\u25b6\ufe0f /on — Autotrading ON\n"
+                "\u23f9\ufe0f /off — Autotrading OFF\n"
+                "\U0001f4ca /status — Bot Status\n"
+                "\U0001f4b0 /balance — Check Balance\n"
+                "\U0001f6d1 /close — Close All Positions\n"
+                "\U0001f9f9 /clear — Force Clear Zombie\n"
+                "\u2753 /help — Command List"
             )
 
     async def _cmd_status(self):
