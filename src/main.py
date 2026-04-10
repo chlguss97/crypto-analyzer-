@@ -1117,7 +1117,7 @@ class CryptoAnalyzer:
         await self.redis.set("sys:autotrading", "on")  # 초기 ON (텔레그램 /off 로 끄기)
         await self.redis.set("sys:ml_enabled", "on")
         # 사용자 의도: 스캘핑 중점
-        await self.redis.set("sys:active_model", "scalp")
+        await self.redis.set("sys:active_model", "both")
 
         # 텔레그램 명령어 처리용 주입 (양방향 통신)
         self.telegram.redis = self.redis
