@@ -1114,7 +1114,7 @@ class CryptoAnalyzer:
         logger.info("봇 시작 — Swing + Scalp 듀얼 모델 + AdaptiveML + PaperTrading")
         self.start_dashboard_thread()  # 대시보드 별도 스레드
         await self.redis.set("sys:bot_status", "running")
-        await self.redis.set("sys:autotrading", "off")  # 초기 OFF (텔레그램 /on 으로 켜기)
+        await self.redis.set("sys:autotrading", "on")  # 초기 ON (텔레그램 /off 로 끄기)
         await self.redis.set("sys:ml_enabled", "on")
         # 사용자 의도: 스캘핑 중점
         await self.redis.set("sys:active_model", "scalp")
