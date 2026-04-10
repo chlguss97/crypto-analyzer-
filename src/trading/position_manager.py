@@ -1003,6 +1003,12 @@ class PositionManager:
         청산된 포지션의 모든 정리 작업 — DB / Redis / 메모리 / 텔레그램 / ML 콜백.
         _full_close 와 외부 청산 감지 양쪽에서 호출.
         """
+        # ── 잔존 알고 주문 정리 (04-10 fix: 포지션 종료 후 트리거 주문 잔류 버그) ──
+        try:
+            await self._cancel_all_algos(pos)
+        except Exception as e:
+            logger.debug(f"finalize 알고 정리 실패 (무시): {e}")
+
         # ── exit_price 정확화 (BUG #1~3 fix) ──
         # 외부 청산 (서버 SL/TP 자동 발동) 또는 close 응답에 가격 없는 경우
         # OKX fetch_my_trades 로 실제 청산 가격 받아옴 → PnL 정확
