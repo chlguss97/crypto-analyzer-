@@ -142,9 +142,11 @@ class HistoricalLearner:
                         continue
 
                     meta = {**base_meta, "sl_mult": sl_mult}
-                    self.ml_swing.record_trade(signals, meta, pnl_pct)
+                    # 시뮬 수수료: 0.05% × 2(왕복) × 25x(추정) = 2.5%
+                    sim_fee_pct = 0.0005 * 2 * 25 * 100
+                    self.ml_swing.record_trade(signals, meta, pnl_pct, fee_pct=sim_fee_pct)
                     if timeframe in ("5m", "1m"):
-                        self.ml_scalp.record_trade(signals, meta, pnl_pct)
+                        self.ml_scalp.record_trade(signals, meta, pnl_pct, fee_pct=sim_fee_pct)
                     trades_learned += 1
                     self._stats["total"] += 1
                     if pnl_pct > 0:
@@ -380,7 +382,7 @@ class HistoricalLearner:
                 meta = {"atr_pct": result.get("atr_pct", 0.2),
                         "hour": entry_hour,
                         "regime": regime_result["regime"]}
-                self.ml_scalp.record_trade(result.get("signals", {}), meta, net_pnl)
+                self.ml_scalp.record_trade(result.get("signals", {}), meta, net_pnl, fee_pct=fee_pct)
 
                 scalp_stats["total"] += 1
                 if net_pnl > 0:
@@ -501,11 +503,12 @@ class HistoricalLearner:
                     meta = {"atr_pct": signals.get("atr", {}).get("atr_pct", 0.3),
                             "hour": entry_hour, "regime": regime}
 
+                    sim_fee_pct = 0.0005 * 2 * 25 * 100
                     for sl_mult in self.SL_MULTIPLIERS:
                         pnl = self._simulate_trade(direction, entry_price, future,
                                                    aggregated["score"], sl_mult)
                         if pnl is not None:
-                            self.ml_swing.record_trade(signals, meta, pnl)
+                            self.ml_swing.record_trade(signals, meta, pnl, fee_pct=sim_fee_pct)
                             learned += 1
 
                 except Exception:
@@ -611,7 +614,8 @@ class HistoricalLearner:
                 regime = self.regime_detector.detect(df_5m_slice)
                 meta = {"atr_pct": result.get("atr_pct", 0.3), "hour": entry_hour,
                         "regime": regime["regime"]}
-                self.ml_scalp.record_trade(result.get("signals", {}), meta, net_pnl)
+                exp_fee = self.FEE_RATE * 2 * 25 * 100
+                self.ml_scalp.record_trade(result.get("signals", {}), meta, net_pnl, fee_pct=exp_fee)
                 learned += 1
 
             except Exception:

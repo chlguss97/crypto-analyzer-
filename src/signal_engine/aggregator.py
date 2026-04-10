@@ -174,7 +174,13 @@ class SignalAggregator:
         confluence_bonus = min(MAX_CONFLUENCE_BONUS, confluence_bonus)
 
         # 최종 방향 결정
-        if long_score > short_score:
+        # 04-10: 양방향 점수 차이가 20% 미만이면 neutral (방향 불확실 → 승률 급락)
+        dominant = max(long_score, short_score)
+        minor = min(long_score, short_score)
+        if dominant > 0 and minor / dominant > 0.8:
+            direction = "neutral"
+            raw_score = 0
+        elif long_score > short_score:
             direction = "long"
             raw_score = long_score + confluence_bonus
         elif short_score > long_score:

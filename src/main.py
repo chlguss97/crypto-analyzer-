@@ -105,6 +105,8 @@ class CryptoAnalyzer:
         # 마켓 레짐 감지
         self.regime_detector = MarketRegimeDetector()
         self._current_regime = None
+        self._regime_transition = None  # "to_trending" | "to_ranging" | None
+        self._regime_transition_time = 0  # 전환 감지 시각
 
         # 뉴스 필터
         self.news_filter = NewsFilter()
@@ -245,6 +247,18 @@ class CryptoAnalyzer:
         new_regime = regime_result.get("regime")
         if prev_regime and new_regime and prev_regime != new_regime:
             logger.info(f"📊 레짐 변경: {prev_regime} → {new_regime}")
+            # 레짐 전환 상태 기록 (04-10: 전환 초기 부스트 / 횡보 전환 즉시 중단)
+            import time as _t
+            if new_regime in ("trending_up", "trending_down") and prev_regime == "ranging":
+                self._regime_transition = "to_trending"
+                self._regime_transition_time = _t.time()
+                logger.info(f"📈 ranging → trending 전환 감지 → 30분간 레버리지 1.5x 부스트")
+            elif new_regime == "ranging":
+                self._regime_transition = "to_ranging"
+                self._regime_transition_time = _t.time()
+                logger.info(f"📉 trending → ranging 전환 감지 → 신규 진입 즉시 중단")
+            else:
+                self._regime_transition = None
             if self.telegram:
                 try:
                     await self.telegram.notify_regime_change(
@@ -253,6 +267,10 @@ class CryptoAnalyzer:
                     )
                 except Exception:
                     pass
+        # 전환 부스트 30분 만료 체크
+        import time as _t
+        if self._regime_transition == "to_trending" and _t.time() - self._regime_transition_time > 1800:
+            self._regime_transition = None
 
         # 합산
         aggregated = self.aggregator.aggregate(fast, slow)
@@ -503,12 +521,15 @@ class CryptoAnalyzer:
             logger.info("[SWING] 학습 중 → 신규 진입 스킵")
             return
 
-        # 🔒 ranging 레짐 차단 — 박스권에서 양방향 진입 손실 패턴 방지 (04-09)
+        # 🔒 ranging 레짐 전면 차단 — 횡보장 방향성 매매 승률 23% (04-10 분석)
         if self._current_regime and self._current_regime.get("regime") == "ranging":
-            score = grade_result.get("score", 0)
-            if score < 8.0:  # ranging 에선 매우 강한 신호만
-                logger.info(f"[SWING] ranging 레짐 → 점수 {score:.1f} < 8.0 차단")
-                return
+            logger.info(f"[SWING] ranging 레짐 → 전면 차단 (explosive 외 진입 불가)")
+            return
+
+        # 🔒 trending → ranging 전환 직후 30분간 진입 차단
+        if self._regime_transition == "to_ranging":
+            logger.info(f"[SWING] trending→ranging 전환 직후 → 신규 진입 차단")
+            return
 
         direction = grade_result["direction"]
         atr_pct = self._last_fast.get("atr", {}).get("atr_pct", 0.3)
@@ -523,6 +544,11 @@ class CryptoAnalyzer:
             return
 
         leverage = lev["leverage"]
+        # ranging → trending 전환 초기 30분: 레버리지 1.5x 부스트
+        if self._regime_transition == "to_trending":
+            max_lev = self.config["risk"]["leverage_range"][1]
+            leverage = min(int(leverage * 1.5), max_lev)
+            logger.info(f"[SWING] 🚀 trending 전환 부스트 → 레버리지 {leverage}x")
         sizing_mode = self.config["risk"].get("sizing_mode", "margin_loss_cap")
 
         # ── 사이즈 + SL/TP 계산 ──
@@ -638,17 +664,21 @@ class CryptoAnalyzer:
         is_smc = bool(scalp_sig.get("smc_entry", False))
         score = scalp_sig.get("score", 0)
 
+        # 🔒 trending → ranging 전환 직후 진입 차단 (explosive 제외)
+        if self._regime_transition == "to_ranging" and not is_explosive:
+            logger.info(f"[SCALP] trending→ranging 전환 직후 → 신규 진입 차단")
+            return
+
         # 🚀 EXPLOSIVE MODE: 박스권에서도 변동성 폭발 시 빠른 스캘핑 진입
         # vol_explosion / range_breakout / rapid_momentum 중 하나 strength > 0.5
         # → ranging 차단 우회, Quick Mode (TP +5%, SL -3%, 5분 timeout)
         if is_explosive:
             logger.info(f"[SCALP-EXPLOSIVE] 🚀 변동성 폭발 감지 → Quick Mode 진입 시도")
         elif is_ranging:
-            # ranging + 일반 시그널: 점수 8.0 미만은 차단, 그 외는 사이즈 40% 축소
-            if score < 8.0:
-                logger.info(f"[SCALP] ranging 레짐 → 점수 {score:.1f} < 8.0 차단")
+            # ranging 레짐 전면 차단 — explosive/SMC 외 진입 불가 (04-10 분석: 23% 승률)
+            if not is_smc:
+                logger.info(f"[SCALP] ranging 레짐 → 일반 시그널 전면 차단 (explosive/SMC만 허용)")
                 return
-            # 점수 8.0+ 통과지만 사이즈 축소 적용
 
         price_str = await self.redis.get("rt:price:BTC-USDT-SWAP")
         price = float(price_str) if price_str else 0
@@ -658,6 +688,10 @@ class CryptoAnalyzer:
         balance = risk_state.get("balance", 0)
         sl_dist_indicator = scalp_sig["sl_distance"]
         leverage = 25
+        # ranging → trending 전환 초기: 레버리지 부스트
+        if self._regime_transition == "to_trending":
+            leverage = min(30, int(leverage * 1.5))
+            logger.info(f"[SCALP] 🚀 trending 전환 부스트 → 레버리지 {leverage}x")
         if balance <= 0 or sl_dist_indicator <= 0 or price <= 0:
             return
 
@@ -701,10 +735,6 @@ class CryptoAnalyzer:
                 tp3_dist = tp1_dist * 4
 
                 margin = balance * margin_pct
-                # ranging 사이즈 축소 (옵션 B): 학습 데이터 확보 + 손실 cap
-                if is_ranging:
-                    margin *= 0.4
-                    logger.info(f"[SCALP-RANGING] 사이즈 40% 축소 (학습 데이터 확보)")
 
                 logger.info(
                     f"[SCALP-SIZING] balance ${balance:.2f} × {margin_pct*100:.0f}% = "
@@ -794,14 +824,15 @@ class CryptoAnalyzer:
 
     # ── ML 학습 기록 ──
 
-    async def record_ml_trade(self, mode: str, signals: dict, pnl_pct: float):
+    async def record_ml_trade(self, mode: str, signals: dict, pnl_pct: float,
+                             fee_pct: float = 0.0):
         """실거래 결과 → ML 학습 + 시그널 기여도 추적"""
         ml = self.ml_swing if mode == "swing" else self.ml_scalp
         regime = self._current_regime["regime"] if self._current_regime else "ranging"
         meta = {"atr_pct": self._last_fast.get("atr", {}).get("atr_pct", 0.3),
                 "hour": datetime.now(timezone.utc).hour,
                 "regime": regime}
-        ml.record_trade(signals, meta, pnl_pct)
+        ml.record_trade(signals, meta, pnl_pct, fee_pct=fee_pct)
 
         # 시그널 기여도 추적
         if self.signal_tracker:
@@ -813,11 +844,17 @@ class CryptoAnalyzer:
 
     async def _initial_history_learn(self):
         """봇 시작 시 과거 데이터 학습 (백그라운드)"""
+        import time as _time
         await asyncio.sleep(30)  # 캔들 수집 완료 대기
+        _t0 = _time.time()
         try:
             self._learning_local = True
             await self.redis.set("sys:learning", "1", ttl=3600)
             logger.info("[HIST] 🔒 초기 역사 백필 학습 시작 (Swing) — 신규 진입 일시 정지")
+            try:
+                await self.telegram.notify_study_start("초기 백필학습")
+            except Exception:
+                pass
             await self.hist_learner.run_backfill("15m", lookback=2000, step=5)
 
             logger.info("[HIST] 초기 역사 백필 학습 시작 (Scalp)...")
@@ -829,9 +866,20 @@ class CryptoAnalyzer:
         except Exception as e:
             logger.error(f"[HIST] 초기 학습 에러: {e}")
         finally:
+            elapsed = _time.time() - _t0
             self._learning_local = False
             await self.redis.delete("sys:learning")
             logger.info("[HIST] 🔓 초기 학습 종료 — 매매 재개")
+            try:
+                await self.telegram.notify_study_done(
+                    "초기 백필학습", 0, elapsed_sec=elapsed,
+                    swing_oos=getattr(self.ml_swing, 'oos_accuracy', 0),
+                    scalp_oos=getattr(self.ml_scalp, 'oos_accuracy', 0),
+                    swing_buf=len(getattr(self.ml_swing, 'X_buffer', [])),
+                    scalp_buf=len(getattr(self.ml_scalp, 'X_buffer', [])),
+                )
+            except Exception:
+                pass
 
     async def periodic_study_scheduler(self):
         """
@@ -847,15 +895,33 @@ class CryptoAnalyzer:
 
         async def _guarded_study(label: str, coro):
             """학습 작업을 메모리 + redis flag 로 감싸서 실행 — Redis 끊김에도 안전"""
+            import time as _time
+            _t0 = _time.time()
+            result = None
             try:
                 self._learning_local = True
                 await self.redis.set("sys:learning", "1", ttl=3600)
                 logger.info(f"[SCHED] 🔒 학습 모드 ON ({label}) — 신규 진입 일시 정지")
-                await coro
+                try:
+                    await self.telegram.notify_study_start(label)
+                except Exception:
+                    pass
+                result = await coro
             finally:
+                elapsed = _time.time() - _t0
                 self._learning_local = False
                 await self.redis.delete("sys:learning")
                 logger.info(f"[SCHED] 🔓 학습 모드 OFF ({label}) — 매매 재개")
+                try:
+                    await self.telegram.notify_study_done(
+                        label, result, elapsed_sec=elapsed,
+                        swing_oos=getattr(self.ml_swing, 'oos_accuracy', 0),
+                        scalp_oos=getattr(self.ml_scalp, 'oos_accuracy', 0),
+                        swing_buf=len(getattr(self.ml_swing, 'X_buffer', [])),
+                        scalp_buf=len(getattr(self.ml_scalp, 'X_buffer', [])),
+                    )
+                except Exception:
+                    pass
 
         while self._running:
             try:

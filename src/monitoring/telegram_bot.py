@@ -266,14 +266,19 @@ class TelegramNotifier:
     async def notify_exit(self, direction: str, exit_reason: str,
                           entry_price: float, exit_price: float,
                           pnl_pct: float, pnl_usdt: float,
-                          hold_minutes: int):
-        icon = "\U0001f4b5" if pnl_usdt > 0 else "\u2716\ufe0f"
+                          hold_minutes: int,
+                          fee: float = 0.0, funding: float = 0.0):
+        net_pnl = pnl_usdt - fee - funding
+        icon = "\U0001f4b5" if net_pnl > 0 else "\u2716\ufe0f"
         text = (
             f"{icon} <b>Exit | {direction.upper()} | {exit_reason}</b>\n"
             f"\n"
             f"진입: ${entry_price:,.1f} -> 청산: ${exit_price:,.1f}\n"
             f"수익률: {pnl_pct:+.2f}%\n"
             f"손익: ${pnl_usdt:+,.2f}\n"
+            f"수수료: ${fee:,.4f}\n"
+            f"펀딩비: ${funding:,.4f}\n"
+            f"<b>순손익: ${net_pnl:+,.2f}</b>\n"
             f"보유: {hold_minutes}분\n"
             f"\n"
             f"{datetime.now(timezone.utc).strftime('%H:%M:%S UTC')}"
@@ -341,6 +346,41 @@ class TelegramNotifier:
             f"\n"
             f"{old_regime} \u2192 {new_regime}\n"
             f"Confidence: {confidence*100:.0f}%"
+        )
+        await self._send(text)
+
+    # ── 학습 알림 ──
+
+    async def notify_study_start(self, label: str):
+        text = (
+            f"\U0001f4d6 <b>학습 시작 | {label}</b>\n"
+            f"\n"
+            f"신규 진입 일시 정지\n"
+            f"{datetime.now(timezone.utc).strftime('%H:%M:%S UTC')}"
+        )
+        await self._send(text)
+
+    async def notify_study_done(self, label: str, result,
+                                elapsed_sec: float = 0,
+                                swing_oos: float = 0, scalp_oos: float = 0,
+                                swing_buf: int = 0, scalp_buf: int = 0):
+        learned = result if isinstance(result, (int, float)) else 0
+        m, s = divmod(int(elapsed_sec), 60)
+        text = (
+            f"\u2705 <b>학습 완료 | {label}</b>\n"
+            f"\n"
+            f"학습 건수: {learned:,}건\n"
+            f"소요 시간: {m}분 {s}초\n"
+        )
+        if swing_oos or scalp_oos:
+            text += (
+                f"Swing OOS: {swing_oos:.3f} (버퍼 {swing_buf:,})\n"
+                f"Scalp OOS: {scalp_oos:.3f} (버퍼 {scalp_buf:,})\n"
+            )
+        text += (
+            f"\n"
+            f"매매 재개\n"
+            f"{datetime.now(timezone.utc).strftime('%H:%M:%S UTC')}"
         )
         await self._send(text)
 

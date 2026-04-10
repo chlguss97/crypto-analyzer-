@@ -22,8 +22,8 @@ class ScalpEngine:
     def __init__(self):
         self.name = "scalp"
         self.default_leverage = 25
-        self.sl_atr_mult = 0.8
-        self.tp_rr = 2.0
+        self.sl_atr_mult = 1.5    # 0.8→1.5: SL 노이즈 즉사 방지 (04-10)
+        self.tp_rr = 2.5          # 2.0→2.5: RR 개선
 
     async def analyze(self, candles_1m: pd.DataFrame, candles_5m: pd.DataFrame,
                       candles_15m: pd.DataFrame = None) -> dict:
@@ -129,7 +129,13 @@ class ScalpEngine:
         # 실측: 한 방향 발동률 ~30%, strength 평균 ~0.4 → 한 방향 raw 평균 5~10
         # 정규화 분모를 15.0 으로 낮춰 임계값(0.5~2.5) 대비 합리적 점수 분포 확보
         max_possible = 15.0
-        if score_long > score_short:
+        # 04-10: 양방향 점수 차이 20% 미만 → neutral (방향 불확실)
+        dominant = max(score_long, score_short)
+        minor = min(score_long, score_short)
+        if dominant > 0 and minor / dominant > 0.8:
+            direction = "neutral"
+            raw = 0
+        elif score_long > score_short:
             direction = "long"
             raw = score_long
         elif score_short > score_long:
@@ -153,14 +159,14 @@ class ScalpEngine:
         # 개선: 각 필터마다 정해진 비율만 감점
         penalty = 0.0
 
-        # 15m 역방향 (급변동/SMC면 약화)
+        # 15m 역방향 (04-10 강화: 역추세 일반 0.30→0.50 — 승률 핵심 필터)
         if trend_filter != "neutral" and trend_filter != direction:
             if smc_entry:
-                penalty += 0.10  # SMC는 카운터 트레이드 가능
+                penalty += 0.15  # SMC 카운터도 약간 감점
             elif is_explosive:
-                penalty += 0.15
+                penalty += 0.20
             else:
-                penalty += 0.30
+                penalty += 0.50  # 역추세 일반 진입 사실상 차단
 
         # 안티첩 (SMC/급변동 모드면 무시 — 횡보장에서도 이런 시그널 잘 먹음)
         if antichop["is_chop"] and not (smc_entry or is_explosive):
@@ -181,17 +187,21 @@ class ScalpEngine:
 
         # SL/TP 모드별 조정
         if smc_entry:
-            sl_mult = 0.5
+            sl_mult = 1.0    # 0.5→1.0: SMC도 노이즈 방어 필요
             tp_mult = 2.5
             use_trailing = False
         elif explosive_mode:
-            sl_mult = 0.6
-            tp_mult = 1.5
+            sl_mult = 1.2    # 0.6→1.2: 변동성 폭발 시 흔들림 대비
+            tp_mult = 2.0    # 1.5→2.0: RR 개선
             use_trailing = True
         else:
-            sl_mult = self.sl_atr_mult
-            tp_mult = self.tp_rr
+            sl_mult = self.sl_atr_mult  # 1.5
+            tp_mult = self.tp_rr        # 2.5
             use_trailing = False
+
+        # 최소 SL 가격 0.15% — 노이즈 즉사 방지 (04-10)
+        min_sl_dist = candles_5m["close"].iloc[-1] * 0.0015
+        sl_dist = max(atr * sl_mult, min_sl_dist)
 
         return {
             "mode": "scalp",
@@ -203,8 +213,8 @@ class ScalpEngine:
             "signals": signals,
             "atr": round(atr, 2),
             "atr_pct": round(atr_pct, 4),
-            "sl_distance": round(atr * sl_mult, 2),
-            "tp_distance": round(atr * sl_mult * tp_mult, 2),
+            "sl_distance": round(sl_dist, 2),
+            "tp_distance": round(sl_dist * tp_mult, 2),
             "leverage": self.default_leverage,
             "explosive_mode": explosive_mode,
             "smc_entry": smc_entry,

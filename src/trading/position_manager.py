@@ -125,7 +125,7 @@ class PositionManager:
         self.risk_cfg = self.config["risk"]
 
         self.positions: dict[str, Position] = {}  # symbol → Position
-        self.on_trade_closed = None  # 콜백: async def(mode, signals, pnl_pct)
+        self.on_trade_closed = None  # 콜백: async def(mode, signals, pnl_pct, fee_pct)
         self.telegram = None  # main.py 에서 주입 — 청산 알림용
         self.trade_logger = None  # main.py 에서 주입 — 청산 로그용
         # 동일 심볼 동시 처리 방지 (check_positions vs signal_exit vs close_all)
@@ -1049,6 +1049,13 @@ class PositionManager:
             except Exception as e:
                 logger.debug(f"실제 청산가 fetch 실패: {e}")
 
+        # 펀딩비 조회 (포지션 진입 이후 발생한 펀딩비 합산)
+        try:
+            funding = await self.executor.fetch_funding_bill(pos.entry_time * 1000)
+            pos.funding_cost = funding
+        except Exception as e:
+            logger.debug(f"펀딩비 조회 실패: {e}")
+
         # P&L 계산
         pnl_pct = pos.pnl_pct(exit_price) if exit_price > 0 else 0
         pnl_usdt = 0.0
@@ -1092,7 +1099,8 @@ class PositionManager:
             try:
                 await self.telegram.notify_exit(
                     pos.direction, reason, pos.entry_price, exit_price,
-                    pnl_pct, pnl_usdt, pos.hold_minutes
+                    pnl_pct, pnl_usdt, pos.hold_minutes,
+                    fee=pos.total_fee, funding=pos.funding_cost
                 )
             except Exception as e:
                 logger.error(f"텔레그램 청산 알림 실패: {e}")
@@ -1107,11 +1115,14 @@ class PositionManager:
             except Exception as e:
                 logger.error(f"trade_logger.log_exit 실패: {e}")
 
-        # ML 학습 콜백 (실거래 시그널 데이터 포함)
+        # ML 학습 콜백 (실거래 시그널 데이터 포함 + 수수료율)
         if self.on_trade_closed:
             mode = "scalp" if pos.grade == "SCALP" else "swing"
+            # 수수료를 마진 대비 % 로 변환 (ML 라벨링에 반영)
+            margin = pos.size * pos.entry_price / pos.leverage if pos.leverage > 0 else 0
+            fee_pct = (pos.total_fee + pos.funding_cost) / margin * 100 if margin > 0 else 0
             try:
-                await self.on_trade_closed(mode, pos.signals_snapshot, pnl_pct)
+                await self.on_trade_closed(mode, pos.signals_snapshot, pnl_pct, fee_pct=fee_pct)
             except Exception as e:
                 logger.error(f"ML 콜백 에러: {e}")
 

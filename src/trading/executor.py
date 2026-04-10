@@ -577,6 +577,20 @@ class OrderExecutor:
             logger.error(f"포지션 조회 실패: {e}")
             return []
 
+    async def fetch_funding_bill(self, since_ms: int) -> float:
+        """포지션 보유 중 발생한 펀딩비 합계 조회 (OKX account bills, type=8=funding fee)"""
+        total = 0.0
+        try:
+            response = await self.exchange.private_get_account_bills(
+                {"instId": self.symbol.replace("/", "-"),
+                 "type": "8", "begin": str(since_ms), "limit": "100"}
+            )
+            for bill in response.get("data", []):
+                total += abs(float(bill.get("balChg", 0) or 0))
+        except Exception as e:
+            logger.debug(f"펀딩비 조회 실패: {e}")
+        return total
+
     async def get_balance(self) -> float:
         """USDT 잔고 조회"""
         try:

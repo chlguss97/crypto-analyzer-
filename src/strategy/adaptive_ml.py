@@ -43,10 +43,8 @@ class AdaptiveML:
         # 적응형 가중치
         self.weights = self._default_weights()
 
-        # 임계값
-        # 초기 임계값 — scalp 은 ScalpEngine 점수 분포 (0.16~1.6 관측) 에 맞춰 1.0
-        # (옛 4.5 는 점수의 4~28배라 절대 진입 불가였음)
-        self.entry_threshold = 5.5 if mode == "swing" else 1.0
+        # 임계값 (04-10 상향: scalp 1.0→5.0, 저점수 진입 = 20% 승률)
+        self.entry_threshold = 5.5 if mode == "swing" else 5.0
         self.min_trades_to_train = 30
         self.retrain_interval = 100  # 100거래마다 재학습 (모델 안정화)
 
@@ -222,25 +220,22 @@ class AdaptiveML:
                     avg_proba += p * w
             avg_proba /= total_weight
 
-            # class: 0=loss, 1=small_win, 2=big_win
-            if len(avg_proba) >= 3:
-                win_prob = avg_proba[1] + avg_proba[2]
-                big_win_prob = float(avg_proba[2])
-            elif len(avg_proba) == 2:
+            # class: 0=loss, 1=win (2클래스)
+            if len(avg_proba) >= 2:
                 win_prob = float(avg_proba[1])
-                big_win_prob = 0.0
             else:
                 win_prob = 0.5
-                big_win_prob = 0.0
+            big_win_prob = 0.0
 
             confidence = abs(win_prob - 0.5) * 2
 
-            if win_prob > 0.55:
+            # 04-10 임계값 조정: confirm 완화(0.50), reject 강화(0.45/-3.0)
+            if win_prob > 0.50:
                 ml_direction = "confirm"
                 ml_score = min(3.0, (win_prob - 0.5) * 6)
-            elif win_prob < 0.4:
+            elif win_prob < 0.45:
                 ml_direction = "reject"
-                ml_score = -2.0
+                ml_score = -3.0
             else:
                 ml_direction = "neutral"
                 ml_score = 0.0
@@ -262,7 +257,8 @@ class AdaptiveML:
 
     # ── 학습 기록 ──
 
-    def record_trade(self, signals: dict, meta: dict, pnl_pct: float):
+    def record_trade(self, signals: dict, meta: dict, pnl_pct: float,
+                     fee_pct: float = 0.0):
         """거래 결과 기록 → 레짐별 버퍼 + 글로벌 버퍼"""
         features = self.extract_features(signals, meta)
         regime = (meta or {}).get("regime", "ranging")
@@ -278,12 +274,9 @@ class AdaptiveML:
             )
             return
 
-        if pnl_pct <= -0.05:
-            label = 0
-        elif pnl_pct < 1.0:
-            label = 1
-        else:
-            label = 2
+        # 수수료 차감 후 순손익 기준 라벨링 (04-10: 수수료 빼면 loss인 거래를 win으로 학습 방지)
+        net_pnl = pnl_pct - fee_pct
+        label = 0 if net_pnl <= 0 else 1
 
         # 글로벌 버퍼
         self.X_buffer.append(features)
@@ -363,11 +356,17 @@ class AdaptiveML:
             X_train_s = self.global_scaler.transform(X_train)
             X_test_s = self.global_scaler.transform(X_test)
 
+            # 클래스 불균형 보정: loss 과다 → win 샘플에 가중치 부여
+            n_loss = np.sum(y_train == 0)
+            n_win = np.sum(y_train == 1)
+            spw = n_loss / max(n_win, 1)  # scale_pos_weight
+            sample_w = np.where(y_train == 1, spw, 1.0)
+
             gbm = GradientBoostingClassifier(
                 n_estimators=150, max_depth=4, min_samples_leaf=5,
                 learning_rate=0.08, subsample=0.8, random_state=42,
             )
-            gbm.fit(X_train_s, y_train)
+            gbm.fit(X_train_s, y_train, sample_weight=sample_w)
             self.global_model = gbm
 
             # Walk-forward 정확도
@@ -408,13 +407,19 @@ class AdaptiveML:
 
                 ensemble = {}
 
+                # 레짐별 클래스 불균형 보정
+                n_loss_r = np.sum(y_rt == 0)
+                n_win_r = np.sum(y_rt == 1)
+                spw_r = n_loss_r / max(n_win_r, 1)
+                sw_r = np.where(y_rt == 1, spw_r, 1.0)
+
                 # GBM
                 try:
                     g = GradientBoostingClassifier(
                         n_estimators=100, max_depth=3, min_samples_leaf=5,
                         learning_rate=0.1, subsample=0.8, random_state=42,
                     )
-                    g.fit(X_rt_s, y_rt)
+                    g.fit(X_rt_s, y_rt, sample_weight=sw_r)
                     ensemble["gbm"] = g
                 except Exception as e:
                     logger.debug(f"[{self.mode}] {regime} GBM 학습 실패: {e}")
@@ -422,7 +427,8 @@ class AdaptiveML:
                 # RandomForest
                 try:
                     rf = RandomForestClassifier(
-                        n_estimators=100, max_depth=5, min_samples_leaf=3, random_state=42,
+                        n_estimators=100, max_depth=5, min_samples_leaf=3,
+                        class_weight="balanced", random_state=42,
                     )
                     rf.fit(X_rt_s, y_rt)
                     ensemble["rf"] = rf
@@ -431,7 +437,7 @@ class AdaptiveML:
 
                 # LogisticRegression
                 try:
-                    lr = LogisticRegression(max_iter=500, random_state=42, multi_class="multinomial")
+                    lr = LogisticRegression(max_iter=500, random_state=42, class_weight="balanced")
                     lr.fit(X_rt_s, y_rt)
                     ensemble["lr"] = lr
                 except Exception as e:
@@ -476,10 +482,9 @@ class AdaptiveML:
         recent = list(self.recent_results)
         if len(recent) >= 10:
             recent_wr = sum(1 for r in recent[-10:] if self._get_pnl(r) > 0) / 10
-            # 모드별 임계값 상한/하한
-            # scalp: ScalpEngine 점수 관측 분포 0.16~1.6 → 자동 조정 범위 0.5~2.5
+            # 모드별 임계값 상한/하한 (04-10: scalp 최소 4.0)
             if self.mode == "scalp":
-                max_threshold, min_threshold = 2.5, 0.5
+                max_threshold, min_threshold = 7.0, 4.0
             else:
                 max_threshold, min_threshold = 8.0, 4.0
 

@@ -1,7 +1,7 @@
 """
-PaperTrader — 가상매매 + 전수 학습 엔진
-1) 전수 학습: 점수 2.0+ 모든 시그널에서 가상 진입 (낮은 점수가 정말 나쁜지 학습)
-2) 미진입 추적(Shadow): neutral 시그널도 추적하여 "진입 안 한 게 맞았나?" 검증
+PaperTrader — 가상매매 + 학습 엔진
+1) 학습: 점수 5.0+ 시그널에서 가상 진입 (ML 학습 데이터 품질 확보)
+2) 미진입 추적(Shadow): neutral/저점수 시그널도 추적하여 "진입 안 한 게 맞았나?" 검증
 3) 모든 결과 → DB 기록 + ML 실시간 학습
 """
 import logging
@@ -72,7 +72,7 @@ class ShadowTrack:
 class PaperTrader:
     """
     가상매매 + 전수학습 + 미진입 추적 엔진
-    - 점수 2.0+ 모든 시그널 → 가상 진입 (max 10개 동시)
+    - 점수 5.0+ 시그널 → 가상 진입 (max 10개 동시, 04-10 품질 상향)
     - neutral/저점수 시그널 → shadow 추적 (30분간)
     - 모든 결과 → DB + ML 피드백
     """
@@ -101,7 +101,7 @@ class PaperTrader:
     # ── 전수 학습 진입 (점수 2.0+) ──
 
     async def try_entry(self, signal_result: dict, mode: str, current_price: float):
-        """전수 학습: 점수 2.0+ 모든 시그널에서 가상 진입"""
+        """학습: 점수 5.0+ 시그널에서 가상 진입 (04-10 품질 상향)"""
         direction = signal_result.get("direction", "neutral")
         score = signal_result.get("score", 0)
 
@@ -110,8 +110,8 @@ class PaperTrader:
             self._add_shadow(signal_result, mode, current_price)
             return None
 
-        # 점수 너무 낮으면 shadow
-        if score < 2.0:
+        # 점수 너무 낮으면 shadow (5.0 미만 → 저품질 데이터 제외)
+        if score < 5.0:
             self._add_shadow(signal_result, mode, current_price)
             return None
 
@@ -262,7 +262,8 @@ class PaperTrader:
             if self.regime_detector and self.regime_detector._regime_history:
                 regime = self.regime_detector._regime_history[-1]
             meta = {"atr_pct": 0.3, "hour": datetime.now(timezone.utc).hour, "shadow": True, "regime": regime}
-            ml.record_trade(s.signals_snapshot, meta, potential_pnl * 0.5)
+            shadow_fee = self.FEE_RATE * 2 * 15 * 100  # 추정 15x
+            ml.record_trade(s.signals_snapshot, meta, potential_pnl * 0.5, fee_pct=shadow_fee)
             logger.info(
                 f"[SHADOW-{s.mode.upper()}] 놓친 기회! {s.direction.upper()} "
                 f"잠재 PnL: {potential_pnl:+.1f}% 점수 {s.score:.1f}"
@@ -274,7 +275,8 @@ class PaperTrader:
             if self.regime_detector and self.regime_detector._regime_history:
                 regime = self.regime_detector._regime_history[-1]
             meta = {"atr_pct": 0.3, "hour": datetime.now(timezone.utc).hour, "shadow": True, "regime": regime}
-            ml.record_trade(s.signals_snapshot, meta, potential_pnl * 0.3)
+            shadow_fee = self.FEE_RATE * 2 * 15 * 100
+            ml.record_trade(s.signals_snapshot, meta, potential_pnl * 0.3, fee_pct=shadow_fee)
             logger.debug(f"[SHADOW] 올바른 거부: {s.direction} PnL {potential_pnl:+.1f}%")
 
     # ── 포지션 체크 + 청산 ──
@@ -372,7 +374,7 @@ class PaperTrader:
             if len(history) > 0:
                 regime = history[-1]
         meta = {"atr_pct": 0.3, "hour": datetime.now(timezone.utc).hour, "regime": regime}
-        ml.record_trade(pos.signals_snapshot, meta, net_pnl_pct)
+        ml.record_trade(pos.signals_snapshot, meta, net_pnl_pct, fee_pct=fee_pct)
 
         # 시그널 기여도 추적
         if self.signal_tracker:
