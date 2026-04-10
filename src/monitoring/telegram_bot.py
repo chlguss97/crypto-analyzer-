@@ -114,13 +114,13 @@ class TelegramNotifier:
         elif cmd == "/help":
             await self._send(
                 "<b>Commands</b>\n\n"
-                "/on — Autotrading ON\n"
-                "/off — Autotrading OFF\n"
-                "/status — Bot Status\n"
-                "/balance — Check Balance\n"
-                "/close — Close All Positions\n"
-                "/clear — Force Clear Zombie\n"
-                "/help — Command List"
+                "\U0001f7e2 /on — Autotrading ON\n"
+                "\U0001f534 /off — Autotrading OFF\n"
+                "\U0001f4ca /status — Bot Status\n"
+                "\U0001f4b0 /balance — Check Balance\n"
+                "\U0001f6d1 /close — Close All Positions\n"
+                "\U0001f9f9 /clear — Force Clear Zombie\n"
+                "\u2753 /help — Command List"
             )
 
         elif cmd == "/\uba70\ub2c8":
