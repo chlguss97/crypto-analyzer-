@@ -138,8 +138,11 @@ class CryptoAnalyzer:
         self._scalp_daily_pnl = 0.0         # 일일 스캘핑 P&L (%)
         self._scalp_streak = 0               # 연패 카운터
         self._scalp_cooldown_until = 0       # 쿨다운 종료 시각 (timestamp)
-        self._last_sl_direction = None       # 마지막 SL 방향
-        self._last_sl_time = 0               # 마지막 SL 시각
+        # 04-13: Swing/Scalp SL 쿨다운 분리 (H4)
+        self._swing_last_sl_dir = None
+        self._swing_last_sl_time = 0
+        self._scalp_last_sl_dir = None
+        self._scalp_last_sl_time = 0
         self._scalp_pending_signal = None    # 진입 확인 대기 시그널
         self._scalp_pending_price = 0.0
 
@@ -181,6 +184,7 @@ class CryptoAnalyzer:
         self.position_manager.on_trade_closed = self.record_ml_trade
         self.position_manager.telegram = self.telegram
         self.position_manager.trade_logger = self.trade_logger
+        self.position_manager.risk_manager = self.risk_manager
         await self.position_manager.sync_positions()
 
         # 캔들 백필 (15m, 1h, 5m, 1m)
@@ -554,10 +558,10 @@ class CryptoAnalyzer:
 
         direction = grade_result["direction"]
 
-        # 04-13 개선: SL 쿨다운 60분→30분 (폭락장 양방향 동시 차단 문제)
+        # 04-13: Swing 전용 SL 쿨다운 30분
         import time as _t
-        if (self._last_sl_direction == direction
-                and _t.time() - self._last_sl_time < 1800):
+        if (self._swing_last_sl_dir == direction
+                and _t.time() - self._swing_last_sl_time < 1800):
             logger.info(f"[SWING] {direction} SL 후 30분 미경과 → 같은 방향 재진입 차단")
             return
 
@@ -651,7 +655,7 @@ class CryptoAnalyzer:
 
         # OKX BTC-USDT-SWAP: 1 contract = 0.01 BTC, sz 는 contracts 단위
         # 0.01 단위 down rounding (math.floor) — round() 의 banker's rounding 회피
-        raw_size = margin * lev["leverage"] / price
+        raw_size = margin * leverage / price  # 04-13: 부스트된 leverage 사용 (H5)
         size_btc = math.floor(raw_size / 0.01) * 0.01
         size_btc = round(size_btc, 4)
 
@@ -685,10 +689,10 @@ class CryptoAnalyzer:
         if direction == "neutral":
             return
 
-        # 04-13 개선: SL 쿨다운 60분→15분 (스캘핑은 빠른 재진입 필요)
+        # 04-13: Scalp 전용 SL 쿨다운 15분
         import time as _t
-        if (self._last_sl_direction == direction
-                and _t.time() - self._last_sl_time < 900):
+        if (self._scalp_last_sl_dir == direction
+                and _t.time() - self._scalp_last_sl_time < 900):
             logger.info(f"[SCALP] {direction} SL 후 15분 미경과 → 같은 방향 재진입 차단")
             return
 
@@ -844,10 +848,15 @@ class CryptoAnalyzer:
         ctx["funding_rate"] = float(fr_val) if fr_val else 0
         fn_min = await self.redis.get("rt:funding_next_min:BTC-USDT-SWAP")
         ctx["funding_next_min"] = int(fn_min) if fn_min else 999
-        ctx["funding_history"] = oi_history
+        # 04-13: 각 히스토리를 올바른 데이터로 조회 (H6: 전부 oi_history 쓰던 버그)
+        funding_history = await self.db.get_funding_history(self.symbol, limit=24) \
+            if hasattr(self.db, 'get_funding_history') else oi_history
+        ctx["funding_history"] = funding_history
         ls_val = await self.redis.get("rt:ls_ratio:BTC-USDT-SWAP")
         ctx["ls_ratio_account"] = float(ls_val) if ls_val else 1.0
-        ctx["ls_history"] = oi_history
+        ls_history = await self.db.get_ls_history(self.symbol, limit=24) \
+            if hasattr(self.db, 'get_ls_history') else oi_history
+        ctx["ls_history"] = ls_history
         # CVD 는 진행 중 윈도우 (cvd:15m:current) 우선, 없으면 직전 윈도우 합계 (cvd:15m) fallback
         # → 시그널 엔진이 1봉 lag 없이 현재 누적값을 본다 (BUG #1 fix)
         cvd_15m_cur = await self.redis.get("cvd:15m:current:BTC-USDT-SWAP")
@@ -875,11 +884,15 @@ class CryptoAnalyzer:
         if mode == "scalp":
             self._scalp_record_result(pnl_pct)
 
-        # SL 후 같은 방향 재진입 차단 기록 (04-10)
+        # 04-13: SL 기록 모드별 분리 (H4)
         import time as _t
         if "sl" in exit_reason and pnl_pct < 0 and direction:
-            self._last_sl_direction = direction
-            self._last_sl_time = _t.time()
+            if mode == "scalp":
+                self._scalp_last_sl_dir = direction
+                self._scalp_last_sl_time = _t.time()
+            else:
+                self._swing_last_sl_dir = direction
+                self._swing_last_sl_time = _t.time()
 
         # 시그널 기여도 추적
         if self.signal_tracker:
@@ -1124,6 +1137,11 @@ class CryptoAnalyzer:
                 self._scalp_streak = 0
                 self._scalp_cooldown_until = 0
                 self._loss_warning_sent = False  # 일일 손실 임박 알림 플래그 리셋
+                # 04-13: SL 쿨다운 리셋 (H7)
+                self._swing_last_sl_dir = None
+                self._swing_last_sl_time = 0
+                self._scalp_last_sl_dir = None
+                self._scalp_last_sl_time = 0
 
                 # 일일 리포트 — DB에서 어제 거래 집계 (정확)
                 try:

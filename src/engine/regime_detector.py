@@ -123,13 +123,15 @@ class MarketRegimeDetector:
         confidence = scores[regime] / max(sum(scores.values()), 1)
 
         # 레짐 안정화 (급변 방지 — 2회 연속 같아야 전환)
+        # 04-13: raw(감지된) 레짐을 history에 기록 (기존: stabilized 기록 → 전환 불가 버그)
+        raw_regime = regime
         if regime != self._last_regime:
             if len(self._regime_history) >= 2 and self._regime_history[-1] == regime:
                 self._last_regime = regime
             else:
                 regime = self._last_regime
 
-        self._regime_history.append(regime)
+        self._regime_history.append(raw_regime)  # raw 값 기록 (안정화 전)
         if len(self._regime_history) > self._max_history:
             self._regime_history.pop(0)
 
@@ -173,10 +175,10 @@ class MarketRegimeDetector:
                 scores[REGIME_TRENDING_UP] += 3.0
             else:
                 scores[REGIME_TRENDING_DOWN] += 3.0
+        elif adx < 15:
+            scores[REGIME_RANGING] += 4.0  # 04-13: 순서 교정 (M10: dead code)
         elif adx < 20:
             scores[REGIME_RANGING] += 3.0
-        elif adx < 15:
-            scores[REGIME_RANGING] += 4.0
 
         # ── BB Width 기반 ──
         if bb_pctile > 80:

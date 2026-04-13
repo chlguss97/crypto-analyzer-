@@ -113,6 +113,24 @@ def _zones_overlap(signals: dict) -> bool:
 class SignalAggregator:
     """시그널 가중 합산 + 컨플루언스 보너스"""
 
+    @staticmethod
+    def _calc_directional_bonus(signals: dict, direction: str, total_bonus: float) -> float:
+        """컨플루언스 보너스 중 해당 방향 시그널과 일치하는 것만 반영"""
+        if total_bonus <= 0:
+            return 0.0
+        # 보너스 구성 시그널(OB, FVG, fractal 등)의 방향이 dominant과 일치하는 비율
+        key_signals = ["order_block", "fvg", "fractal", "bollinger", "vwap"]
+        matching = 0
+        total = 0
+        for k in key_signals:
+            sig = signals.get(k, {})
+            if sig.get("strength", 0) > 0.3:
+                total += 1
+                if sig.get("direction") == direction:
+                    matching += 1
+        ratio = matching / total if total > 0 else 0.5
+        return total_bonus * ratio
+
     def aggregate(
         self,
         fast_signals: dict,
@@ -175,20 +193,25 @@ class SignalAggregator:
 
         # 최종 방향 결정
         # 04-13 개선: 0.8→0.6 완화 + neutral이어도 dominant 방향 점수 50% 유지
-        # (폭락 시 시그널 충돌로 모든 매매 차단되던 문제 해결)
         dominant = max(long_score, short_score)
         minor = min(long_score, short_score)
+
+        # 04-13: 방향별 컨플루언스 보너스 분리 (방향 무시하고 가산되던 버그 수정)
+        dir_bonus = 0.0
+        if long_score >= short_score:
+            dir_bonus = self._calc_directional_bonus(all_signals, "long", confluence_bonus)
+        else:
+            dir_bonus = self._calc_directional_bonus(all_signals, "short", confluence_bonus)
+
         if dominant > 0 and minor / dominant > 0.6:
-            # 방향 불확실하지만 dominant 방향으로 감점 진입 허용
             direction = "long" if long_score >= short_score else "short"
-            raw_score = (dominant - minor) + confluence_bonus  # 순차이만 반영
-            raw_score *= 0.5  # 50% 감점
+            raw_score = (dominant - minor + dir_bonus) * 0.5
         elif long_score > short_score:
             direction = "long"
-            raw_score = long_score + confluence_bonus
+            raw_score = long_score + dir_bonus
         elif short_score > long_score:
             direction = "short"
-            raw_score = short_score + confluence_bonus
+            raw_score = short_score + dir_bonus
         else:
             direction = "neutral"
             raw_score = 0

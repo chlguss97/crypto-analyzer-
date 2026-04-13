@@ -290,19 +290,20 @@ class AdaptiveML:
 
         self.recent_results.append({
             "pnl_pct": pnl_pct,
+            "net_pnl": net_pnl,  # 04-13: net PnL 추가 (H18)
             "timestamp": int(_time.time() * 1000),
             "label": label,
             "regime": regime,
         })
         self.trade_count += 1
 
-        # 레짐별 성능 추적
+        # 레짐별 성능 추적 (04-13: net_pnl 기준으로 변경)
         if regime in self.regime_performance:
             self.regime_performance[regime]["trades"] += 1
-            if pnl_pct > 0:
+            if net_pnl > 0:
                 self.regime_performance[regime]["wins"] += 1
 
-        self._adjust_weights(signals, pnl_pct)
+        self._adjust_weights(signals, net_pnl)  # 04-13: net_pnl 사용
 
         if self.trade_count % self.retrain_interval == 0 and len(self.X_buffer) >= self.min_trades_to_train:
             self.train()
@@ -623,9 +624,9 @@ class AdaptiveML:
                 }
 
         loaded_threshold = data["entry_threshold"]
-        # 모드별 임계값 cap 적용 (자동 조정 범위 밖의 옛 pkl 값 강제 보정)
+        # 04-13: _adjust_weights 범위와 동일하게 맞춤 (기존 scalp [0.5,2.5] → [4.0,7.0])
         if self.mode == "scalp":
-            self.entry_threshold = min(2.5, max(0.5, loaded_threshold))
+            self.entry_threshold = min(7.0, max(4.0, loaded_threshold))
         else:
             self.entry_threshold = min(8.0, max(4.0, loaded_threshold))
         if loaded_threshold != self.entry_threshold:
@@ -714,7 +715,10 @@ class AdaptiveML:
     # ── 유틸 ──
 
     def _get_pnl(self, r):
-        return r.get("pnl_pct", 0) if isinstance(r, dict) else r
+        # 04-13: net_pnl 우선 사용 (H18: 수수료 반영)
+        if isinstance(r, dict):
+            return r.get("net_pnl", r.get("pnl_pct", 0))
+        return r
 
     def get_stats(self) -> dict:
         """현재 학습 상태 (대시보드용)"""

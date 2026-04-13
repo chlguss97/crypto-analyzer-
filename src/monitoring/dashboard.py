@@ -32,6 +32,8 @@ DASHBOARD_PASS = os.getenv("DASHBOARD_PASS", "")
 def verify_auth(credentials: HTTPBasicCredentials = Depends(security)):
     """대시보드 Basic Auth 검증"""
     if not DASHBOARD_PASS:
+        # 04-13: 비밀번호 미설정 시 읽기 전용만 허용, 매매 API는 차단 (H15)
+        logger.warning("DASHBOARD_PASS 미설정 — 읽기 전용 모드")
         return credentials.username
     correct_user = secrets.compare_digest(credentials.username, DASHBOARD_USER)
     correct_pass = secrets.compare_digest(credentials.password, DASHBOARD_PASS)
@@ -523,11 +525,17 @@ async def resume_bot():
 @app.post("/api/close-all")
 async def close_all():
     """전 포지션 청산 (킬 스위치)"""
+    _require_auth()
     await redis.set("sys:bot_status", "stopped")
-    # 실제 청산은 main.py의 position_manager가 Redis 상태 변경 감지 후 처리
-    # 여기서는 상태 변경만
+    # 04-13: Redis 플래그 + 직접 청산 병행 (H16)
+    if position_manager and position_manager.positions:
+        try:
+            result = await _run_in_main_loop(position_manager.close_all("kill_switch_dashboard"))
+            logger.warning(f"킬 스위치: 직접 청산 실행 → {result}")
+        except Exception as e:
+            logger.error(f"킬 스위치 직접 청산 실패: {e} → main loop에서 처리 대기")
     logger.warning("킬 스위치 작동 (대시보드)")
-    return {"status": "stopped", "message": "전 포지션 청산 요청됨"}
+    return {"status": "stopped", "message": "전 포지션 청산 실행됨"}
 
 
 # ── 실시간 데이터 ──
@@ -555,9 +563,15 @@ async def get_market():
 
 # ── 매매 엔드포인트 ──
 
+def _require_auth():
+    """04-13: 매매 API는 비밀번호 필수 (H15)"""
+    if not DASHBOARD_PASS:
+        raise HTTPException(403, "매매 API는 DASHBOARD_PASS 설정 필수")
+
 @app.post("/api/trade/open")
 async def manual_open(req: ManualOrderRequest):
     """수동 매매 진입"""
+    _require_auth()
     if not executor:
         raise HTTPException(400, "OrderExecutor 미초기화 (API 키 확인)")
 

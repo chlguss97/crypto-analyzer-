@@ -17,7 +17,7 @@ risk:
   # ── mode_b: margin_loss_cap (사용자 의도) ──
   # SL/TP 모두 "마진 손익 %" 기준으로 결정 → 가격 거리 = % / leverage
   # 매물대 SL 은 더 가까울 때만 보호 차원에서 사용
-  margin_pct: 0.95              # 잔고의 95% 를 마진으로 사용
+  margin_pct: 0.90              # 04-13: 95→90% (H19: 여유 5% 확보, 소규모 계좌 호환)
   max_margin_loss_pct: 12.0     # 10→12%: SL 확대에 맞춰 마진 손실 한도 상향 (04-10)
   use_indicator_sl: true        # true 면 매물대 SL 과 마진 한도 SL 중 가까운 것 사용
 

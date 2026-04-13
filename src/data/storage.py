@@ -278,7 +278,23 @@ class RedisClient:
     def connected(self) -> bool:
         return self._client is not None
 
+    async def _ensure_connected(self):
+        """04-13: Redis 재연결 시도 (H14: 시작 실패 시 영구 None 방지)"""
+        if self._client is not None:
+            return
+        try:
+            self._client = redis.Redis(
+                host=self.host, port=self.port, db=self.db_num, decode_responses=True
+            )
+            await self._client.ping()
+            logger.info(f"Redis 재연결 성공: {self.host}:{self.port}")
+        except Exception as e:
+            logger.warning(f"Redis 재연결 실패: {e}")
+            self._client = None
+
     async def set(self, key: str, value, ttl: int = None):
+        if not self._client:
+            await self._ensure_connected()
         if not self._client:
             return
         try:
@@ -289,15 +305,19 @@ class RedisClient:
             else:
                 await self._client.set(key, value)
         except Exception as e:
-            logger.debug(f"Redis set error ({key}): {e}")
+            logger.warning(f"Redis set error ({key}): {e}")
+            self._client = None  # 다음 호출 시 재연결 시도
 
     async def get(self, key: str) -> str | None:
+        if not self._client:
+            await self._ensure_connected()
         if not self._client:
             return None
         try:
             return await self._client.get(key)
         except Exception as e:
-            logger.debug(f"Redis get error ({key}): {e}")
+            logger.warning(f"Redis get error ({key}): {e}")
+            self._client = None
             return None
 
     async def get_json(self, key: str) -> dict | list | None:
@@ -307,6 +327,8 @@ class RedisClient:
         return None
 
     async def hset(self, key: str, mapping: dict, ttl: int = None):
+        if not self._client:
+            await self._ensure_connected()
         if not self._client:
             return
         try:
@@ -337,6 +359,8 @@ class RedisClient:
             return []
 
     async def delete(self, key: str):
+        if not self._client:
+            await self._ensure_connected()
         if not self._client:
             return
         try:

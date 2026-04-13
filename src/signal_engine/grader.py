@@ -134,7 +134,11 @@ class SignalGrader:
             }
 
         max_lev = int(matched_grade["max_leverage"] * leverage_mult)
-        max_lev = max(max_lev, self.risk_cfg["leverage_range"][0])
+        # 04-13: 연패 시 floor 적용 안 함 (H9: 4연패에도 10x 쓰던 문제)
+        if leverage_mult < 1.0:
+            max_lev = max(max_lev, 5)  # 연패 시 최소 5x (floor 10x 무시)
+        else:
+            max_lev = max(max_lev, self.risk_cfg["leverage_range"][0])
 
         result = {
             "grade": grade_name,

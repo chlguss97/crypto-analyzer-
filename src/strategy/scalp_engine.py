@@ -583,8 +583,8 @@ class ScalpEngine:
             wick_above = current_high - recent_high
             sweep = "high_swept"
             direction = "short"
-            # 정규화: wick / atr 비율로 계산
-            atr_proxy = (recent_high - recent_low) / 20  # 평균 봉 크기
+            # 04-13: ATR proxy에 최소 floor 추가 (H17: tight range에서 strength 항상 1.0)
+            atr_proxy = max((recent_high - recent_low) / 20, current_close * 0.001)
             wick_ratio = wick_above / atr_proxy if atr_proxy > 0 else 0
             strength = min(1.0, 0.4 + wick_ratio * 0.3)
             if current_close < current_open:
@@ -595,7 +595,7 @@ class ScalpEngine:
             wick_below = recent_low - current_low
             sweep = "low_swept"
             direction = "long"
-            atr_proxy = (recent_high - recent_low) / 20
+            atr_proxy = max((recent_high - recent_low) / 20, current_close * 0.001)
             wick_ratio = wick_below / atr_proxy if atr_proxy > 0 else 0
             strength = min(1.0, 0.4 + wick_ratio * 0.3)
             if current_close > current_open:

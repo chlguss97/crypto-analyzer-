@@ -50,6 +50,9 @@ class Position:
         # 사용자 수동 SL/TP 수정 → self_heal/트레일이 안 덮음
         self.manual_sl_override = False
         self.manual_tp_override = False
+        # 04-13: 시간 청산 반복 방지 플래그 (H12)
+        self.time_1h_done = False
+        self.time_2h_done = False
 
         # OKX 알고 주문 ID 추적 (cancel/replace 용)
         # 러너 모드에서는 tp2/tp3 사용 안 함 — 호환용으로만 유지
@@ -128,6 +131,7 @@ class PositionManager:
         self.on_trade_closed = None  # 콜백: async def(mode, signals, pnl_pct, fee_pct)
         self.telegram = None  # main.py 에서 주입 — 청산 알림용
         self.trade_logger = None  # main.py 에서 주입 — 청산 로그용
+        self.risk_manager = None  # main.py 에서 주입 — 매매 결과 리스크 갱신용
         # 동일 심볼 동시 처리 방지 (check_positions vs signal_exit vs close_all)
         self._symbol_locks: dict[str, asyncio.Lock] = {}
 
@@ -769,8 +773,8 @@ class PositionManager:
             await self._full_close(pos, "time_6h")
             return True
 
-        # 2시간 → TP1 미체결 시 75% 청산
-        if hours >= 2 and not pos.tp1_filled:
+        # 2시간 → TP1 미체결 시 75% 청산 (1회만)
+        if hours >= 2 and not pos.tp1_filled and not pos.time_2h_done:
             # 잔여가 최소단위 미만 되면 전체 청산
             close_pct = 0.75
             if pos.remaining_size * (1 - close_pct) < self.MIN_ORDER_SIZE_BTC:
@@ -778,18 +782,20 @@ class PositionManager:
                 await self._full_close(pos, "time_2h_full")
                 return True
             await self._partial_close(pos, close_pct, "time_2h")
+            pos.time_2h_done = True  # 04-13: 반복 방지 (H12)
             if pos.remaining_size > 0:
                 await self._move_sl(pos, pos.current_sl, label="time_2h_resize")
             return False
 
-        # 1시간 → 수익 < 3% 시 50% 청산
-        if hours >= 1 and not pos.tp1_filled and pnl < 3.0:
+        # 1시간 → 수익 < 3% 시 50% 청산 (1회만)
+        if hours >= 1 and not pos.tp1_filled and pnl < 3.0 and not pos.time_1h_done:
             close_pct = 0.5
             if pos.remaining_size * (1 - close_pct) < self.MIN_ORDER_SIZE_BTC:
                 await self._cancel_all_algos(pos)
                 await self._full_close(pos, "time_1h_full")
                 return True
             await self._partial_close(pos, close_pct, "time_1h")
+            pos.time_1h_done = True  # 04-13: 반복 방지 (H12)
             if pos.remaining_size > 0:
                 await self._move_sl(pos, pos.current_sl, label="time_1h_resize")
             return False
@@ -1087,11 +1093,11 @@ class PositionManager:
         except Exception as e:
             logger.debug(f"펀딩비 조회 실패: {e}")
 
-        # P&L 계산
+        # P&L 계산 (04-13: remaining_size 기준 — TP1 50% 익절 후 남은 사이즈만)
         pnl_pct = pos.pnl_pct(exit_price) if exit_price > 0 else 0
         pnl_usdt = 0.0
         if pos.entry_price > 0 and pos.leverage > 0:
-            margin = pos.size * pos.entry_price / pos.leverage
+            margin = pos.remaining_size * pos.entry_price / pos.leverage
             pnl_usdt = margin * pnl_pct / 100
 
         # DB 업데이트 (음수 trade_id = 임시 ID, DB 에 없으므로 스킵)
@@ -1146,11 +1152,18 @@ class PositionManager:
             except Exception as e:
                 logger.error(f"trade_logger.log_exit 실패: {e}")
 
+        # 04-13: 리스크 매니저에 매매 결과 기록 (일일/주간 P&L, 연패 추적)
+        if self.risk_manager:
+            try:
+                await self.risk_manager.record_trade_result(pnl_pct, pnl_usdt)
+            except Exception as e:
+                logger.error(f"리스크 매니저 기록 실패: {e}")
+
         # ML 학습 콜백 (실거래 시그널 데이터 포함 + 수수료율 + 방향/사유)
         if self.on_trade_closed:
             mode = "scalp" if pos.grade == "SCALP" else "swing"
-            # 수수료를 마진 대비 % 로 변환 (ML 라벨링에 반영)
-            margin = pos.size * pos.entry_price / pos.leverage if pos.leverage > 0 else 0
+            # 04-13: remaining_size 기준 마진 (C1 일관성)
+            margin = pos.remaining_size * pos.entry_price / pos.leverage if pos.leverage > 0 else 0
             fee_pct = (pos.total_fee + pos.funding_cost) / margin * 100 if margin > 0 else 0
             try:
                 await self.on_trade_closed(mode, pos.signals_snapshot, pnl_pct,

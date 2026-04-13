@@ -390,10 +390,16 @@ class OrderExecutor:
         new_sl: float,
         old_algo_id: str | None,
     ) -> str | None:
-        """기존 SL 알고 취소 후 새 SL 등록 (트레일링/본절 이동)"""
-        if old_algo_id:
+        """SL 갱신: 새 SL 먼저 등록 → 성공 시에만 old 취소 (나체 포지션 방지)"""
+        new_id = await self.set_stop_loss(direction, size, new_sl)
+        if new_id and old_algo_id:
+            # 새 SL 성공 → 이제 old 취소 (실패해도 두 개 공존은 안전)
             await self.cancel_algo_order(old_algo_id)
-        return await self.set_stop_loss(direction, size, new_sl)
+        elif not new_id and old_algo_id:
+            # 새 SL 실패 → old 유지 (나체 방지)
+            logger.warning(f"새 SL 등록 실패 → 기존 SL {old_algo_id} 유지")
+            return old_algo_id
+        return new_id
 
     async def get_position_size(self, symbol: str | None = None) -> float:
         """
@@ -578,18 +584,23 @@ class OrderExecutor:
             return []
 
     async def fetch_funding_bill(self, since_ms: int) -> float:
-        """포지션 보유 중 발생한 펀딩비 합계 조회 (OKX account bills, type=8=funding fee)"""
+        """포지션 보유 중 발생한 펀딩비 비용 합계 (양수=지출, 음수=수입 → 비용만 합산)"""
         total = 0.0
         try:
+            # 04-13: instId 포맷 수정 (M6) + abs() 제거 (H3)
+            market = self.exchange.market(self.symbol)
+            inst_id = market["id"]  # "BTC-USDT-SWAP"
             response = await self.exchange.private_get_account_bills(
-                {"instId": self.symbol.replace("/", "-"),
+                {"instId": inst_id,
                  "type": "8", "begin": str(since_ms), "limit": "100"}
             )
             for bill in response.get("data", []):
-                total += abs(float(bill.get("balChg", 0) or 0))
+                # balChg: 음수=지출(비용), 양수=수입(보너스) → 부호 그대로 합산
+                total += float(bill.get("balChg", 0) or 0)
         except Exception as e:
             logger.debug(f"펀딩비 조회 실패: {e}")
-        return total
+        # 반환: 음수=순비용, 양수=순수입 → 호출자가 비용으로 사용 시 abs() 적용
+        return abs(total)  # 호환: 기존 코드가 funding_cost를 양수로 사용
 
     async def get_balance(self) -> float:
         """USDT 잔고 조회"""

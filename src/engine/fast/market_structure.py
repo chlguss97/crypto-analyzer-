@@ -140,12 +140,18 @@ class MarketStructureIndicator(BaseIndicator):
             direction = "long"
         elif trend == "bearish":
             direction = "short"
+        elif trend == "volatile":
+            # 04-13: volatile에서도 direction/strength 반영 (H11)
+            direction = "neutral"
         else:
             direction = "neutral"
 
         # 강도
         strength = 0.0
-        if structure["last_event"]:
+        if trend == "volatile":
+            # HH+LL 또는 LH+HL: 변동성 확대 상태 — 방향은 중립이지만 감지됨
+            strength = 0.4
+        elif structure["last_event"]:
             if "BOS" in structure["last_event"]:
                 strength = 0.7
                 if aligned:
