@@ -907,63 +907,123 @@ class ScalpEngine:
 
     def _rsi2_extreme(self, candles_1m: pd.DataFrame, candles_5m: pd.DataFrame) -> dict:
         """
-        RSI(2) Extreme Mean Reversion — 승률 65~72%
+        RSI(2) Extreme Mean Reversion v2 — 승률 65~72%
         출처: Larry Connors / Renaissance Technologies 변형
-        - RSI(2) < 5 → 과매도 롱, > 95 → 과매수 숏
-        - 5m EMA200 방향 필터 (추세 방향으로만 평균회귀)
+        강화: 다중 RSI 확인 + Stochastic 보조 + BB %B 겹침 + 연속봉 카운트
         """
-        result = {"type": "rsi2_extreme", "direction": "neutral", "strength": 0.0}
-        if len(candles_1m) < 10 or len(candles_5m) < 200:
+        result = {"type": "rsi2_extreme", "direction": "neutral", "strength": 0.0,
+                  "rsi2": 50.0, "stoch_k": 50.0, "consecutive": 0}
+        if len(candles_1m) < 20 or len(candles_5m) < 200:
             return result
 
         close_1m = candles_1m["close"]
-        # RSI(2) 계산
+        price = float(close_1m.iloc[-1])
+
+        # RSI(2) — 초민감 과매도/과매수 감지
         delta = close_1m.diff()
         gain = delta.clip(lower=0).rolling(2).mean()
         loss = (-delta.clip(upper=0)).rolling(2).mean()
         rs = gain / loss.replace(0, 1e-10)
         rsi2 = 100 - (100 / (1 + rs))
         current_rsi2 = float(rsi2.iloc[-1])
-
         if np.isnan(current_rsi2):
             return result
 
-        # 5m EMA(200) 추세 필터
-        ema200 = candles_5m["close"].ewm(span=200, adjust=False).mean().iloc[-1]
-        price = float(close_1m.iloc[-1])
-        trend_up = price > ema200
-        trend_down = price < ema200
+        # Stochastic(5,3,3) — 추가 과매도/과매수 확인
+        low_5 = candles_1m["low"].rolling(5).min()
+        high_5 = candles_1m["high"].rolling(5).max()
+        stoch_raw = (close_1m - low_5) / (high_5 - low_5 + 1e-10) * 100
+        stoch_k = float(stoch_raw.rolling(3).mean().iloc[-1])
+        if np.isnan(stoch_k):
+            stoch_k = 50.0
 
-        # 볼륨 필터: 현재 봉 < 1.5x 평균 (폭락 중 잡지 않기)
-        vol_avg = candles_1m["volume"].rolling(20).mean().iloc[-1]
-        vol_current = candles_1m["volume"].iloc[-1]
-        vol_ok = vol_current < vol_avg * 1.5
+        # BB %B — 밴드 대비 위치 (0 미만 = 하단 이탈)
+        sma20 = close_1m.rolling(20).mean()
+        std20 = close_1m.rolling(20).std()
+        bb_upper = sma20 + 2.0 * std20
+        bb_lower = sma20 - 2.0 * std20
+        bb_range = bb_upper - bb_lower
+        pct_b = float(((close_1m - bb_lower) / bb_range.replace(0, 1)).iloc[-1])
 
-        if current_rsi2 < 5 and trend_up and vol_ok:
-            strength = min(1.0, (5 - current_rsi2) / 5 * 0.5 + 0.5)
+        # 5m EMA(50) + EMA(200) 이중 추세 필터
+        ema50 = float(candles_5m["close"].ewm(span=50, adjust=False).mean().iloc[-1])
+        ema200 = float(candles_5m["close"].ewm(span=200, adjust=False).mean().iloc[-1])
+        trend_up = price > ema200 and ema50 > ema200    # 확실한 상승 추세
+        trend_down = price < ema200 and ema50 < ema200  # 확실한 하락 추세
+
+        # 연속 하락/상승 봉 카운트 (mean reversion 강도 지표)
+        consecutive_down = 0
+        consecutive_up = 0
+        for i in range(-1, -min(8, len(close_1m)), -1):
+            if close_1m.iloc[i] < close_1m.iloc[i-1]:
+                consecutive_down += 1
+            else:
+                break
+        for i in range(-1, -min(8, len(close_1m)), -1):
+            if close_1m.iloc[i] > close_1m.iloc[i-1]:
+                consecutive_up += 1
+            else:
+                break
+
+        # 볼륨 필터: 현재 봉 < 2x 평균 (폭락/펌프 중 잡지 않기)
+        vol_avg = float(candles_1m["volume"].rolling(20).mean().iloc[-1])
+        vol_current = float(candles_1m["volume"].iloc[-1])
+        vol_ok = vol_current < vol_avg * 2.0 if vol_avg > 0 else True
+
+        # ── 롱 조건: RSI(2) < 10 + Stoch < 20 + 추세 상승 ──
+        if current_rsi2 < 10 and stoch_k < 20 and trend_up and vol_ok:
+            base = 0.4
+            # RSI 극단 보너스 (5 미만 강한 시그널)
+            base += min(0.2, (10 - current_rsi2) / 10 * 0.2)
+            # BB 하단 이탈 보너스
+            if pct_b < 0.05:
+                base += 0.15
+            # 연속 하락봉 보너스 (3봉+ = 강한 MR)
+            if consecutive_down >= 3:
+                base += min(0.15, consecutive_down * 0.03)
+            # Stoch 극단 보너스
+            if stoch_k < 10:
+                base += 0.1
+
             result["direction"] = "long"
-            result["strength"] = round(strength, 3)
+            result["strength"] = round(min(1.0, base), 3)
             result["rsi2"] = round(current_rsi2, 2)
-        elif current_rsi2 > 95 and trend_down and vol_ok:
-            strength = min(1.0, (current_rsi2 - 95) / 5 * 0.5 + 0.5)
+            result["stoch_k"] = round(stoch_k, 2)
+            result["consecutive"] = consecutive_down
+            result["bb_pct_b"] = round(pct_b, 3)
+
+        # ── 숏 조건: RSI(2) > 90 + Stoch > 80 + 추세 하락 ──
+        elif current_rsi2 > 90 and stoch_k > 80 and trend_down and vol_ok:
+            base = 0.4
+            base += min(0.2, (current_rsi2 - 90) / 10 * 0.2)
+            if pct_b > 0.95:
+                base += 0.15
+            if consecutive_up >= 3:
+                base += min(0.15, consecutive_up * 0.03)
+            if stoch_k > 90:
+                base += 0.1
+
             result["direction"] = "short"
-            result["strength"] = round(strength, 3)
+            result["strength"] = round(min(1.0, base), 3)
             result["rsi2"] = round(current_rsi2, 2)
+            result["stoch_k"] = round(stoch_k, 2)
+            result["consecutive"] = consecutive_up
+            result["bb_pct_b"] = round(pct_b, 3)
 
         return result
 
     def _vwap_mean_reversion(self, candles_5m: pd.DataFrame, candles_1m: pd.DataFrame) -> dict:
         """
-        VWAP Band Mean Reversion — 승률 60~68%
+        VWAP Band Mean Reversion v2 — 승률 60~68%
         출처: Brian Shannon "VWAP Bible", CryptoFace 크립토 적용
-        - 세션 VWAP ±2σ 터치 후 복귀 → 평균회귀 진입
-        - ADX < 30 (횡보장) + RSI(9) 극단 필터
+        강화: 3σ 밴드 + 볼륨 클라이맥스 + VWAP 슬로프 필터 + 1m 캔들 확인
         """
-        result = {"type": "vwap_mean_reversion", "direction": "neutral", "strength": 0.0}
-        if len(candles_5m) < 30:
+        result = {"type": "vwap_mean_reversion", "direction": "neutral", "strength": 0.0,
+                  "vwap": 0.0, "band_touch": "none", "vwap_slope": 0.0}
+        if len(candles_5m) < 30 or len(candles_1m) < 10:
             return result
 
-        # 세션 VWAP 계산 (최근 24시간 = 288 × 5m 봉)
+        # 세션 VWAP + σ 밴드
         lookback = min(288, len(candles_5m))
         df = candles_5m.iloc[-lookback:]
         typical_price = (df["high"] + df["low"] + df["close"]) / 3
@@ -971,109 +1031,200 @@ class ScalpEngine:
         cum_vol = volume.cumsum()
         cum_tp_vol = (typical_price * volume).cumsum()
         vwap = cum_tp_vol / cum_vol
-
-        # VWAP 표준편차 밴드
         sq_diff = ((typical_price - vwap) ** 2 * volume).cumsum() / cum_vol
         std = np.sqrt(sq_diff.clip(lower=0))
-        upper_2 = vwap + 2 * std
-        lower_2 = vwap - 2 * std
 
-        current_vwap = float(vwap.iloc[-1])
-        current_upper = float(upper_2.iloc[-1])
-        current_lower = float(lower_2.iloc[-1])
+        cv = float(vwap.iloc[-1])
+        cs1 = float(std.iloc[-1])
+        upper_2 = cv + 2 * cs1
+        lower_2 = cv - 2 * cs1
+        upper_3 = cv + 3 * cs1
+        lower_3 = cv - 3 * cs1
         price = float(candles_5m["close"].iloc[-1])
 
-        if current_upper == current_lower:
+        if cs1 < price * 0.0001:  # 밴드 너무 좁으면 스킵
             return result
 
-        # ADX 필터 (< 30: 횡보장에서만)
-        high = candles_5m["high"].values[-14:]
-        low = candles_5m["low"].values[-14:]
-        close = candles_5m["close"].values[-14:]
-        if len(high) < 14:
-            return result
-        atr = np.mean(np.maximum(high[1:] - low[1:],
-                       np.abs(high[1:] - close[:-1]),
-                       np.abs(low[1:] - close[:-1])))
-        # 간이 ADX 대용: ATR 변동률
-        atr_pct = atr / price * 100 if price > 0 else 0
+        result["vwap"] = round(cv, 1)
+
+        # VWAP 슬로프 (기울기 — 양수=상승, 음수=하락)
+        if len(vwap) >= 6:
+            vwap_slope = (float(vwap.iloc[-1]) - float(vwap.iloc[-6])) / float(vwap.iloc[-6]) * 100
+        else:
+            vwap_slope = 0.0
+        result["vwap_slope"] = round(vwap_slope, 4)
+
+        # 가격이 최근 30분 이내 VWAP ±1σ 안에 있었는지 (레인징 확인)
+        recent_6 = candles_5m["close"].iloc[-6:]  # 30분 = 6×5m
+        was_inside = any(
+            (cv - cs1) <= float(p) <= (cv + cs1) for p in recent_6
+        )
+
+        # 볼륨 클라이맥스: 현재 봉 볼륨 > 2x 평균 (피로 신호)
+        vol_avg = float(df["volume"].rolling(20).mean().iloc[-1])
+        vol_current = float(candles_5m["volume"].iloc[-1])
+        vol_climax = vol_current > vol_avg * 2.0 if vol_avg > 0 else False
 
         # RSI(9) on 1m
-        if len(candles_1m) < 10:
-            return result
         delta = candles_1m["close"].diff()
         gain = delta.clip(lower=0).rolling(9).mean()
-        loss = (-delta.clip(upper=0)).rolling(9).mean()
-        rs = gain / loss.replace(0, 1e-10)
+        loss_s = (-delta.clip(upper=0)).rolling(9).mean()
+        rs = gain / loss_s.replace(0, 1e-10)
         rsi9 = float((100 - (100 / (1 + rs))).iloc[-1])
+        if np.isnan(rsi9):
+            rsi9 = 50.0
 
-        # -2σ 터치 + RSI < 25 → 롱
-        if price <= current_lower and rsi9 < 25:
-            dist = (current_vwap - price) / (current_vwap - current_lower) if (current_vwap - current_lower) > 0 else 0
-            strength = min(1.0, 0.5 + dist * 0.5)
+        # 1m 확인 캔들: 반전 봉 (해머/인걸핑)
+        c1m = candles_1m.iloc[-1]
+        c1m_bull = c1m["close"] > c1m["open"]  # 양봉
+        c1m_bear = c1m["close"] < c1m["open"]  # 음봉
+
+        # ── 롱: -2σ 이하 터치 + RSI < 30 + 레인징 + 확인 봉 ──
+        if price <= lower_2 and rsi9 < 30 and was_inside:
+            base = 0.4
+            # -3σ 터치 보너스 (극단 이탈)
+            if price <= lower_3:
+                base += 0.2
+                result["band_touch"] = "-3sigma"
+            else:
+                result["band_touch"] = "-2sigma"
+            # 볼륨 클라이맥스 보너스 (매도 피로)
+            if vol_climax:
+                base += 0.15
+            # 1m 양봉 확인
+            if c1m_bull:
+                base += 0.1
+            # VWAP 상향 슬로프 = 매수 방향 OK
+            if vwap_slope > 0:
+                base += 0.05
             result["direction"] = "long"
-            result["strength"] = round(strength, 3)
-        # +2σ 터치 + RSI > 75 → 숏
-        elif price >= current_upper and rsi9 > 75:
-            dist = (price - current_vwap) / (current_upper - current_vwap) if (current_upper - current_vwap) > 0 else 0
-            strength = min(1.0, 0.5 + dist * 0.5)
+            result["strength"] = round(min(1.0, base), 3)
+
+        # ── 숏: +2σ 이상 터치 + RSI > 70 + 레인징 + 확인 봉 ──
+        elif price >= upper_2 and rsi9 > 70 and was_inside:
+            base = 0.4
+            if price >= upper_3:
+                base += 0.2
+                result["band_touch"] = "+3sigma"
+            else:
+                result["band_touch"] = "+2sigma"
+            if vol_climax:
+                base += 0.15
+            if c1m_bear:
+                base += 0.1
+            if vwap_slope < 0:
+                base += 0.05
             result["direction"] = "short"
-            result["strength"] = round(strength, 3)
+            result["strength"] = round(min(1.0, base), 3)
 
         return result
 
     def _liquidation_cascade_fade(self, candles_1m: pd.DataFrame) -> dict:
         """
-        Liquidation Cascade Fade — RR 2:1+, 승률 50~55%
+        Liquidation Cascade Fade v2 — RR 2:1+, 승률 50~55%
         출처: Coinglass/Hyblock Capital, PhoenixBTC
-        - OI 급락(-0.5%+) + 가격 급변(0.3%+) + 볼륨 5x → 캐스케이드 감지
-        - 다음 봉 위크 반전 확인 → 카운터 진입 (되돌림 페이드)
+        강화: 다중 봉 캐스케이드 감지 + V자 반전 패턴 + 볼륨 감소 확인 + 스프레드 분석
         """
-        result = {"type": "liq_cascade_fade", "direction": "neutral", "strength": 0.0}
+        result = {"type": "liq_cascade_fade", "direction": "neutral", "strength": 0.0,
+                  "cascade_type": "none", "cascade_bars": 0, "recovery_pct": 0.0}
         if len(candles_1m) < 25:
             return result
 
-        # 최근 캔들 분석 (2번째 최근 = 캐스케이드 후보, 최근 = 확인 봉)
-        prev = candles_1m.iloc[-2]
-        curr = candles_1m.iloc[-1]
+        vol_avg = float(candles_1m["volume"].iloc[-22:-2].mean()) if len(candles_1m) > 22 else 1.0
+        if vol_avg <= 0:
+            vol_avg = 1.0
 
-        # 캐스케이드 감지: 대형 봉 + 고볼륨
-        price_move = abs(prev["close"] - prev["open"]) / prev["open"] * 100
-        vol_avg = float(candles_1m["volume"].iloc[-22:-2].mean())
-        vol_spike = prev["volume"] / vol_avg if vol_avg > 0 else 0
+        # ── 다중 봉 캐스케이드 감지 (최근 1~3봉 연속 대형봉) ──
+        cascade_bars = 0
+        cascade_direction = "none"  # "down" or "up"
+        total_move = 0.0
+        max_vol_spike = 0.0
 
-        if price_move < 0.3 or vol_spike < 3.0:
+        for i in range(-3, 0):  # -3, -2, -1 (마지막 3봉 검사, 현재봉 제외는 아래서)
+            if abs(i) > len(candles_1m) - 1:
+                continue
+            bar = candles_1m.iloc[i]
+            bar_move = (bar["close"] - bar["open"]) / bar["open"] * 100 if bar["open"] > 0 else 0
+            bar_vol_spike = bar["volume"] / vol_avg
+
+            if abs(bar_move) >= 0.15 and bar_vol_spike >= 2.0:
+                if cascade_direction == "none":
+                    cascade_direction = "down" if bar_move < 0 else "up"
+                # 같은 방향이면 캐스케이드 연장
+                if (cascade_direction == "down" and bar_move < 0) or \
+                   (cascade_direction == "up" and bar_move > 0):
+                    cascade_bars += 1
+                    total_move += bar_move
+                    max_vol_spike = max(max_vol_spike, bar_vol_spike)
+
+        if cascade_bars == 0 or abs(total_move) < 0.25:
             return result
 
-        # 캐스케이드 방향
-        cascade_down = prev["close"] < prev["open"]  # 큰 음봉 = 하방 캐스케이드
-        cascade_up = prev["close"] > prev["open"]     # 큰 양봉 = 상방 캐스케이드
-
-        # 확인 봉: 위크 반전 (캐스케이드 반대 방향 위크 > 50% of body)
+        # ── 현재 봉 (확인 봉): 반전 패턴 ──
+        curr = candles_1m.iloc[-1]
+        prev = candles_1m.iloc[-2]
         curr_body = abs(curr["close"] - curr["open"])
         curr_range = curr["high"] - curr["low"]
-
         if curr_range <= 0:
             return result
 
-        wick_ratio = 1 - (curr_body / curr_range) if curr_range > 0 else 0
+        # V자 반전: 현재 봉이 캐스케이드 반대 방향
+        curr_bull = curr["close"] > curr["open"]
+        curr_bear = curr["close"] < curr["open"]
 
-        if cascade_down and curr["close"] > curr["open"] and wick_ratio > 0.4:
-            # 하방 캐스케이드 후 양봉 반전 → 롱 페이드
-            strength = min(1.0, 0.4 + vol_spike * 0.05 + price_move * 0.3)
+        # 하단 위크 비율 (롱 반전) / 상단 위크 비율 (숏 반전)
+        lower_wick = min(curr["open"], curr["close"]) - curr["low"]
+        upper_wick = curr["high"] - max(curr["open"], curr["close"])
+        lower_wick_pct = lower_wick / curr_range
+        upper_wick_pct = upper_wick / curr_range
+
+        # 볼륨 감소 확인 (캐스케이드 소진 = 볼륨 줄어듦)
+        curr_vol_ratio = curr["volume"] / vol_avg if vol_avg > 0 else 1.0
+        volume_declining = curr_vol_ratio < max_vol_spike * 0.7  # 캐스케이드 봉 대비 30%+ 감소
+
+        # 회복률: 캐스케이드 범위 대비 현재 봉 되돌림
+        cascade_range = abs(prev["close"] - prev["open"]) if prev["open"] > 0 else 1
+        if cascade_direction == "down":
+            recovery = (curr["close"] - curr["open"]) / cascade_range if cascade_range > 0 else 0
+        else:
+            recovery = (curr["open"] - curr["close"]) / cascade_range if cascade_range > 0 else 0
+
+        result["cascade_bars"] = cascade_bars
+        result["recovery_pct"] = round(recovery * 100, 1)
+
+        # ── 롱 페이드: 하방 캐스케이드 + 양봉 반전 + 하단 위크 ──
+        if cascade_direction == "down" and curr_bull:
+            base = 0.35
+            # 캐스케이드 강도 보너스
+            base += min(0.2, cascade_bars * 0.07)
+            base += min(0.15, abs(total_move) * 0.15)
+            # 볼륨 스파이크 보너스
+            base += min(0.1, max_vol_spike * 0.015)
+            # 하단 위크 보너스 (V자 바닥 확인)
+            if lower_wick_pct > 0.4:
+                base += 0.1
+            # 볼륨 감소 = 매도 피로
+            if volume_declining:
+                base += 0.1
+
             result["direction"] = "long"
-            result["strength"] = round(min(1.0, strength), 3)
+            result["strength"] = round(min(1.0, base), 3)
             result["cascade_type"] = "down_fade"
-            result["price_move_pct"] = round(price_move, 3)
-            result["vol_spike"] = round(vol_spike, 1)
-        elif cascade_up and curr["close"] < curr["open"] and wick_ratio > 0.4:
-            # 상방 캐스케이드 후 음봉 반전 → 숏 페이드
-            strength = min(1.0, 0.4 + vol_spike * 0.05 + price_move * 0.3)
+
+        # ── 숏 페이드: 상방 캐스케이드 + 음봉 반전 + 상단 위크 ──
+        elif cascade_direction == "up" and curr_bear:
+            base = 0.35
+            base += min(0.2, cascade_bars * 0.07)
+            base += min(0.15, abs(total_move) * 0.15)
+            base += min(0.1, max_vol_spike * 0.015)
+            if upper_wick_pct > 0.4:
+                base += 0.1
+            if volume_declining:
+                base += 0.1
+
             result["direction"] = "short"
-            result["strength"] = round(min(1.0, strength), 3)
+            result["strength"] = round(min(1.0, base), 3)
             result["cascade_type"] = "up_fade"
-            result["price_move_pct"] = round(price_move, 3)
-            result["vol_spike"] = round(vol_spike, 1)
 
         return result
 

@@ -79,6 +79,8 @@ class AdaptiveML:
                 "ema_cross": 2.5, "rapid_momentum": 2.5, "fvg": 2.5,
                 "pivot_points": 2.5, "rsi_reversal": 2.0, "volume_spike": 2.0,
                 "candle_pattern": 2.0, "momentum": 1.5,
+                # 해외 유명 기법 (04-13)
+                "rsi2_extreme": 4.0, "vwap_mean_reversion": 3.5, "liq_cascade_fade": 4.5,
             }
 
     # ── 강화 피처 엔지니어링 ──
@@ -149,6 +151,44 @@ class AdaptiveML:
         cluster = fractal.get("cluster_zone")
         features.append(cluster.get("distance_pct", 5) / 5 if cluster else 1.0)
 
+        # 9) 스캘핑 전용 피처 (04-13 ML 업그레이드)
+        if self.mode == "scalp":
+            # RSI2 극단값 (평균회귀 강도)
+            rsi2_sig = signals.get("rsi2_extreme", {})
+            features.append(rsi2_sig.get("rsi2", 50) / 100)
+            features.append(rsi2_sig.get("stoch_k", 50) / 100)
+            features.append(rsi2_sig.get("consecutive", 0) / 5)
+
+            # VWAP 밴드 위치 (MR 기회)
+            vwap_sig = signals.get("vwap_mean_reversion", {})
+            features.append(vwap_sig.get("vwap_slope", 0) / 0.1)  # 정규화
+            band_touch = vwap_sig.get("band_touch", "none")
+            features.append(1.0 if "3sigma" in band_touch else 0.5 if "2sigma" in band_touch else 0.0)
+
+            # 캐스케이드 감지 (페이드 기회)
+            cascade_sig = signals.get("liq_cascade_fade", {})
+            features.append(cascade_sig.get("cascade_bars", 0) / 3)
+            features.append(cascade_sig.get("recovery_pct", 0) / 100)
+
+            # 시그널 간 컨플루언스 (여러 MR 시그널 동시 발동)
+            mr_signals = ["rsi2_extreme", "vwap_mean_reversion", "rsi_reversal", "bb_breakout"]
+            mr_count = sum(1 for k in mr_signals
+                          if signals.get(k, {}).get("strength", 0) > 0.3)
+            features.append(mr_count / len(mr_signals))
+
+            # 방향 일관성 (신규 기법 vs 기존 기법)
+            new_dir = set()
+            old_dir = set()
+            for k in ["rsi2_extreme", "vwap_mean_reversion", "liq_cascade_fade"]:
+                d = signals.get(k, {}).get("direction", "neutral")
+                if d != "neutral":
+                    new_dir.add(d)
+            for k in ["order_block", "bos", "ema_cross", "momentum"]:
+                d = signals.get(k, {}).get("direction", "neutral")
+                if d != "neutral":
+                    old_dir.add(d)
+            features.append(1.0 if new_dir == old_dir and len(new_dir) > 0 else 0.0)
+
         return features
 
     # ── 예측 ──
@@ -185,26 +225,30 @@ class AdaptiveML:
             probas = []
             model_names = []
 
-            # 1) 레짐별 모델 (있으면)
+            # 1) 레짐별 모델 (있으면) — 04-13: 스캘핑 MR 레짐 가중치 강화
             if regime in self.models and self.models[regime]:
                 scaler = self.scalers.get(regime, self.global_scaler)
                 X_s = scaler.transform(X)
+                # 스캘핑에서 ranging/volatile 레짐은 MR 기법이 강하므로 가중치 UP
+                regime_boost = 1.0
+                if self.mode == "scalp" and regime in ("ranging", "volatile"):
+                    regime_boost = 1.5
                 for name, model in self.models[regime].items():
                     try:
                         p = model.predict_proba(X_s)[0]
-                        # GBM 가중치 높게
-                        weight = 2.0 if name == "gbm" else 1.0
+                        weight = (2.0 if name == "gbm" else 1.0) * regime_boost
                         probas.append((p, weight))
                         model_names.append(f"{regime}_{name}")
                     except Exception:
                         pass
 
-            # 2) 글로벌 모델 (항상)
+            # 2) 글로벌 모델 (항상) — 레짐 모델 있으면 가중치 낮춤
+            global_weight = 1.0 if len(probas) > 0 else 1.5
             if self.global_model is not None:
                 try:
                     X_g = self.global_scaler.transform(X)
                     p = self.global_model.predict_proba(X_g)[0]
-                    probas.append((p, 1.5))
+                    probas.append((p, global_weight))
                     model_names.append("global")
                 except Exception:
                     pass
@@ -229,13 +273,19 @@ class AdaptiveML:
 
             confidence = abs(win_prob - 0.5) * 2
 
-            # 04-10 임계값 조정: confirm 완화(0.50), reject 강화(0.45/-3.0)
-            if win_prob > 0.50:
-                ml_direction = "confirm"
+            # 04-13 ML 예측 로직 개선: 부드러운 점수 조정 (하드 리젝 제거)
+            if win_prob > 0.55:
+                ml_direction = "strong_confirm"
                 ml_score = min(3.0, (win_prob - 0.5) * 6)
-            elif win_prob < 0.45:
+            elif win_prob > 0.48:
+                ml_direction = "confirm"
+                ml_score = min(1.5, (win_prob - 0.48) * 10)
+            elif win_prob < 0.35:
                 ml_direction = "reject"
-                ml_score = -3.0
+                ml_score = max(-2.0, (win_prob - 0.35) * 5)  # -2.0 최대 감점 (기존 -3.0)
+            elif win_prob < 0.45:
+                ml_direction = "weak_reject"
+                ml_score = max(-1.0, (win_prob - 0.45) * 3)
             else:
                 ml_direction = "neutral"
                 ml_score = 0.0
@@ -483,16 +533,22 @@ class AdaptiveML:
         recent = list(self.recent_results)
         if len(recent) >= 10:
             recent_wr = sum(1 for r in recent[-10:] if self._get_pnl(r) > 0) / 10
-            # 04-13: scalp score 범위(0~4)에 맞게 조정
+            # 04-13: 동적 threshold — 승률 기반 빠른 조정
             if self.mode == "scalp":
                 max_threshold, min_threshold = 4.0, 1.5
             else:
                 max_threshold, min_threshold = 8.0, 4.0
 
-            if recent_wr < 0.3:
-                self.entry_threshold = min(max_threshold, self.entry_threshold + 0.1)
-            elif recent_wr > 0.5:
-                self.entry_threshold = max(min_threshold, self.entry_threshold - 0.05)
+            if recent_wr < 0.25:
+                # 심각한 연패 → 임계값 빠르게 상향 (진입 줄이기)
+                self.entry_threshold = min(max_threshold, self.entry_threshold + 0.15)
+            elif recent_wr < 0.35:
+                self.entry_threshold = min(max_threshold, self.entry_threshold + 0.05)
+            elif recent_wr > 0.55:
+                # 고승률 → 임계값 하향 (기회 늘리기)
+                self.entry_threshold = max(min_threshold, self.entry_threshold - 0.08)
+            elif recent_wr > 0.45:
+                self.entry_threshold = max(min_threshold, self.entry_threshold - 0.03)
 
     def get_adjusted_score(self, raw_score: float, signals: dict, meta: dict = None) -> float:
         """ML 예측으로 점수 조정"""
