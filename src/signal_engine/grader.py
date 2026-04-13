@@ -10,6 +10,7 @@ GRADES = [
     {"grade": "B+", "min_score": 7.5, "max_leverage": 20, "size_pct": 0.75, "execution": "limit"},
     {"grade": "B",  "min_score": 6.5, "max_leverage": 15, "size_pct": 0.50, "execution": "limit"},
     {"grade": "B-", "min_score": 6.0, "max_leverage": 10, "size_pct": 0.30, "execution": "limit"},
+    {"grade": "C+", "min_score": 5.0, "max_leverage": 10, "size_pct": 0.20, "execution": "limit"},
 ]
 
 
@@ -193,14 +194,16 @@ class SignalGrader:
         if risk_state.get("has_same_symbol", False):
             return "같은 심볼 포지션 존재"
 
-        # 수수료 필터: 기대수익 > 0.15%
+        # 수수료 필터: 기대수익 체크 (04-13: 6.0→5.0 하향 — 폭락장 기회 포착)
         score = aggregated.get("score", 0)
-        if score < 6.0:
+        if score < 5.0:
             return "기대수익 부족"
 
-        # 15m-1H 구조 정렬 체크
+        # 15m-1H 구조 정렬 체크 (04-13: 하드리젝 → 감점으로 전환)
+        # 폭락 시 HH+LL 혼재로 ranging 판정 → 모든 매매 차단되던 문제 해결
+        # 감점은 aggregate 단계에서 score에 이미 반영되므로 여기선 로그만
         ms = aggregated.get("signals_detail", {}).get("market_structure", {})
         if ms.get("trend") == "ranging":
-            return "시장 구조 횡보 (방향 불명)"
+            logger.info(f"시장 구조 횡보 — 감점 반영됨 (하드리젝 제거)")
 
         return None

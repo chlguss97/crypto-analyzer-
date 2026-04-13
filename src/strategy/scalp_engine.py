@@ -129,12 +129,12 @@ class ScalpEngine:
         # 실측: 한 방향 발동률 ~30%, strength 평균 ~0.4 → 한 방향 raw 평균 5~10
         # 정규화 분모를 15.0 으로 낮춰 임계값(0.5~2.5) 대비 합리적 점수 분포 확보
         max_possible = 15.0
-        # 04-10: 양방향 점수 차이 20% 미만 → neutral (방향 불확실)
+        # 04-13 개선: 0.8→0.6 완화 + 충돌 시에도 dominant 방향 감점 진입
         dominant = max(score_long, score_short)
         minor = min(score_long, score_short)
-        if dominant > 0 and minor / dominant > 0.8:
-            direction = "neutral"
-            raw = 0
+        if dominant > 0 and minor / dominant > 0.6:
+            direction = "long" if score_long >= score_short else "short"
+            raw = (dominant - minor) * 0.5  # 순차이의 50%만 반영
         elif score_long > score_short:
             direction = "long"
             raw = score_long

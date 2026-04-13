@@ -5,6 +5,36 @@
 
 ---
 
+## 2026-04-13
+
+### 매매 차단 게이트 전면 완화 — 폭락장 무매매 사태 대응
+
+주말 BTC 폭락에도 매매 0건 발생 → 안전장치가 동시 발동하여 모든 진입 차단된 구조적 문제 수정.
+
+- **neutral 판정 완화** (`aggregator.py`, `scalp_engine.py`)
+  - 양방향 충돌 임계값 0.8 → 0.6 (40% 차이까지 neutral)
+  - neutral 시 점수 0 → dominant 방향 50% 감점으로 변경 (진입 가능)
+- **grader 최소 점수 6.0 → 5.0** (`grader.py`)
+  - C+ 등급 신설 (5.0+, 레버리지 10x, 사이즈 20%)
+- **market_structure 횡보 하드리젝 제거** (`grader.py`)
+  - ranging일 때 즉시 거부 → 로그만 남기고 통과
+- **HH+LL / LH+HL = volatile** (`market_structure.py`)
+  - 폭락 시 혼재 패턴을 ranging 대신 volatile로 판정
+- **레짐 ranging 전면차단 → 조건부 허용** (`main.py`)
+  - Swing: 점수 7.0+ 이면 ranging에서도 진입
+  - Scalp: 점수 4.0+ 이면 ranging에서도 진입
+  - to_ranging 전환 블록: 무기한 → 10분(Swing)/5분(Scalp) 후 자동 만료
+- **SL 쿨다운 축소** (`main.py`)
+  - Swing: 60분 → 30분
+  - Scalp: 60분 → 15분
+- **학습 중 매매 허용** (`main.py`)
+  - 학습 락이 실거래 차단하지 않음 (가상매매만 차단 유지)
+  - 일일 학습 1~2시간 동안 매매 공백 제거
+- **scalp pending 확인 완화** (`main.py`)
+  - 5초 후 가격 역행해도 점수 5.0+ 이면 강제 진입
+
+---
+
 ## 2026-04-08
 
 ### 정밀 분석 후 6개 버그 수정 (Pass 1~5 ★★★)

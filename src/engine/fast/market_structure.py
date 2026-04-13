@@ -95,9 +95,11 @@ class MarketStructureIndicator(BaseIndicator):
             trend = "bearish"
             last_event = "BOS_bearish"  # 하락 추세 유지
         elif hh and ll:
-            trend = "ranging"
+            # 04-13: HH+LL = 확장 변동성 (폭락/급등), ranging이 아님
+            trend = "volatile"
         elif lh and hl:
-            trend = "ranging"
+            # 04-13: LH+HL = 수축 변동성, ranging보다는 전환 구간
+            trend = "volatile"
         elif ll and hl:
             # 이전 상승 중 LL → CHoCH
             last_event = "CHoCH_bearish"

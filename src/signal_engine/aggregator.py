@@ -174,12 +174,15 @@ class SignalAggregator:
         confluence_bonus = min(MAX_CONFLUENCE_BONUS, confluence_bonus)
 
         # 최종 방향 결정
-        # 04-10: 양방향 점수 차이가 20% 미만이면 neutral (방향 불확실 → 승률 급락)
+        # 04-13 개선: 0.8→0.6 완화 + neutral이어도 dominant 방향 점수 50% 유지
+        # (폭락 시 시그널 충돌로 모든 매매 차단되던 문제 해결)
         dominant = max(long_score, short_score)
         minor = min(long_score, short_score)
-        if dominant > 0 and minor / dominant > 0.8:
-            direction = "neutral"
-            raw_score = 0
+        if dominant > 0 and minor / dominant > 0.6:
+            # 방향 불확실하지만 dominant 방향으로 감점 진입 허용
+            direction = "long" if long_score >= short_score else "short"
+            raw_score = (dominant - minor) + confluence_bonus  # 순차이만 반영
+            raw_score *= 0.5  # 50% 감점
         elif long_score > short_score:
             direction = "long"
             raw_score = long_score + confluence_bonus

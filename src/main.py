@@ -269,10 +269,15 @@ class CryptoAnalyzer:
                     )
                 except Exception:
                     pass
-        # 전환 부스트 30분 만료 체크
+        # 전환 부스트/블록 만료 체크
         import time as _t
-        if self._regime_transition == "to_trending" and _t.time() - self._regime_transition_time > 1800:
-            self._regime_transition = None
+        if self._regime_transition and hasattr(self, '_regime_transition_time'):
+            elapsed = _t.time() - self._regime_transition_time
+            if self._regime_transition == "to_trending" and elapsed > 1800:
+                self._regime_transition = None
+            elif self._regime_transition == "to_ranging" and elapsed > 600:
+                # 04-13: to_ranging 블록도 10분 후 자동 만료
+                self._regime_transition = None
 
         # 합산
         aggregated = self.aggregator.aggregate(fast, slow)
@@ -433,8 +438,13 @@ class CryptoAnalyzer:
             elif pending["direction"] == "short" and current_price < self._scalp_pending_price:
                 confirmed = True
 
+            # 04-13 개선: 강한 시그널(score 5.0+)이면 가격 역행해도 진입 허용
+            # 폭락 시 5초 내 되돌림으로 모든 시그널 폐기되던 문제 해결
+            if not confirmed and pending.get("score", 0) >= 5.0:
+                confirmed = True
+                logger.info(f"[SCALP] 가격 역행이지만 점수 {pending['score']:.1f} >= 5.0 → 강제 진입")
+
             if confirmed:
-                # 진입 확정
                 await self._try_scalp_entry(pending, current_price)
             # 확인 실패 또는 완료 → 대기 초기화
             self._scalp_pending_signal = None
@@ -521,28 +531,34 @@ class CryptoAnalyzer:
 
     async def _execute_swing(self, grade_result, aggregated, risk_state):
         """Swing 매매 실행"""
-        # 🔒 학습 중에는 신규 진입 스킵 (asyncio 블로킹 race 방지)
+        # 04-13 개선: 학습 중에도 실거래 허용 (학습 락은 가상매매만 차단)
+        # 기존: 학습 1~2시간 동안 모든 매매 차단 → 폭락 시 기회 놓침
         if self._learning_local or await self.redis.get("sys:learning") == "1":
-            logger.info("[SWING] 학습 중 → 신규 진입 스킵")
+            logger.info("[SWING] 학습 중이지만 실거래는 허용")
+
+        # 04-13 개선: ranging 레짐에서도 고점수 시그널은 진입 허용
+        # (폭락 전 횡보→폭락 시 레짐 전환 지연으로 모든 매매 차단되던 문제 해결)
+        is_ranging = self._current_regime and self._current_regime.get("regime") == "ranging"
+        swing_score = grade_result.get("score", 0)
+        if is_ranging and swing_score < 7.0:
+            logger.info(f"[SWING] ranging 레짐 + 점수 {swing_score:.1f} < 7.0 → 차단")
             return
 
-        # 🔒 ranging 레짐 전면 차단 — 횡보장 방향성 매매 승률 23% (04-10 분석)
-        if self._current_regime and self._current_regime.get("regime") == "ranging":
-            logger.info(f"[SWING] ranging 레짐 → 전면 차단 (explosive 외 진입 불가)")
-            return
-
-        # 🔒 trending → ranging 전환 직후 30분간 진입 차단
+        # 04-13 개선: to_ranging 전환 블록 10분 제한 (기존: 무기한)
+        import time as _t
         if self._regime_transition == "to_ranging":
-            logger.info(f"[SWING] trending→ranging 전환 직후 → 신규 진입 차단")
-            return
+            elapsed = _t.time() - getattr(self, '_regime_transition_time', 0)
+            if elapsed < 600 and swing_score < 7.0:  # 10분 이내 + 낮은 점수만 차단
+                logger.info(f"[SWING] trending→ranging 전환 {elapsed:.0f}s < 600s → 차단")
+                return
 
         direction = grade_result["direction"]
 
-        # 🔒 SL 후 같은 방향 60분 차단 (04-10)
+        # 04-13 개선: SL 쿨다운 60분→30분 (폭락장 양방향 동시 차단 문제)
         import time as _t
         if (self._last_sl_direction == direction
-                and _t.time() - self._last_sl_time < 3600):
-            logger.info(f"[SWING] {direction} SL 후 60분 미경과 → 같은 방향 재진입 차단")
+                and _t.time() - self._last_sl_time < 1800):
+            logger.info(f"[SWING] {direction} SL 후 30분 미경과 → 같은 방향 재진입 차단")
             return
 
         atr_pct = self._last_fast.get("atr", {}).get("atr_pct", 0.3)
@@ -661,20 +677,19 @@ class CryptoAnalyzer:
 
     async def _execute_scalp(self, scalp_sig, risk_state):
         """Scalp 매매 실행"""
-        # 🔒 학습 중에는 신규 진입 스킵
+        # 04-13 개선: 학습 중에도 실거래 허용
         if self._learning_local or await self.redis.get("sys:learning") == "1":
-            logger.info("[SCALP] 학습 중 → 신규 진입 스킵")
-            return
+            logger.info("[SCALP] 학습 중이지만 실거래는 허용")
 
         direction = scalp_sig["direction"]
         if direction == "neutral":
             return
 
-        # 🔒 SL 후 같은 방향 60분 차단 (04-10: 연속 SL 방지)
+        # 04-13 개선: SL 쿨다운 60분→15분 (스캘핑은 빠른 재진입 필요)
         import time as _t
         if (self._last_sl_direction == direction
-                and _t.time() - self._last_sl_time < 3600):
-            logger.info(f"[SCALP] {direction} SL 후 60분 미경과 → 같은 방향 재진입 차단")
+                and _t.time() - self._last_sl_time < 900):
+            logger.info(f"[SCALP] {direction} SL 후 15분 미경과 → 같은 방향 재진입 차단")
             return
 
         # ── 모드 분기: explosive (변동성 폭발) vs ranging (박스권) vs 일반 ──
@@ -684,20 +699,21 @@ class CryptoAnalyzer:
         is_smc = bool(scalp_sig.get("smc_entry", False))
         score = scalp_sig.get("score", 0)
 
-        # 🔒 trending → ranging 전환 직후 진입 차단 (explosive 제외)
+        # 04-13 개선: to_ranging 전환 블록 5분 제한 + 고점수 우회
+        import time as _t2
         if self._regime_transition == "to_ranging" and not is_explosive:
-            logger.info(f"[SCALP] trending→ranging 전환 직후 → 신규 진입 차단")
-            return
+            elapsed = _t2.time() - getattr(self, '_regime_transition_time', 0)
+            if elapsed < 300 and score < 5.0:
+                logger.info(f"[SCALP] trending→ranging 전환 {elapsed:.0f}s → 차단")
+                return
 
-        # 🚀 EXPLOSIVE MODE: 박스권에서도 변동성 폭발 시 빠른 스캘핑 진입
-        # vol_explosion / range_breakout / rapid_momentum 중 하나 strength > 0.5
-        # → ranging 차단 우회, Quick Mode (TP +5%, SL -3%, 5분 timeout)
+        # 🚀 EXPLOSIVE MODE
         if is_explosive:
             logger.info(f"[SCALP-EXPLOSIVE] 🚀 변동성 폭발 감지 → Quick Mode 진입 시도")
         elif is_ranging:
-            # ranging 레짐 전면 차단 — explosive/SMC 외 진입 불가 (04-10 분석: 23% 승률)
-            if not is_smc:
-                logger.info(f"[SCALP] ranging 레짐 → 일반 시그널 전면 차단 (explosive/SMC만 허용)")
+            # 04-13 개선: ranging에서도 점수 4.0+면 진입 허용 (기존: SMC/explosive만)
+            if not is_smc and score < 4.0:
+                logger.info(f"[SCALP] ranging 레짐 + 점수 {score:.1f} < 4.0 → 차단")
                 return
 
         price_str = await self.redis.get("rt:price:BTC-USDT-SWAP")
