@@ -43,8 +43,8 @@ class AdaptiveML:
         # 적응형 가중치
         self.weights = self._default_weights()
 
-        # 임계값 (04-10 상향: scalp 1.0→5.0, 저점수 진입 = 20% 승률)
-        self.entry_threshold = 5.5 if mode == "swing" else 5.0
+        # 04-13: scalp score 실측 범위 0~4 반영 (기존 5.0은 진입 불가 수준)
+        self.entry_threshold = 5.5 if mode == "swing" else 2.0
         self.min_trades_to_train = 30
         self.retrain_interval = 100  # 100거래마다 재학습 (모델 안정화)
 
@@ -483,9 +483,9 @@ class AdaptiveML:
         recent = list(self.recent_results)
         if len(recent) >= 10:
             recent_wr = sum(1 for r in recent[-10:] if self._get_pnl(r) > 0) / 10
-            # 모드별 임계값 상한/하한 (04-10: scalp 최소 4.0)
+            # 04-13: scalp score 범위(0~4)에 맞게 조정
             if self.mode == "scalp":
-                max_threshold, min_threshold = 7.0, 4.0
+                max_threshold, min_threshold = 4.0, 1.5
             else:
                 max_threshold, min_threshold = 8.0, 4.0
 
@@ -624,9 +624,9 @@ class AdaptiveML:
                 }
 
         loaded_threshold = data["entry_threshold"]
-        # 04-13: _adjust_weights 범위와 동일하게 맞춤 (기존 scalp [0.5,2.5] → [4.0,7.0])
+        # 04-13: scalp score 실측 범위(0~4)에 맞게 cap
         if self.mode == "scalp":
-            self.entry_threshold = min(7.0, max(4.0, loaded_threshold))
+            self.entry_threshold = min(4.0, max(1.5, loaded_threshold))
         else:
             self.entry_threshold = min(8.0, max(4.0, loaded_threshold))
         if loaded_threshold != self.entry_threshold:
