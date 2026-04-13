@@ -171,7 +171,21 @@ class PositionManager:
         dist_from_margin = price * (trail_margin_pct / pos.leverage / 100)
         # 최소 노이즈 보호
         dist_min = price * (min_price_pct / 100)
-        return max(dist_from_margin, dist_min)
+        dist = max(dist_from_margin, dist_min)
+
+        # 04-13: TP1 거리 대비 cap — trail이 TP1 이익보다 크면 러��가 무의미
+        # trail_distance <= TP1 거리 × 0.7 (TP1 이익의 30%는 보전)
+        tp1_dist = abs(pos.tp1_price - pos.entry_price)
+        if tp1_dist > 0:
+            max_trail = tp1_dist * 0.7
+            if dist > max_trail:
+                logger.info(
+                    f"트레일 거리 ${dist:.1f} > TP1거리 ${tp1_dist:.1f}×0.7 "
+                    f"→ cap ${max_trail:.1f}"
+                )
+                dist = max_trail
+
+        return dist
 
     # OKX BTC-USDT-SWAP 최소 주문: 1 contract = 0.01 BTC
     MIN_ORDER_SIZE_BTC = 0.01
@@ -475,11 +489,16 @@ class PositionManager:
                     await self._move_sl(pos, new_sl, label="본절(서버TP)")
 
                     pos.runner_mode = True
-                    pos.best_price = current_price
-                    pos.trail_distance = self._get_trail_distance(pos, current_price)
+                    # 04-13: best_price를 최소 TP1 가격으로 설정
+                    # 서버 TP1은 TP1가 이상에서 체결됐지만, 폴링 시점 가격은 이미 하락했을 수 있음
+                    if pos.direction == "long":
+                        pos.best_price = max(current_price, pos.tp1_price)
+                    else:
+                        pos.best_price = min(current_price, pos.tp1_price) if current_price > 0 else pos.tp1_price
+                    pos.trail_distance = self._get_trail_distance(pos, pos.best_price)
                     logger.info(
                         f"✅ 서버 TP1 자동 체결 감지 → SL 본전 ${new_sl:.0f} | "
-                        f"🏃 러너 모드 ON (트레일 ${pos.trail_distance:.1f})"
+                        f"🏃 러너 모드 ON (best ${pos.best_price:.0f}, 트레일 ${pos.trail_distance:.1f})"
                     )
                     # 텔레그램 알림 — TP1 hit + 본절 이동 + 러너 ON
                     if self.telegram:
@@ -593,15 +612,20 @@ class PositionManager:
             await self._move_sl(pos, new_sl, label="본절")
             pos.manual_sl_override = False  # TP1 후 본절은 봇 자동 진행
 
-            # 러너 모드 활성화 — 트레일 거리는 마진 % 기반
+            # 러너 모드 활성화 — 트레일 거리는 마진 % 기준
             pos.runner_mode = True
-            pos.best_price = current_price
-            pos.trail_distance = self._get_trail_distance(pos, current_price)
+            # 04-13: best_price를 최소 TP1 가격으로 설정
+            # 폴링 지연으로 current_price가 TP1보다 낮을 수 있음 → 트레일 시작점 손해 방지
+            if pos.direction == "long":
+                pos.best_price = max(current_price, pos.tp1_price)
+            else:
+                pos.best_price = min(current_price, pos.tp1_price) if current_price > 0 else pos.tp1_price
+            pos.trail_distance = self._get_trail_distance(pos, pos.best_price)
 
             logger.info(
                 f"✅ TP1 익절 50% @ ${pos.tp1_price:.0f} → SL 본전 ${new_sl:.0f} | "
-                f"🏃 러너 모드 ON (트레일 ${pos.trail_distance:.1f} = "
-                f"{pos.trail_distance/current_price*100*pos.leverage:.1f}% 마진)"
+                f"🏃 러너 모드 ON (best ${pos.best_price:.0f}, 트레일 ${pos.trail_distance:.1f} = "
+                f"{pos.trail_distance/pos.best_price*100*pos.leverage:.1f}% 마진)"
             )
             # 텔레그램 알림 — TP1 hit + 본절 이동 + 러너 ON
             if self.telegram:
@@ -613,7 +637,8 @@ class PositionManager:
                     )
                 except Exception:
                     pass
-            return
+            # 04-13: return 제거 → 즉시 아래 러너 트레일링 실행
+            # (best_price=TP1 기준으로 SL을 본전보다 높게 올릴 수 있음)
 
         # 러너 모드 트레일링 — 가격이 새 고/저 갱신 시 SL 추격
         if pos.runner_mode:
