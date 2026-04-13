@@ -25,9 +25,9 @@ class LongShortRatioIndicator(BaseIndicator):
 
         # 1시간 내 변화율
         change_1h_pct = 0.0
-        if ls_history and len(ls_history) >= 2:
+        if ls_history and len(ls_history) >= 2 and isinstance(ls_history[-2], dict):
             prev_ratio = ls_history[-2].get("long_short_ratio_account", ratio_account)
-            if prev_ratio > 0:
+            if prev_ratio is not None and prev_ratio > 0:
                 change_1h_pct = (ratio_account - prev_ratio) / prev_ratio * 100
 
         # 고래 vs 개인 불일치
