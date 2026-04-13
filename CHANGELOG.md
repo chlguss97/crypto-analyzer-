@@ -7,6 +7,21 @@
 
 ## 2026-04-13
 
+### 전체 코드 정밀 분석 — CRITICAL 5 + HIGH 15 버그 수정
+
+4개 병렬 에이전트로 전체 코드베이스 정밀 분석 후 발견된 20개 버그 수정.
+
+**CRITICAL:**
+- **PnL USDT 계산 오류** — `pos.size`(원본)→`pos.remaining_size` (TP1 50% 후 PnL 2배 계산되던 근본 원인)
+- **리스크 한도 미작동** — `record_trade_result()` 미호출 → 일일-10%/주간-20% 한도 완전히 무시됨
+- **ML threshold 재시작 리셋** — scalp `_load_v2` cap [0.5,2.5] ↔ `_adjust_weights` [4.0,7.0] 불일치 → 통일
+- **레짐 전환 불가능** — 안정화 필터가 stabilized 값을 history에 기록 → 영구 고정 (raw_regime 기록으로 수정)
+- **컨플루언스 방향 무시** — 보너스가 역방향 점수에도 가산 → 방향 일치 비율만 반영
+
+**HIGH:** SL 나체 방지, Swing/Scalp 쿨다운 분리, trending boost 실적용, 시간청산 반복 방지, Redis 재연결, dashboard 인증 강화, kill switch 직접 청산, ML net_pnl 사용 등 15건
+
+---
+
 ### 매매 차단 게이트 전면 완화 — 폭락장 무매매 사태 대응
 
 주말 BTC 폭락에도 매매 0건 발생 → 안전장치가 동시 발동하여 모든 진입 차단된 구조적 문제 수정.
