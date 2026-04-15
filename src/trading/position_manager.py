@@ -1220,8 +1220,8 @@ class PositionManager:
             return
 
         # 봇 재시작 시 거래소 활성 알고 모두 정리 → 옛 알고와 self_heal 새 알고 중복 방지
-        # (포지션이 있든 없든 옛 알고는 모두 stale 로 간주)
-        if exchange_positions:
+        # 04-15: 포지션 유무와 무관하게 항상 정리 (고아 알고 방지)
+        if True:
             try:
                 cleaned = await self.executor.cancel_all_algos()
                 if cleaned and self.telegram:
