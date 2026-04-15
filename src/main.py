@@ -322,7 +322,10 @@ class CryptoAnalyzer:
         df_5m = BaseIndicator.to_dataframe(candles_5m)
         df_15m = BaseIndicator.to_dataframe(candles_15m) if candles_15m and len(candles_15m) >= 20 else None
 
-        result = await self.scalp_engine.analyze(df_1m, df_5m, df_15m)
+        # 실시간 가격 변속도 데이터 (급등락 감지용)
+        rt_velocity = await self.redis.hgetall("rt:velocity:BTC-USDT-SWAP")
+
+        result = await self.scalp_engine.analyze(df_1m, df_5m, df_15m, rt_velocity)
         self._last_scalp = result
 
         # ML 조정 (raw 점수 보존 — 디버깅용)

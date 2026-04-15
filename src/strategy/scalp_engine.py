@@ -26,10 +26,18 @@ class ScalpEngine:
         self.tp_rr = 2.5          # 2.0→2.5: RR 개선
 
     async def analyze(self, candles_1m: pd.DataFrame, candles_5m: pd.DataFrame,
-                      candles_15m: pd.DataFrame = None) -> dict:
+                      candles_15m: pd.DataFrame = None,
+                      rt_velocity: dict = None) -> dict:
         signals = {}
         score_long = 0.0
         score_short = 0.0
+
+        # ── 5m EMA 추세 판별 (평균회귀 시그널 필터용) ──
+        _ema50_5m = float(candles_5m["close"].ewm(span=50, adjust=False).mean().iloc[-1])
+        _ema200_5m = float(candles_5m["close"].ewm(span=200, adjust=False).mean().iloc[-1])
+        _price_now = float(candles_5m["close"].iloc[-1])
+        _macro_trend = "up" if (_price_now > _ema50_5m and _ema50_5m > _ema200_5m) else \
+                       "down" if (_price_now < _ema50_5m and _ema50_5m < _ema200_5m) else "neutral"
 
         # ── 기본 시그널 (1~5) ──
         ema_sig = self._ema_cross(candles_5m)
@@ -114,18 +122,42 @@ class ScalpEngine:
         # ── 해외 유명 기법 (19~21) ──
         rsi2_sig = self._rsi2_extreme(candles_1m, candles_5m)
         signals["rsi2_extreme"] = rsi2_sig
-        score_long += rsi2_sig["strength"] * 4.0 if rsi2_sig["direction"] == "long" else 0
-        score_short += rsi2_sig["strength"] * 4.0 if rsi2_sig["direction"] == "short" else 0
+        # 추세 필터: 상승장 숏 / 하락장 롱 차단 (평균회귀 역추세 방지)
+        _rsi2_w = 4.0
+        if rsi2_sig["direction"] == "short" and _macro_trend == "up":
+            _rsi2_w = 0.0  # 상승장 숏 완전 차단
+        elif rsi2_sig["direction"] == "long" and _macro_trend == "down":
+            _rsi2_w = 0.0  # 하락장 롱 완전 차단
+        score_long += rsi2_sig["strength"] * _rsi2_w if rsi2_sig["direction"] == "long" else 0
+        score_short += rsi2_sig["strength"] * _rsi2_w if rsi2_sig["direction"] == "short" else 0
 
         vwap_mr_sig = self._vwap_mean_reversion(candles_5m, candles_1m)
         signals["vwap_mean_reversion"] = vwap_mr_sig
-        score_long += vwap_mr_sig["strength"] * 3.5 if vwap_mr_sig["direction"] == "long" else 0
-        score_short += vwap_mr_sig["strength"] * 3.5 if vwap_mr_sig["direction"] == "short" else 0
+        # 추세 필터: 상승장 숏 / 하락장 롱 차단
+        _vwap_mr_w = 3.5
+        if vwap_mr_sig["direction"] == "short" and _macro_trend == "up":
+            _vwap_mr_w = 0.0
+        elif vwap_mr_sig["direction"] == "long" and _macro_trend == "down":
+            _vwap_mr_w = 0.0
+        score_long += vwap_mr_sig["strength"] * _vwap_mr_w if vwap_mr_sig["direction"] == "long" else 0
+        score_short += vwap_mr_sig["strength"] * _vwap_mr_w if vwap_mr_sig["direction"] == "short" else 0
 
         liq_cascade_sig = self._liquidation_cascade_fade(candles_1m)
         signals["liq_cascade_fade"] = liq_cascade_sig
-        score_long += liq_cascade_sig["strength"] * 4.5 if liq_cascade_sig["direction"] == "long" else 0
-        score_short += liq_cascade_sig["strength"] * 4.5 if liq_cascade_sig["direction"] == "short" else 0
+        # 추세 필터 + 가중치 하향 (4.5→2.5)
+        _cascade_w = 2.5
+        if liq_cascade_sig["direction"] == "short" and _macro_trend == "up":
+            _cascade_w = 0.0
+        elif liq_cascade_sig["direction"] == "long" and _macro_trend == "down":
+            _cascade_w = 0.0
+        score_long += liq_cascade_sig["strength"] * _cascade_w if liq_cascade_sig["direction"] == "long" else 0
+        score_short += liq_cascade_sig["strength"] * _cascade_w if liq_cascade_sig["direction"] == "short" else 0
+
+        # ── 실시간 급등락 감지 (22) — WebSocket 가격 변속도 기반 ──
+        spike_sig = self._realtime_spike(rt_velocity)
+        signals["realtime_spike"] = spike_sig
+        score_long += spike_sig["strength"] * 5.0 if spike_sig["direction"] == "long" else 0
+        score_short += spike_sig["strength"] * 5.0 if spike_sig["direction"] == "short" else 0
 
         # ── 필터 (16~17) ──
         session = self._session_filter(candles_1m)
@@ -141,9 +173,9 @@ class ScalpEngine:
             trend_filter = "long" if candles_15m["close"].iloc[-1] > ema50 else "short"
 
         # ── 점수 계산 ──
-        # 21 시그널 (18기본 + 3해외기법), 한 방향 실측 raw 평균 5~12
-        # 정규화 분모를 18.0으로 조정 (3개 추가 가중치 합 12.0 반영)
-        max_possible = 18.0
+        # 22 시그널 (18기본 + 3해외기법 + 1실시간스파이크)
+        # 정규화 분모 20.0 (스파이크 5.0 추가, 캐스케이드 4.5→2.5 감소)
+        max_possible = 20.0
         # 04-13 개선: 0.8→0.6 완화 + 충돌 시에도 dominant 방향 감점 진입
         dominant = max(score_long, score_short)
         minor = min(score_long, score_short)
@@ -448,12 +480,27 @@ class ScalpEngine:
         return {"type": "candle_pattern", "direction": direction, "strength": round(strength, 2), "pattern": pattern}
 
     def _rapid_momentum(self, df: pd.DataFrame) -> dict:
-        """1분 내 큰 가격 움직임"""
+        """1분 내 큰 가격 움직임 — high/low 기반 실변동폭 감지"""
         if len(df) < 25:
             return {"type": "rapid_momentum", "direction": "neutral", "strength": 0.0}
 
         close = df["close"].values
+        high = df["high"].values
+        low = df["low"].values
+
+        # close-to-close 변화 (기존)
         changes = np.diff(close)
+
+        # high/low 기반 실변동폭 (intra-candle 큰 움직임 포착)
+        # 최근 3봉의 최고-최저 vs 이전 20봉 평균 범위
+        recent_range = max(high[-3:]) - min(low[-3:])
+        avg_range = np.mean(high[-20:] - low[-20:])
+        range_ratio = recent_range / avg_range if avg_range > 0 else 1.0
+
+        # 단일 봉 스파이크: 최근 1봉의 high-low가 평균의 3배 이상
+        last_bar_range = high[-1] - low[-1]
+        bar_spike = last_bar_range / avg_range if avg_range > 0 else 1.0
+
         last_move = abs(changes[-1])
         avg_move = np.mean(np.abs(changes[-20:]))
         move_ratio = last_move / avg_move if avg_move > 0 else 1.0
@@ -463,13 +510,27 @@ class ScalpEngine:
         all_down = all(c < 0 for c in recent_3)
         total_pct = abs(sum(recent_3)) / close[-4] * 100 if close[-4] > 0 else 0
 
+        # 실변동폭 %: 최근 3봉 범위 / 가격
+        range_pct = recent_range / close[-1] * 100 if close[-1] > 0 else 0
+
         direction, strength = "neutral", 0.0
-        if move_ratio >= 3.0 or (total_pct >= 0.15 and (all_up or all_down)):
-            direction = "long" if (all_up or changes[-1] > 0) else "short"
-            strength = min(1.0, max(move_ratio / 5.0, total_pct / 0.3))
+
+        # 기존 조건 + 새 조건: 범위 급등 또는 단일봉 스파이크
+        if (move_ratio >= 3.0 or (total_pct >= 0.15 and (all_up or all_down))
+                or range_ratio >= 3.0 or bar_spike >= 3.0 or range_pct >= 0.5):
+            # 방향: close 변화 기반 (범위만 크고 방향 불명이면 close 기준)
+            if all_up or changes[-1] > 0:
+                direction = "long"
+            elif all_down or changes[-1] < 0:
+                direction = "short"
+            else:
+                direction = "long" if close[-1] > close[-3] else "short"
+            strength = min(1.0, max(move_ratio / 5.0, total_pct / 0.3,
+                                    range_ratio / 5.0, range_pct / 1.0))
 
         return {"type": "rapid_momentum", "direction": direction, "strength": round(strength, 2),
-                "move_ratio": round(move_ratio, 2), "total_pct": round(total_pct, 4)}
+                "move_ratio": round(move_ratio, 2), "total_pct": round(total_pct, 4),
+                "range_pct": round(range_pct, 4), "bar_spike": round(bar_spike, 2)}
 
     # ══════════════════════════════════════
     # SMC 시그널 (10~12)
@@ -1054,11 +1115,12 @@ class ScalpEngine:
             vwap_slope = 0.0
         result["vwap_slope"] = round(vwap_slope, 4)
 
-        # 가격이 최근 30분 이내 VWAP ±1σ 안에 있었는지 (레인징 확인)
-        recent_6 = candles_5m["close"].iloc[-6:]  # 30분 = 6×5m
-        was_inside = any(
-            (cv - cs1) <= float(p) <= (cv + cs1) for p in recent_6
-        )
+        # 레인징 판별: ADX < 25 (기존 was_inside는 상승장에서도 통과하는 버그)
+        _high = candles_5m["high"].astype(float).values
+        _low = candles_5m["low"].astype(float).values
+        _cls = candles_5m["close"].astype(float).values
+        _adx_val = self._calc_adx_simple(_high, _low, _cls, period=14)
+        is_ranging = _adx_val < 25  # ADX < 25 = 비추세 (횡보/약추세)
 
         # 볼륨 클라이맥스: 현재 봉 볼륨 > 2x 평균 (피로 신호)
         vol_avg = float(df["volume"].rolling(20).mean().iloc[-1])
@@ -1080,7 +1142,7 @@ class ScalpEngine:
         c1m_bear = c1m["close"] < c1m["open"]  # 음봉
 
         # ── 롱: -2σ 이하 터치 + RSI < 30 + 레인징 + 확인 봉 ──
-        if price <= lower_2 and rsi9 < 30 and was_inside:
+        if price <= lower_2 and rsi9 < 30 and is_ranging:
             base = 0.4
             # -3σ 터치 보너스 (극단 이탈)
             if price <= lower_3:
@@ -1101,7 +1163,7 @@ class ScalpEngine:
             result["strength"] = round(min(1.0, base), 3)
 
         # ── 숏: +2σ 이상 터치 + RSI > 70 + 레인징 + 확인 봉 ──
-        elif price >= upper_2 and rsi9 > 70 and was_inside:
+        elif price >= upper_2 and rsi9 > 70 and is_ranging:
             base = 0.4
             if price >= upper_3:
                 base += 0.2
@@ -1229,8 +1291,92 @@ class ScalpEngine:
         return result
 
     # ══════════════════════════════════════
+    # 실시간 급등락 감지 (22)
+    # ══════════════════════════════════════
+
+    def _realtime_spike(self, velocity: dict = None) -> dict:
+        """
+        WebSocket 실시간 가격 변속도 기반 급등락 감지
+        $200+ 이동 in 10~60초 = 스파이크 → 추세 추종 진입
+        """
+        result = {"type": "realtime_spike", "direction": "neutral", "strength": 0.0,
+                  "move_30s": 0.0, "range_60s": 0.0}
+        if not velocity:
+            return result
+
+        try:
+            move_10s = float(velocity.get("move_10s", 0))
+            move_30s = float(velocity.get("move_30s", 0))
+            move_60s = float(velocity.get("move_60s", 0))
+            range_60s = float(velocity.get("range_60s", 0))
+        except (ValueError, TypeError):
+            return result
+
+        result["move_30s"] = move_30s
+        result["range_60s"] = range_60s
+
+        # ── 스파이크 판별: 방향성 있는 큰 이동 ──
+        # 10초 내 $150+, 30초 내 $300+, 60초 내 $500+ = 급등락
+        direction = "neutral"
+        strength = 0.0
+
+        # 10초 급등락 (가장 빠른 반응)
+        if abs(move_10s) >= 150:
+            direction = "long" if move_10s > 0 else "short"
+            strength = max(strength, min(1.0, abs(move_10s) / 500))
+
+        # 30초 급등락
+        if abs(move_30s) >= 300:
+            direction = "long" if move_30s > 0 else "short"
+            strength = max(strength, min(1.0, abs(move_30s) / 800))
+
+        # 60초 급등락
+        if abs(move_60s) >= 500:
+            direction = "long" if move_60s > 0 else "short"
+            strength = max(strength, min(1.0, abs(move_60s) / 1200))
+
+        if strength > 0:
+            result["direction"] = direction
+            result["strength"] = round(strength, 3)
+
+        return result
+
+    # ══════════════════════════════════════
     # 유틸
     # ══════════════════════════════════════
+
+    def _calc_adx_simple(self, high, low, close, period=14) -> float:
+        """ADX 간이 계산 (VWAP MR 레인징 판별용)"""
+        n = len(high)
+        if n < period + 1:
+            return 15.0
+        tr = np.zeros(n)
+        plus_dm = np.zeros(n)
+        minus_dm = np.zeros(n)
+        for i in range(1, n):
+            tr[i] = max(high[i] - low[i], abs(high[i] - close[i-1]), abs(low[i] - close[i-1]))
+            up = high[i] - high[i-1]
+            dn = low[i-1] - low[i]
+            plus_dm[i] = up if (up > dn and up > 0) else 0
+            minus_dm[i] = dn if (dn > up and dn > 0) else 0
+        atr = np.zeros(n)
+        sp = np.zeros(n)
+        sm = np.zeros(n)
+        atr[period] = np.mean(tr[1:period+1])
+        sp[period] = np.mean(plus_dm[1:period+1])
+        sm[period] = np.mean(minus_dm[1:period+1])
+        for i in range(period+1, n):
+            atr[i] = (atr[i-1]*(period-1) + tr[i]) / period
+            sp[i] = (sp[i-1]*(period-1) + plus_dm[i]) / period
+            sm[i] = (sm[i-1]*(period-1) + minus_dm[i]) / period
+        dx_vals = []
+        for i in range(period, n):
+            if atr[i] > 0:
+                pdi = sp[i] / atr[i] * 100
+                mdi = sm[i] / atr[i] * 100
+                if pdi + mdi > 0:
+                    dx_vals.append(abs(pdi - mdi) / (pdi + mdi) * 100)
+        return float(np.mean(dx_vals[-period:])) if len(dx_vals) >= period else 15.0
 
     def _calc_atr(self, df: pd.DataFrame, period: int = 14) -> float:
         tr = pd.concat([

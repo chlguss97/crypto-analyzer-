@@ -22,6 +22,9 @@ class WebSocketStream:
         self._cvd_1h = 0.0
         self._cvd_reset_15m = 0
         self._cvd_reset_1h = 0
+        # 가격 변속도 추적 (급등락 감지용)
+        self._price_window = []  # [(timestamp_ms, price), ...]
+        self._price_window_max = 120  # 최근 120 체결 보관 (~60초분)
 
     async def start(self, symbol: str = "BTC-USDT-SWAP"):
         """WebSocket 연결 시작 (무한 재시도)"""
@@ -123,11 +126,52 @@ class WebSocketStream:
         )
 
     async def _handle_trade(self, trade: dict):
-        """체결 데이터 → CVD 계산"""
+        """체결 데이터 → CVD 계산 + 가격 변속도 추적"""
         price = float(trade.get("px", 0))
         size = float(trade.get("sz", 0))
         side = trade.get("side", "")  # buy or sell
         ts = int(trade.get("ts", 0))
+
+        # ── 가격 변속도 추적 (급등락 $500-1000 감지) ──
+        if price > 0 and ts > 0:
+            self._price_window.append((ts, price))
+            # 윈도우 관리: 60초 이상 된 데이터 제거
+            cutoff = ts - 60_000  # 60초
+            while self._price_window and self._price_window[0][0] < cutoff:
+                self._price_window.pop(0)
+
+            # 10초/30초/60초 내 변동폭 계산 → Redis 저장
+            if len(self._price_window) >= 5:
+                prices_in_window = [p for _, p in self._price_window]
+                win_high = max(prices_in_window)
+                win_low = min(prices_in_window)
+                win_range = win_high - win_low
+                oldest_price = self._price_window[0][1]
+                direction_move = price - oldest_price  # 양수=상승, 음수=하락
+
+                # 10초 윈도우
+                ts_10s = ts - 10_000
+                prices_10s = [p for t, p in self._price_window if t >= ts_10s]
+                range_10s = max(prices_10s) - min(prices_10s) if len(prices_10s) >= 2 else 0
+                move_10s = price - prices_10s[0] if prices_10s else 0
+
+                # 30초 윈도우
+                ts_30s = ts - 30_000
+                prices_30s = [p for t, p in self._price_window if t >= ts_30s]
+                range_30s = max(prices_30s) - min(prices_30s) if len(prices_30s) >= 2 else 0
+                move_30s = price - prices_30s[0] if prices_30s else 0
+
+                await self.redis.hset("rt:velocity:BTC-USDT-SWAP", {
+                    "range_60s": str(round(win_range, 1)),
+                    "move_60s": str(round(direction_move, 1)),
+                    "range_30s": str(round(range_30s, 1)),
+                    "move_30s": str(round(move_30s, 1)),
+                    "range_10s": str(round(range_10s, 1)),
+                    "move_10s": str(round(move_10s, 1)),
+                    "high_60s": str(round(win_high, 1)),
+                    "low_60s": str(round(win_low, 1)),
+                    "ts": str(ts),
+                })
 
         # CVD 누적: buy → +, sell → - (오버플로우 방어 ±1e9)
         delta = size if side == "buy" else -size
