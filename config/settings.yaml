@@ -7,7 +7,10 @@ exchange:
 # Scalp/Swing 분리 → 단일 UnifiedEngine (셋업 ABC)
 
 timeframes:
-  # 분석: 1h/15m, 진입: 5m/1m
+  execution: "15m"
+  confirmation: "1h"
+  filter: "4h"
+  # 통합 모델 참고용 (코드에서는 1m/5m/15m/1h 전부 사용)
   analysis: ["1h", "15m"]
   entry: ["5m", "1m"]
 
