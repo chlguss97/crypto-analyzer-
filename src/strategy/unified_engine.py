@@ -66,6 +66,8 @@ class TradeEngine:
 
         # 셋업 B: OB 리테스트 (최고 RR, 우선 체크)
         setup_b = self._check_setup_b(df_1m, df_5m, df_15m, ctx)
+        if not setup_b["match"]:
+            result["signals"]["reject_b"] = setup_b.get("reject_reason", "conditions_not_met")
         if setup_b["match"]:
             result["setup"] = "B"
             result["direction"] = setup_b["direction"]
@@ -79,6 +81,8 @@ class TradeEngine:
 
         # 셋업 A: 추세 모멘텀 (가장 빈번)
         setup_a = self._check_setup_a(df_1m, df_5m, ctx)
+        if not setup_a["match"]:
+            result["signals"]["reject_a"] = setup_a.get("reject_reason", "conditions_not_met")
         if setup_a["match"]:
             result["setup"] = "A"
             result["direction"] = setup_a["direction"]
@@ -92,6 +96,8 @@ class TradeEngine:
 
         # 셋업 C: 브레이크아웃
         setup_c = self._check_setup_c(df_1m, df_5m, ctx)
+        if not setup_c["match"]:
+            result["signals"]["reject_c"] = setup_c.get("reject_reason", "conditions_not_met")
         if setup_c["match"]:
             result["setup"] = "C"
             result["direction"] = setup_c["direction"]
@@ -227,25 +233,29 @@ class TradeEngine:
           4. 5m 거래량 > 평균 1.5배
         """
         r = {"match": False, "direction": "neutral", "score": 0.0,
-             "reason": "", "sl_dist": 0, "tp_dist": 0}
+             "reason": "", "sl_dist": 0, "tp_dist": 0, "reject_reason": ""}
 
         # 조건 1: 추세 명확
         if ctx["trend"] == "neutral":
+            r["reject_reason"] = "no_trend"
             return r
         direction = "long" if ctx["trend"] == "up" else "short"
 
         # 조건 2: 5m BOS
         bos = self._check_bos(df_5m, direction)
         if not bos["confirmed"]:
+            r["reject_reason"] = "no_bos"
             return r
 
         # 조건 3: 1m 모멘텀
         mom = self._check_momentum_1m(df_1m, direction)
         if not mom["confirmed"]:
+            r["reject_reason"] = "no_momentum"
             return r
 
         # 조건 4: 거래량
         if ctx["volume_ratio"] < 1.3:
+            r["reject_reason"] = f"low_volume({ctx['volume_ratio']:.1f}x)"
             return r
 
         # 전부 충족 → 진입

@@ -1126,6 +1126,11 @@ class CryptoAnalyzer:
         # 주기적 로깅 (30초마다)
         if now - getattr(self, "_last_unified_log", 0) >= 30:
             self._last_unified_log = now
+            sigs = result.get("signals", {})
+            rej_a = sigs.get("reject_a", "")
+            rej_b = sigs.get("reject_b", "")
+            rej_c = sigs.get("reject_c", "")
+            reject_info = f" | A:{rej_a} B:{rej_b} C:{rej_c}" if not result.get("setup") else ""
             logger.info(
                 f"[TRADE] setup={result.get('setup') or 'none'} "
                 f"dir={result.get('direction', 'neutral')} "
@@ -1133,6 +1138,7 @@ class CryptoAnalyzer:
                 f"trend={ctx.get('trend', '?')} "
                 f"structure={ctx.get('structure', '?')} "
                 f"streak={self._unified_streak}"
+                f"{reject_info}"
             )
 
         # TradeEngine 상태 Redis 저장 (대시보드 + 텔레그램)
