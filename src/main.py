@@ -34,7 +34,7 @@ from src.signal_engine.aggregator import SignalAggregator
 from src.signal_engine.grader import SignalGrader
 from src.strategy.scalp_engine import ScalpEngine
 from src.strategy.adaptive_ml import AdaptiveML
-from src.strategy.unified_engine import UnifiedEngine
+from src.strategy.unified_engine import TradeEngine
 from src.trading.leverage import LeverageCalculator
 from src.trading.risk_manager import RiskManager
 from src.trading.executor import OrderExecutor
@@ -89,8 +89,8 @@ class CryptoAnalyzer:
         # Scalp 엔진 (레거시 — 비활성)
         self.scalp_engine = ScalpEngine()
 
-        # 통합 엔진 (04-15 전면 개편)
-        self.unified_engine = UnifiedEngine()
+        # TradeEngine (04-15 전면 개편)
+        self.trade_engine = TradeEngine()
 
         # AdaptiveML (레거시 유지, 통합 모델에서는 미사용 — 콜드스타트)
         self.ml_swing = AdaptiveML(mode="swing")
@@ -1051,7 +1051,7 @@ class CryptoAnalyzer:
             try:
                 await self._evaluate_unified()
             except Exception as e:
-                logger.error(f"[UNIFIED] 평가 에러: {e}", exc_info=True)
+                logger.error(f"[TRADE] 평가 에러: {e}", exc_info=True)
             poll_sec = self.config.get("polling", {}).get("signal_eval_sec", 5)
             await asyncio.sleep(poll_sec)
 
@@ -1098,7 +1098,7 @@ class CryptoAnalyzer:
         rt_velocity = await self.redis.hgetall("rt:velocity:BTC-USDT-SWAP")
 
         # 통합 엔진 분석
-        result = await self.unified_engine.analyze(df_1m, df_5m, df_15m, df_1h, rt_velocity)
+        result = await self.trade_engine.analyze(df_1m, df_5m, df_15m, df_1h, rt_velocity)
 
         # 주기적 로깅 (30초마다)
         if now - getattr(self, "_last_unified_log", 0) >= 30:
@@ -1110,7 +1110,7 @@ class CryptoAnalyzer:
             trend = ctx.get("trend", "?")
             structure = ctx.get("structure", "?")
             logger.info(
-                f"[UNIFIED] setup={setup} dir={direction} score={score:.1f} "
+                f"[TRADE] setup={setup} dir={direction} score={score:.1f} "
                 f"trend={trend} structure={structure} streak={self._unified_streak}"
             )
 
@@ -1135,7 +1135,7 @@ class CryptoAnalyzer:
         if self._unified_last_dir and self._unified_last_dir != direction:
             flip_cd = cooldown_cfg.get("direction_flip_sec", 300)
             if now - self._unified_last_trade_time < flip_cd:
-                logger.info(f"[UNIFIED] 방향 전환 쿨다운 ({flip_cd}s) → 대기")
+                logger.info(f"[TRADE] 방향 전환 쿨다운 ({flip_cd}s) → 대기")
                 return
 
         # 가격 확인
@@ -1212,7 +1212,7 @@ class CryptoAnalyzer:
         fee_cost = taker_fee * 2 * leverage * 100
         tp1_gain = tp1_dist / price * leverage * 100
         if tp1_gain <= fee_cost:
-            logger.info(f"[UNIFIED] TP1({tp1_gain:.1f}%) <= 수수료({fee_cost:.1f}%) → 차단")
+            logger.info(f"[TRADE] TP1({tp1_gain:.1f}%) <= 수수료({fee_cost:.1f}%) → 차단")
             return
 
         # 마진 계산
@@ -1232,7 +1232,7 @@ class CryptoAnalyzer:
             return
 
         logger.info(
-            f"[UNIFIED] SETUP {setup} | {direction.upper()} @ ${price:.0f} | "
+            f"[TRADE] SETUP {setup} | {direction.upper()} @ ${price:.0f} | "
             f"SL ${sl:.0f} TP1 ${tp1:.0f} TP2 ${tp2:.0f} TP3 ${tp3:.0f} | "
             f"lev {leverage}x | margin ${margin:.1f} | mode={hold_mode} | "
             f"score={score:.1f} | streak={self._unified_streak}"
@@ -1244,7 +1244,7 @@ class CryptoAnalyzer:
         size_btc = round(size_btc, 4)
 
         if size_btc < 0.01:
-            logger.info(f"[UNIFIED] 사이즈 부족 ({size_btc} BTC) → 차단")
+            logger.info(f"[TRADE] 사이즈 부족 ({size_btc} BTC) → 차단")
             return
 
         trade_req = {
@@ -1292,7 +1292,7 @@ class CryptoAnalyzer:
 
         self._unified_cooldown_until = _t.time() + cd
         logger.info(
-            f"[UNIFIED] 결과: PnL {pnl_pct:+.2f}% | 연패:{self._unified_streak} | "
+            f"[TRADE] 결과: PnL {pnl_pct:+.2f}% | 연패:{self._unified_streak} | "
             f"쿨다운:{cd}s | 일일:{self._unified_daily_pnl:+.1f}%"
         )
 
@@ -1404,17 +1404,12 @@ class CryptoAnalyzer:
                 self._current_day = today.day
                 await self.risk_manager.reset_daily()
 
-                # 스캘핑 일일 리셋
-                logger.info(f"[SCALP] 일일 리셋 | 어제 P&L: {self._scalp_daily_pnl:+.1f}%")
-                self._scalp_daily_pnl = 0.0
-                self._scalp_streak = 0
-                self._scalp_cooldown_until = 0
-                self._loss_warning_sent = False  # 일일 손실 임박 알림 플래그 리셋
-                # 04-13: SL 쿨다운 리셋 (H7)
-                self._swing_last_sl_dir = None
-                self._swing_last_sl_time = 0
-                self._scalp_last_sl_dir = None
-                self._scalp_last_sl_time = 0
+                # TradeEngine 일일 리셋
+                logger.info(f"[TRADE] 일일 리셋 | 어제 P&L: {self._unified_daily_pnl:+.1f}%")
+                self._unified_daily_pnl = 0.0
+                self._unified_streak = 0
+                self._unified_cooldown_until = 0
+                self._unified_last_dir = None
 
                 # 일일 리포트 — DB에서 어제 거래 집계 (정확)
                 try:
@@ -1515,7 +1510,7 @@ class CryptoAnalyzer:
         self._running = True
         self._current_day = datetime.now(timezone.utc).day
 
-        logger.info("봇 시작 — Unified Engine v1 (셋업 ABC) + PaperTrading")
+        logger.info("봇 시작 — TradeEngine v1 (Setup ABC)")
         self.start_dashboard_thread()  # 대시보드 별도 스레드
         await self.redis.set("sys:bot_status", "running")
         await self.redis.set("sys:autotrading", "on")  # 초기 ON (텔레그램 /off 로 끄기)
@@ -1533,13 +1528,13 @@ class CryptoAnalyzer:
         try:
             bal = await self.executor.get_balance()
             await self.telegram._send(
-                "\U0001f7e2 <b>Unified Engine v1</b>\n"
+                "\U0001f7e2 <b>TradeEngine v1</b>\n"
                 "Mode: Setup ABC (Trend+OB+Breakout)\n"
                 "ML: Cold Start (Paper Only)\n"
                 f"Balance: ${bal:,.2f}"
             )
         except Exception:
-            await self.telegram._send("\U0001f7e2 <b>Unified Engine v1 Started</b>")
+            await self.telegram._send("\U0001f7e2 <b>TradeEngine v1 Started</b>")
 
         tasks = [
             asyncio.create_task(self.periodic_candle_update()),
@@ -1550,7 +1545,7 @@ class CryptoAnalyzer:
             asyncio.create_task(self.periodic_position_check()),
             asyncio.create_task(self.periodic_oi_funding()),
             asyncio.create_task(self.periodic_daily_reset()),
-            asyncio.create_task(self.periodic_study_scheduler()),
+            # asyncio.create_task(self.periodic_study_scheduler()),  # ML 콜드스타트 — 학습 비활성
             asyncio.create_task(self.periodic_heartbeat()),
             asyncio.create_task(self.ws_stream.start()),
             asyncio.create_task(self.telegram.poll_commands()),  # 텔레그램 명령어 polling

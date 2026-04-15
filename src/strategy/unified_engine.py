@@ -1,5 +1,5 @@
 """
-Unified Trade Engine v1 — 멀티TF 셋업 매칭 방식
+TradeEngine v1 — 멀티TF 셋업 매칭 방식
 
 점수 합산이 아닌, 3개 명확한 셋업의 조건 전부 충족 시에만 진입.
 
@@ -16,7 +16,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-class UnifiedEngine:
+class TradeEngine:
     """멀티TF 셋업 매칭 엔진"""
 
     def __init__(self):

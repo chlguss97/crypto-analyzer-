@@ -30,7 +30,7 @@ class SignalTracker:
             "total_pnl": 0.0,
             "best_pnl": 0.0,
             "worst_pnl": 0.0,
-            "by_mode": {"swing": 0, "scalp": 0},
+            "by_mode": {"swing": 0, "scalp": 0, "unified": 0},
             "by_regime": {},
             "last_update": 0,
         })
