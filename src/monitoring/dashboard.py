@@ -842,9 +842,12 @@ async def trigger_meta():
 @app.get("/api/setup-tracker")
 async def get_setup_tracker():
     """SetupTracker 셋업별 성과 조회"""
-    from src.strategy.setup_tracker import SetupTracker
-    tracker = SetupTracker()
-    return tracker.get_summary()
+    try:
+        from src.strategy.setup_tracker import SetupTracker
+        tracker = SetupTracker()
+        return tracker.get_summary()
+    except Exception as e:
+        return {"error": str(e), "A": {"total": 0}, "B": {"total": 0}, "C": {"total": 0}}
 
 
 @app.get("/api/backtest")
