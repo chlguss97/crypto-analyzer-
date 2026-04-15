@@ -3,12 +3,12 @@ from src.utils.helpers import load_config
 
 logger = logging.getLogger(__name__)
 
-# 등급별 최대 레버리지 (04-15: 전면 하향)
+# 등급별 최대 레버리지 (04-15: 조정)
 GRADE_MAX_LEVERAGE = {
-    "A+": 15,
-    "A": 12,
-    "B+": 10,
-    "B": 8,
+    "A+": 25,
+    "A": 20,
+    "B+": 15,
+    "B": 10,
     "B-": 5,
 }
 

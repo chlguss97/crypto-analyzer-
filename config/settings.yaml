@@ -36,7 +36,7 @@ risk:
   risk_per_trade: 0.005
 
   # ── 공통 ──
-  leverage_range: [5, 15]        # [10,30]→[5,15]: 과도한 레버리지 근절 (04-15)
+  leverage_range: [5, 25]        # [10,30]→[5,25]: 상한 확대 (04-15)
   sl_atr_multiplier: 1.8      # 1.2→1.8: SL 노이즈 즉사 방지 (04-10, 승률 35%→55% 목표)
   sl_min_pct: 0.003
   sl_max_pct: 0.015

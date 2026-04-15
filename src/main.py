@@ -1118,11 +1118,11 @@ class CryptoAnalyzer:
             except Exception as e:
                 logger.error(f"포지션 체크 에러: {e}")
 
-            # 04-15: 포지션 체크 항상 5초 (15초→5초) — sl_failsafe 지연 최소화
+            # 04-15: 포지션 체크 1초 (활성) / 5초 (비활성)
             if self.position_manager.positions:
-                await asyncio.sleep(3)   # 활성 포지션 있으면 3초
+                await asyncio.sleep(1)
             else:
-                await asyncio.sleep(10)  # 없으면 10초
+                await asyncio.sleep(5)
 
     async def periodic_oi_funding(self):
         """OI/펀딩비 수집 (5분마다)"""
