@@ -735,7 +735,14 @@ class PositionManager:
 
     async def _reconcile_external_close(self, pos: Position, last_price: float):
         """외부에서 포지션이 전량 청산된 경우 DB/콜백 정리"""
-        # 어떤 사유로 청산됐는지 추론
+        # 04-15: OKX 최근 체결에서 실제 exit price 조회 시도
+        try:
+            trades = await self.executor.exchange.fetch_my_trades(pos.symbol, limit=5)
+            if trades:
+                last_trade = trades[-1]
+                last_price = float(last_trade.get("price", last_price))
+        except Exception:
+            pass  # 실패 시 폴링 가격 사용
         pnl_now = pos.pnl_pct(last_price) if last_price > 0 else 0
         small_position = pos.size < self.MIN_ORDER_SIZE_BTC * 2
 
@@ -977,10 +984,13 @@ class PositionManager:
             return
 
         if not order:
+            # 04-15: 지수 백오프 — 연속 실패 시 대기 시간 증가 (API ban 방지)
+            backoff = min(30, 2 ** min(pos.close_attempts, 5))  # 1,2,4,8,16,30초
             logger.error(
                 f"🚨 청산 실패 ({reason}) {pos.close_attempts}/10 → "
-                f"SL 긴급 재등록 + 다음 폴링 재시도"
+                f"SL 긴급 재등록 + {backoff}초 후 재시도"
             )
+            await asyncio.sleep(backoff)
             try:
                 # 호출자가 _cancel_all_algos 를 미리 불렀으므로 SL 다시 만들어야 함
                 new_id = await self.executor.set_stop_loss(
@@ -1016,8 +1026,13 @@ class PositionManager:
                     except Exception:
                         pass
                 # 포지션 메모리 강제 정리 — 무한루프 탈출
-                # (거래소엔 이미 없을 가능성 높음 — 51169 = "no position")
-                await self._finalize_position(pos, f"{reason}_force_cleanup", exit_price=0)
+                # 04-15: exit_price=0 대신 현재가로 대체 (PnL 데이터 보존)
+                try:
+                    price_str = await self.redis.get("rt:price:BTC-USDT-SWAP")
+                    fallback_price = float(price_str) if price_str else pos.entry_price
+                except Exception:
+                    fallback_price = pos.entry_price
+                await self._finalize_position(pos, f"{reason}_force_cleanup", exit_price=fallback_price)
                 return
             return  # 메모리 유지 → 다음 폴링에서 _full_close 재호출 (10회 미만)
 
@@ -1219,22 +1234,24 @@ class PositionManager:
                     pass
             return
 
-        # 봇 재시작 시 거래소 활성 알고 모두 정리 → 옛 알고와 self_heal 새 알고 중복 방지
-        # 04-15: 포지션 유무와 무관하게 항상 정리 (고아 알고 방지)
-        if True:
-            try:
+        # 04-15 개선: 포지션 매칭되는 알고는 유지, 고아만 정리
+        # 포지션 없으면 모든 알고 = 고아 → 전부 정리
+        active_symbols = set()
+        for ep in exchange_positions:
+            s = ep.get("symbol", "")
+            sz = abs(float(ep.get("size") or 0))
+            if sz > 0:
+                active_symbols.add(s)
+
+        try:
+            if not active_symbols:
+                # 포지션 0 = 모든 알고 고아 → 전부 정리
                 cleaned = await self.executor.cancel_all_algos()
-                if cleaned and self.telegram:
-                    types = ", ".join(set(c.get("ord_type", "?") for c in cleaned))
-                    try:
-                        await self.telegram.notify_warning(
-                            f"🧹 봇 재시작 — 옛 알고 {len(cleaned)}개 정리 ({types}). "
-                            f"새 SL/TP 가 self-heal 로 등록됩니다."
-                        )
-                    except Exception:
-                        pass
-            except Exception as e:
-                logger.error(f"sync 시 알고 정리 실패: {e}")
+                if cleaned:
+                    logger.info(f"🧹 고아 알고 {len(cleaned)}개 정리 (포지션 없음)")
+            # 포지션 있으면 알고 유지 (self_heal이 None인 것만 재등록)
+        except Exception as e:
+            logger.error(f"sync 시 알고 정리 실패: {e}")
 
         for ep in exchange_positions:
             symbol = ep["symbol"]
@@ -1290,13 +1307,24 @@ class PositionManager:
                     pos.runner_mode = bool(int(redis_data.get("runner_mode", 0)))
                     pos.best_price = float(redis_data.get("best_price", ex_entry))
                     pos.trail_distance = float(redis_data.get("trail_distance", 0))
-                    # algo_ids 는 모두 stale 로 간주 → self_heal 이 다음 폴링에서 재등록
+                    # 기존 알고가 아직 살아있으면 유지, 없으면 즉시 재등록
                     pos.algo_ids = {"sl": None, "tp1": None, "tp2": None, "tp3": None}
                     self.positions[symbol] = pos
+
+                    # 즉시 SL 재등록 (15초 대기 제거 — 공백 최소화)
+                    try:
+                        new_sl_id = await self.executor.update_stop_loss(
+                            pos.direction, pos.remaining_size, pos.current_sl, None
+                        )
+                        if new_sl_id:
+                            pos.algo_ids["sl"] = new_sl_id
+                            logger.info(f"🔧 SL 알고 즉시 복구: ${pos.current_sl:.0f} id={new_sl_id}")
+                    except Exception as e:
+                        logger.error(f"SL 즉시 복구 실패: {e} — self_heal이 재시도")
+
                     logger.info(
                         f"✅ 포지션 복원 완료: {symbol} "
-                        f"(tp1_filled={pos.tp1_filled}, runner={pos.runner_mode}). "
-                        f"SL/TP 알고는 다음 폴링에서 self-heal 이 재등록"
+                        f"(tp1_filled={pos.tp1_filled}, runner={pos.runner_mode})"
                     )
                 except Exception as e:
                     logger.error(f"Position 복원 실패: {e}")

@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 MAX_RETRIES = 3
 RETRY_DELAY = 2
-LIMIT_TIMEOUT_SEC = 120
+LIMIT_TIMEOUT_SEC = 30  # 120→30초: 미체결 시 빠르게 시장가 전환 (04-15)
 MAX_SLIPPAGE_PCT = 0.1
 
 
@@ -203,8 +203,9 @@ class OrderExecutor:
                         price *= 0.9995
                     await asyncio.sleep(RETRY_DELAY)
 
-        logger.error("지정가 주문 최종 실패 → 시그널 포기")
-        return None
+        # 04-15: 리밋 실패 → 시장가 폴백 (시그널 손실 방지)
+        logger.warning("지정가 주문 미체결 → 시장가 폴백")
+        return await self._market_order(side, size, pos_side)
 
     async def _wait_for_fill(self, order_id: str, timeout: int) -> dict | None:
         """주문 체결 대기"""
