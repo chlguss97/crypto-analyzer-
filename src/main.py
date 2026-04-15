@@ -1546,9 +1546,11 @@ class CryptoAnalyzer:
         dash_module.telegram_bot = self.telegram  # 자동매매 토글 알림용
 
         def _run():
-            config = uvicorn.Config(app, host="0.0.0.0", port=8000, log_level="warning")
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            config = uvicorn.Config(app, host="0.0.0.0", port=8000, log_level="warning", loop="asyncio")
             server = uvicorn.Server(config)
-            server.run()
+            loop.run_until_complete(server.serve())
 
         t = threading.Thread(target=_run, daemon=True)
         t.start()
