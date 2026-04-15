@@ -1100,18 +1100,19 @@ class CryptoAnalyzer:
         # 통합 엔진 분석
         result = await self.trade_engine.analyze(df_1m, df_5m, df_15m, df_1h, rt_velocity)
 
+        # 컨텍스트 추출
+        ctx = result.get("signals", {}).get("context", {})
+
         # 주기적 로깅 (30초마다)
         if now - getattr(self, "_last_unified_log", 0) >= 30:
             self._last_unified_log = now
-            setup = result.get("setup") or "none"
-            direction = result.get("direction", "neutral")
-            score = result.get("score", 0)
-            ctx = result.get("signals", {}).get("context", {})
-            trend = ctx.get("trend", "?")
-            structure = ctx.get("structure", "?")
             logger.info(
-                f"[TRADE] setup={setup} dir={direction} score={score:.1f} "
-                f"trend={trend} structure={structure} streak={self._unified_streak}"
+                f"[TRADE] setup={result.get('setup') or 'none'} "
+                f"dir={result.get('direction', 'neutral')} "
+                f"score={result.get('score', 0):.1f} "
+                f"trend={ctx.get('trend', '?')} "
+                f"structure={ctx.get('structure', '?')} "
+                f"streak={self._unified_streak}"
             )
 
         # TradeEngine 상태 Redis 저장 (대시보드 + 텔레그램)
