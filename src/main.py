@@ -1050,17 +1050,25 @@ class CryptoAnalyzer:
     # ── 주기적 루프들 ──
 
     async def periodic_candle_update(self):
-        """캔들 갱신 (10초마다, 모든 TF) — 스캘핑 빠른 반응"""
+        """캔들 갱신 — 1m/5m 3초, 15m/1h 30초 (OKX rate limit 20req/2s 이내)"""
+        _cycle = 0
         while self._running:
             try:
-                # 1m/5m은 자주, 큰 TF는 덜 자주
-                for tf in ["1m", "5m", "15m", "1h"]:
+                # 매 사이클: 1m + 5m (2 req)
+                for tf in ["1m", "5m"]:
                     candles = await self.candle_collector.fetch_candles(tf, limit=5)
                     if candles:
                         await self.db.insert_candles(self.symbol, tf, candles)
+                # 10 사이클(30초)마다: 15m + 1h 추가 (4 req total)
+                if _cycle % 10 == 0:
+                    for tf in ["15m", "1h"]:
+                        candles = await self.candle_collector.fetch_candles(tf, limit=5)
+                        if candles:
+                            await self.db.insert_candles(self.symbol, tf, candles)
+                _cycle += 1
             except Exception as e:
                 logger.error(f"캔들 갱신 에러: {e}")
-            await asyncio.sleep(10)
+            await asyncio.sleep(3)  # 10초→3초
 
     async def periodic_signal_eval(self):
         """Swing 시그널 평가 + 매매 (60초마다)"""
@@ -1073,14 +1081,14 @@ class CryptoAnalyzer:
             await asyncio.sleep(60)
 
     async def periodic_scalp_eval(self):
-        """스캘핑 시그널 평가 (5초마다) — 초고속 반응"""
-        await asyncio.sleep(2)  # 캔들 backfill 짧게 대기 (재시작 직후 4 사이클 손실 방지)
+        """스캘핑 시그널 평가 (3초마다)"""
+        await asyncio.sleep(2)
         while self._running:
             try:
                 await self._evaluate_scalp()
             except Exception as e:
                 logger.error(f"Scalp 평가 에러: {e}")
-            await asyncio.sleep(5)
+            await asyncio.sleep(3)  # 5초→3초
 
     async def periodic_position_check(self):
         """
