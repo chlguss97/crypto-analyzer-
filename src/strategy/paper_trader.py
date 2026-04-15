@@ -110,8 +110,13 @@ class PaperTrader:
             self._add_shadow(signal_result, mode, current_price)
             return None
 
-        # 점수 너무 낮으면 shadow (5.0 미만 → 저품질 데이터 제외)
-        if score < 5.0:
+        # 통합 모델: setup 있으면 진입 허용, 없으면 shadow
+        if mode == "unified":
+            if not signal_result.get("setup"):
+                self._add_shadow(signal_result, mode, current_price)
+                return None
+        # 레거시: 점수 5.0 미만 shadow
+        elif score < 5.0:
             self._add_shadow(signal_result, mode, current_price)
             return None
 
@@ -128,7 +133,13 @@ class PaperTrader:
         atr_pct = signal_result.get("atr_pct", 0.3)
         sl_distance = current_price * atr_pct / 100 * 1.2
 
-        if mode == "swing":
+        if mode == "unified":
+            leverage = 15
+            sl_distance = signal_result.get("sl_distance", current_price * 0.004)
+            tp1_dist = signal_result.get("tp_distance", sl_distance * 1.5)
+            tp2_dist = tp1_dist * 2.0
+            sl_distance = max(sl_distance, current_price * 0.0035)
+        elif mode == "swing":
             leverage = self._calc_leverage(score, atr_pct)
             tp1_dist = sl_distance * 1.5
             tp2_dist = sl_distance * 2.5

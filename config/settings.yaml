@@ -3,72 +3,72 @@ exchange:
   symbol: "BTC/USDT:USDT"
   margin_mode: "isolated"
 
+# ── 통합 모델 (04-15 전면 개편) ──
+# Scalp/Swing 분리 → 단일 UnifiedEngine (셋업 ABC)
+
 timeframes:
-  execution: "15m"
-  confirmation: "1h"
-  filter: "4h"
+  # 분석: 1h/15m, 진입: 5m/1m
+  analysis: ["1h", "15m"]
+  entry: ["5m", "1m"]
 
 risk:
-  # ── 사이즈 모드 ──
-  # mode_a: risk_per_trade 기반 (옛 방식, 큰 계좌용)
-  # mode_b: margin_loss_cap 기반 (신규, 작은 계좌 + 매물대 SL)
   sizing_mode: "margin_loss_cap"
-
-  # ── mode_b: margin_loss_cap (사용자 의도) ──
-  # SL/TP 모두 "마진 손익 %" 기준으로 결정 → 가격 거리 = % / leverage
-  # 매물대 SL 은 더 가까울 때만 보호 차원에서 사용
-  margin_pct: 0.90              # 04-13: 95→90% (H19: 여유 5% 확보, 소규모 계좌 호환)
-  max_margin_loss_pct: 8.0      # 12→8%: SL 가격거리 확대를 위해 마진 손실 한도 하향 (04-15)
-                                # 15x에서 8%/15 = 0.53% 가격거리 (~$400 BTC)
-  use_indicator_sl: true        # true 면 매물대 SL 과 마진 한도 SL 중 가까운 것 사용
-
-  # TP 마진 손익 % (TP1 만 등록, TP2/TP3 는 러너 트레일에 위임)
-  tp1_margin_gain_pct: 15.0     # 20→15%: RR 1.5+ 보장 (SL 8% 대비 TP 15% = RR 1.87) (04-15)
-  # 트레일링 (러너 모드 활성화 후)
-  trail_margin_pct: 4.0         # 5→4%: 러너 SL 트레일 거리 축소 (더 빠른 본절) (04-15)
-  trail_min_price_pct: 0.3      # 0.5→0.3%: 트레일 최소 축소 (이익 보호) (04-15)
-
-  # min_indicator_sl_pct: 매물대 SL 이 너무 가까우면 무시 (즉시 청산 방지)
-  # 04-15: 0.40→0.50 상향 — 0.12% SL 즉사 근절 (BTC $75k 기준 $375 이하 SL 차단)
-  min_indicator_sl_price_pct: 0.50   # 0.40→0.50: 최소 SL 가격거리 0.5% (04-15)
-
-  # ── mode_a: risk_per_trade (옛, backtest 호환) ──
-  risk_per_trade: 0.005
-
-  # ── 공통 ──
-  leverage_range: [10, 25]       # 10~25x (04-15)
-  sl_atr_multiplier: 1.8      # 1.2→1.8: SL 노이즈 즉사 방지 (04-10, 승률 35%→55% 목표)
-  sl_min_pct: 0.003
-  sl_max_pct: 0.015
-  min_expected_profit: 0.0015
-  max_positions: 3
-  max_same_direction: 2
-  max_daily_loss: 0.05
+  margin_pct: 0.30              # 0.90→0.30: 생존 우선 ($200 계좌, 한 번에 잔고 2~3% 리스크)
+  leverage_range: [10, 25]
+  max_positions: 1              # 3→1: 동시 포지션 1개만
+  max_daily_loss: 0.10          # 일일 최대 손실 10%
   max_drawdown: 0.15
-  max_hold_hours: 6
 
-  # TP 손익비 (R-multiple, R = SL 거리)
-  tp1_rr: 1.5    # TP1 = 1.5R (50% 익절)
-  tp2_rr: 2.5    # TP2 = 2.5R (러너 모드에서는 미사용)
-  tp3_rr: 4.0    # TP3 = 4.0R (러너 모드에서는 미사용)
+  # SL 등록 실패 시 즉시 청산
+  sl_fail_close: true
+
+  # ── 연패 사이즈 축소 ──
+  streak_sizing:
+    3: 0.70   # 3연패: 마진 70%
+    5: 0.50   # 5연패: 마진 50%
+    10: 0.25  # 10연패: 마진 25%
+
+# ── 셋업별 SL/TP/보유 설정 ──
+hold_modes:
+  quick:       # 셋업 A (추세 모멘텀)
+    max_hold_min: 30
+    sl_margin_pct: 6.0          # 마진 -6%
+    tp1_margin_pct: 9.0         # 마진 +9% (RR 1.5)
+    tp2_mult: 2.0               # TP2 = SL × 2
+    tp3_mult: 3.0
+  standard:    # 셋업 B, C (OB 리테스트, 브레이크아웃)
+    max_hold_min: 60
+    sl_margin_pct: 8.0          # 마진 -8%
+    tp1_margin_pct: 12.0        # 마진 +12% (RR 1.5)
+    tp2_mult: 2.5
+    tp3_mult: 4.0
+  swing:       # 구조적으로 강한 셋업 (미래 확장용)
+    max_hold_min: 120
+    sl_margin_pct: 8.0
+    tp1_margin_pct: 15.0
+    tp2_mult: 3.0
+    tp3_mult: 5.0
 
 trailing:
-  # 라이브 거래: 진입 시 OKX 서버사이드 SL/TP1/TP2/TP3 등록
-  # TP는 PRICE 기준 (반익본절 SL 자동 이동) — main.py 가 R-multiple 로 계산
-  # 분할 비율: TP1=50%, TP2=30%, TP3=20% (PositionManager.TP_FRACTIONS)
   tp1_close_pct: 0.5
   tp2_close_pct: 0.3
   tp3_close_pct: 0.2
+  trail_margin_pct: 4.0
+  trail_min_price_pct: 0.3
 
-  # 백테스트(backtest/simulator.py) 호환용 — 라이브에서는 미사용
-  breakeven_trigger: 0.008
-  tp1_trigger: 0.015
-  tp2_trigger: 0.025
-  tp3_atr_multiplier: 0.8
-
+# ── 쿨다운 (조건부) ──
 cooldown:
-  streak_3_min: 30
-  streak_5_min: 120
+  after_loss_sec: 180           # 손절 후 3분
+  after_win_sec: 60             # 익절 후 1분
+  direction_flip_sec: 300       # 방향 전환 시 5분
+  min_interval_sec: 60          # 최소 진입 간격 1분
+
+# ── 폴링 주기 ──
+polling:
+  candle_fast_sec: 3            # 1m/5m 캔들 갱신
+  candle_slow_sec: 30           # 15m/1h 캔들 갱신
+  signal_eval_sec: 5            # 시그널 평가
+  position_check_sec: 1         # 포지션 SL/TP 체크
 
 fees:
   taker: 0.0005
@@ -84,5 +84,3 @@ redis:
 
 data:
   candle_backfill_days: 30
-  slow_path_interval_sec: 180
-  health_check_interval_sec: 60

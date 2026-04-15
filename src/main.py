@@ -34,6 +34,7 @@ from src.signal_engine.aggregator import SignalAggregator
 from src.signal_engine.grader import SignalGrader
 from src.strategy.scalp_engine import ScalpEngine
 from src.strategy.adaptive_ml import AdaptiveML
+from src.strategy.unified_engine import UnifiedEngine
 from src.trading.leverage import LeverageCalculator
 from src.trading.risk_manager import RiskManager
 from src.trading.executor import OrderExecutor
@@ -85,12 +86,23 @@ class CryptoAnalyzer:
         self.aggregator = SignalAggregator()
         self.grader = SignalGrader()
 
-        # Scalp 엔진 (1m/5m)
+        # Scalp 엔진 (레거시 — 비활성)
         self.scalp_engine = ScalpEngine()
 
-        # AdaptiveML (듀얼)
+        # 통합 엔진 (04-15 전면 개편)
+        self.unified_engine = UnifiedEngine()
+
+        # AdaptiveML (레거시 유지, 통합 모델에서는 미사용 — 콜드스타트)
         self.ml_swing = AdaptiveML(mode="swing")
         self.ml_scalp = AdaptiveML(mode="scalp")
+
+        # 통합 모델 상태
+        self._unified_streak = 0
+        self._unified_daily_pnl = 0.0
+        self._unified_cooldown_until = 0
+        self._unified_last_dir = None
+        self._unified_last_trade_time = 0
+        self._unified_last_exit_reason = None
 
         # 매매 엔진 (executor 먼저 생성 → risk_manager 가 참조)
         self.leverage_calc = LeverageCalculator()
@@ -169,11 +181,9 @@ class CryptoAnalyzer:
         await self.telegram.initialize()
         await self.executor.initialize()
 
-        # ML 모델 로드
-        self.ml_swing.load()
-        self.ml_scalp.load()
-        logger.info(f"ML Swing: {'TRAINED' if self.ml_swing.is_trained else 'LEARNING'} | "
-                     f"Scalp: {'TRAINED' if self.ml_scalp.is_trained else 'LEARNING'}")
+        # ML 콜드스타트 (04-15: 기존 모델 폐기, 빈 모델로 시작)
+        # 기존 pkl은 서버에 백업으로 남아있음
+        logger.info("ML: 콜드스타트 (통합 모델 — 기존 데이터 폐기, raw 시그널로 매매)")
 
         # 잔고 + 리스크
         balance = await self.executor.get_balance()
@@ -194,8 +204,8 @@ class CryptoAnalyzer:
             await self.candle_collector.backfill(tf, days=7)
         logger.info("캔들 백필 완료")
 
-        # 역사 백필은 스케줄러(하루 3회)에서 실행 — 시작 시 대시보드 응답 보장
-        logger.info("ML 학습은 스케줄러에서 실행됩니다 (UTC 02/10/18)")
+        # 04-15: ML 콜드스타트 — 역사 학습 비활성
+        logger.info("통합 엔진 v1 — ML 비활성 (페이퍼 데이터 축적 후 학습 예정)")
 
     # ── Swing 시그널 ──
 
@@ -888,33 +898,16 @@ class CryptoAnalyzer:
     async def record_ml_trade(self, mode: str, signals: dict, pnl_pct: float,
                              fee_pct: float = 0.0, direction: str = "",
                              exit_reason: str = ""):
-        """실거래 결과 → ML 학습 + 연패 관리 + 시그널 기여도 추적"""
-        ml = self.ml_swing if mode == "swing" else self.ml_scalp
-        regime = self._current_regime["regime"] if self._current_regime else "ranging"
-        meta = {"atr_pct": self._last_fast.get("atr", {}).get("atr_pct", 0.3),
-                "hour": datetime.now(timezone.utc).hour,
-                "regime": regime}
-        ml.record_trade(signals, meta, pnl_pct, fee_pct=fee_pct)
-
-        # 스캘핑 연패/쿨다운 관리 (04-10: 호출 누락 수정)
-        if mode == "scalp":
-            self._scalp_record_result(pnl_pct)
-
-        # 04-13: SL 기록 모드별 분리 (H4)
-        import time as _t
-        if "sl" in exit_reason and pnl_pct < 0 and direction:
-            if mode == "scalp":
-                self._scalp_last_sl_dir = direction
-                self._scalp_last_sl_time = _t.time()
-            else:
-                self._swing_last_sl_dir = direction
-                self._swing_last_sl_time = _t.time()
+        """실거래 결과 → 연패 관리 + 시그널 기여도 추적 (ML 콜드스타트: 학습 안 함)"""
+        # 통합 모델 연패/쿨다운 관리
+        self._unified_record_result(pnl_pct, exit_reason)
 
         # 시그널 기여도 추적
+        regime = self._current_regime["regime"] if self._current_regime else "ranging"
         if self.signal_tracker:
-            self.signal_tracker.record_trade(signals, pnl_pct, mode=mode, regime=regime)
+            self.signal_tracker.record_trade(signals, pnl_pct, mode="unified", regime=regime)
 
-        logger.info(f"[실거래→ML] {mode} PnL {pnl_pct:+.2f}% 레짐:{regime} 학습 완료")
+        logger.info(f"[실거래] PnL {pnl_pct:+.2f}% 연패:{self._unified_streak} 레짐:{regime}")
 
     # ── 역사 학습 ──
 
@@ -1047,7 +1040,263 @@ class CryptoAnalyzer:
                     pass
             await asyncio.sleep(60)
 
-    # ── 주기적 루프들 ──
+    # ══════════════════════════════════════════════════
+    # 통합 엔진 (04-15 전면 개편)
+    # ══════════════════════════════════════════════════
+
+    async def periodic_unified_eval(self):
+        """통합 시그널 평가 (5초마다) — 셋업 ABC 매칭"""
+        await asyncio.sleep(5)  # 캔들 백필 대기
+        while self._running:
+            try:
+                await self._evaluate_unified()
+            except Exception as e:
+                logger.error(f"[UNIFIED] 평가 에러: {e}", exc_info=True)
+            poll_sec = self.config.get("polling", {}).get("signal_eval_sec", 5)
+            await asyncio.sleep(poll_sec)
+
+    async def _evaluate_unified(self):
+        """통합 엔진 평가 + 매매"""
+        import time as _t
+
+        # 일일 손실 한도
+        if self._unified_daily_pnl <= -10.0:
+            return
+
+        # 쿨다운
+        now = _t.time()
+        if now < self._unified_cooldown_until:
+            return
+
+        # 학습 중 진입 차단
+        learning = self._learning_local or (await self.redis.get("sys:learning")) == "1"
+        if learning:
+            return
+
+        # 이미 포지션 있으면 진입 차단 (max_positions: 1)
+        if self.position_manager.positions:
+            return
+
+        # 자동매매 상태
+        autotrading = (await self.redis.get("sys:autotrading") or "off") == "on"
+
+        # 캔들 로드
+        candles_1m = await self.db.get_candles(self.symbol, "1m", limit=100)
+        candles_5m = await self.db.get_candles(self.symbol, "5m", limit=100)
+        candles_15m = await self.db.get_candles(self.symbol, "15m", limit=100)
+        candles_1h = await self.db.get_candles(self.symbol, "1h", limit=100)
+
+        if not candles_1m or len(candles_1m) < 30 or not candles_5m or len(candles_5m) < 30:
+            return
+
+        df_1m = BaseIndicator.to_dataframe(candles_1m)
+        df_5m = BaseIndicator.to_dataframe(candles_5m)
+        df_15m = BaseIndicator.to_dataframe(candles_15m) if candles_15m and len(candles_15m) >= 20 else None
+        df_1h = BaseIndicator.to_dataframe(candles_1h) if candles_1h and len(candles_1h) >= 20 else None
+
+        # 실시간 가격 변속도
+        rt_velocity = await self.redis.hgetall("rt:velocity:BTC-USDT-SWAP")
+
+        # 통합 엔진 분석
+        result = await self.unified_engine.analyze(df_1m, df_5m, df_15m, df_1h, rt_velocity)
+
+        # 주기적 로깅 (30초마다)
+        if now - getattr(self, "_last_unified_log", 0) >= 30:
+            self._last_unified_log = now
+            setup = result.get("setup") or "none"
+            direction = result.get("direction", "neutral")
+            score = result.get("score", 0)
+            ctx = result.get("signals", {}).get("context", {})
+            trend = ctx.get("trend", "?")
+            structure = ctx.get("structure", "?")
+            logger.info(
+                f"[UNIFIED] setup={setup} dir={direction} score={score:.1f} "
+                f"trend={trend} structure={structure} streak={self._unified_streak}"
+            )
+
+        # 셋업 없으면 리턴
+        if not result.get("setup"):
+            return
+
+        setup = result["setup"]
+        direction = result["direction"]
+        score = result["score"]
+
+        if direction == "neutral":
+            return
+
+        # 최소 진입 간격
+        cooldown_cfg = self.config.get("cooldown", {})
+        min_interval = cooldown_cfg.get("min_interval_sec", 60)
+        if now - self._unified_last_trade_time < min_interval:
+            return
+
+        # 방향 전환 쿨다운
+        if self._unified_last_dir and self._unified_last_dir != direction:
+            flip_cd = cooldown_cfg.get("direction_flip_sec", 300)
+            if now - self._unified_last_trade_time < flip_cd:
+                logger.info(f"[UNIFIED] 방향 전환 쿨다운 ({flip_cd}s) → 대기")
+                return
+
+        # 가격 확인
+        price_str = await self.redis.get("rt:price:BTC-USDT-SWAP")
+        price = float(price_str) if price_str else 0
+        if price <= 0:
+            return
+
+        # 리스크 체크
+        balance = await self.executor.get_balance()
+        if balance <= 0:
+            return
+
+        # 가상매매 기록
+        if not learning:
+            await self.paper_trader.try_entry(result, "unified", price)
+
+        # 실거래
+        if autotrading:
+            await self._execute_unified(result, price, balance)
+
+    async def _execute_unified(self, result: dict, price: float, balance: float):
+        """통합 엔진 매매 실행"""
+        import time as _t
+
+        direction = result["direction"]
+        setup = result["setup"]
+        score = result["score"]
+        hold_mode = result.get("hold_mode", "standard")
+
+        # hold_mode별 SL/TP 설정
+        hm_cfg = self.config.get("hold_modes", {}).get(hold_mode, {})
+        sl_margin_pct = hm_cfg.get("sl_margin_pct", 8.0)
+        tp1_margin_pct = hm_cfg.get("tp1_margin_pct", 12.0)
+        tp2_mult = hm_cfg.get("tp2_mult", 2.5)
+        tp3_mult = hm_cfg.get("tp3_mult", 4.0)
+
+        # 레버리지 (동적)
+        atr_pct = result.get("atr_pct", 0.3)
+        lev_result = self.leverage_calc.calculate("B+", atr_pct, self._unified_streak)
+        leverage = lev_result["leverage"]
+
+        # SL/TP 거리 계산
+        # 셋업이 자체 SL/TP 제공하면 사용, 아니면 마진% 기준
+        sl_dist = result.get("sl_distance", 0)
+        tp_dist = result.get("tp_distance", 0)
+
+        if sl_dist <= 0:
+            sl_dist = price * (sl_margin_pct / leverage / 100)
+        if tp_dist <= 0:
+            tp_dist = price * (tp1_margin_pct / leverage / 100)
+
+        # 최소 SL 0.35%
+        min_sl = price * 0.0035
+        sl_dist = max(sl_dist, min_sl)
+
+        tp1_dist = tp_dist
+        tp2_dist = sl_dist * tp2_mult
+        tp3_dist = sl_dist * tp3_mult
+
+        if direction == "long":
+            sl = price - sl_dist
+            tp1 = price + tp1_dist
+            tp2 = price + tp2_dist
+            tp3 = price + tp3_dist
+        else:
+            sl = price + sl_dist
+            tp1 = price - tp1_dist
+            tp2 = price - tp2_dist
+            tp3 = price - tp3_dist
+
+        # 수수료 필터
+        taker_fee = self.config.get("fees", {}).get("taker", 0.0005)
+        fee_cost = taker_fee * 2 * leverage * 100
+        tp1_gain = tp1_dist / price * leverage * 100
+        if tp1_gain <= fee_cost:
+            logger.info(f"[UNIFIED] TP1({tp1_gain:.1f}%) <= 수수료({fee_cost:.1f}%) → 차단")
+            return
+
+        # 마진 계산
+        risk_cfg = self.config.get("risk", {})
+        margin_pct = risk_cfg.get("margin_pct", 0.30)
+
+        # 연패 사이즈 축소
+        streak_sizing = risk_cfg.get("streak_sizing", {})
+        size_mult = 1.0
+        for threshold, mult in sorted(streak_sizing.items(), key=lambda x: int(x[0]), reverse=True):
+            if self._unified_streak >= int(threshold):
+                size_mult = mult
+                break
+
+        margin = balance * margin_pct * size_mult
+        if margin <= 0:
+            return
+
+        logger.info(
+            f"[UNIFIED] SETUP {setup} | {direction.upper()} @ ${price:.0f} | "
+            f"SL ${sl:.0f} TP1 ${tp1:.0f} TP2 ${tp2:.0f} TP3 ${tp3:.0f} | "
+            f"lev {leverage}x | margin ${margin:.1f} | mode={hold_mode} | "
+            f"score={score:.1f} | streak={self._unified_streak}"
+        )
+
+        # OKX 사이즈 스냅
+        raw_size = margin * leverage / price
+        size_btc = math.floor(raw_size / 0.01) * 0.01
+        size_btc = round(size_btc, 4)
+
+        if size_btc < 0.01:
+            logger.info(f"[UNIFIED] 사이즈 부족 ({size_btc} BTC) → 차단")
+            return
+
+        trade_req = {
+            "symbol": self.symbol, "direction": direction,
+            "grade": f"UNIFIED_{setup}", "score": score,
+            "size": size_btc,
+            "leverage": leverage, "entry_price": None,
+            "sl_price": round(sl, 1),
+            "tp1_price": round(tp1, 1),
+            "tp2_price": round(tp2, 1),
+            "tp3_price": round(tp3, 1),
+            "signals_snapshot": result.get("signals", {}),
+        }
+
+        pos = await self.position_manager.open_position(trade_req)
+        if pos:
+            self._unified_last_trade_time = _t.time()
+            self._unified_last_dir = direction
+
+            await self.telegram.notify_entry(
+                direction, f"SETUP-{setup}", score,
+                pos.entry_price, pos.sl_price, pos.tp1_price, pos.tp2_price,
+                leverage, margin, tp3_price=pos.tp3_price
+            )
+
+    def _unified_record_result(self, pnl_pct: float, exit_reason: str = ""):
+        """통합 엔진 매매 결과 기록"""
+        import time as _t
+
+        self._unified_daily_pnl += pnl_pct
+
+        if pnl_pct < 0:
+            self._unified_streak += 1
+        else:
+            self._unified_streak = 0
+
+        self._unified_last_exit_reason = exit_reason
+
+        # 조건부 쿨다운
+        cooldown_cfg = self.config.get("cooldown", {})
+        if pnl_pct < 0:
+            cd = cooldown_cfg.get("after_loss_sec", 180)
+        else:
+            cd = cooldown_cfg.get("after_win_sec", 60)
+
+        self._unified_cooldown_until = _t.time() + cd
+        logger.info(
+            f"[UNIFIED] 결과: PnL {pnl_pct:+.2f}% | 연패:{self._unified_streak} | "
+            f"쿨다운:{cd}s | 일일:{self._unified_daily_pnl:+.1f}%"
+        )
+
+    # ── 주기적 루프들 (레거시) ──
 
     async def periodic_candle_update(self):
         """캔들 갱신 — 1m/5m 3초, 15m/1h 30초 (OKX rate limit 20req/2s 이내)"""
@@ -1266,7 +1515,7 @@ class CryptoAnalyzer:
         self._running = True
         self._current_day = datetime.now(timezone.utc).day
 
-        logger.info("봇 시작 — Swing + Scalp 듀얼 모델 + AdaptiveML + PaperTrading")
+        logger.info("봇 시작 — Unified Engine v1 (셋업 ABC) + PaperTrading")
         self.start_dashboard_thread()  # 대시보드 별도 스레드
         await self.redis.set("sys:bot_status", "running")
         await self.redis.set("sys:autotrading", "on")  # 초기 ON (텔레그램 /off 로 끄기)
@@ -1284,17 +1533,20 @@ class CryptoAnalyzer:
         try:
             bal = await self.executor.get_balance()
             await self.telegram._send(
-                "\U0001f7e2 <b>Autotrading ON</b>\n"
-                "Mode: Both (Swing + Scalp)\n"
+                "\U0001f7e2 <b>Unified Engine v1</b>\n"
+                "Mode: Setup ABC (Trend+OB+Breakout)\n"
+                "ML: Cold Start (Paper Only)\n"
                 f"Balance: ${bal:,.2f}"
             )
         except Exception:
-            await self.telegram._send("\U0001f7e2 <b>Autotrading ON</b>")
+            await self.telegram._send("\U0001f7e2 <b>Unified Engine v1 Started</b>")
 
         tasks = [
             asyncio.create_task(self.periodic_candle_update()),
-            asyncio.create_task(self.periodic_signal_eval()),
-            asyncio.create_task(self.periodic_scalp_eval()),
+            # 레거시 스윙/스캘핑 루프 비활성 — 통합 엔진으로 대체
+            # asyncio.create_task(self.periodic_signal_eval()),
+            # asyncio.create_task(self.periodic_scalp_eval()),
+            asyncio.create_task(self.periodic_unified_eval()),  # 통합 엔진
             asyncio.create_task(self.periodic_position_check()),
             asyncio.create_task(self.periodic_oi_funding()),
             asyncio.create_task(self.periodic_daily_reset()),
@@ -1315,8 +1567,7 @@ class CryptoAnalyzer:
         finally:
             self._running = False
             self.ws_stream.stop()
-            self.ml_swing.save()
-            self.ml_scalp.save()
+            # ML 콜드스타트 — 저장할 모델 없음
             await self.redis.set("sys:bot_status", "stopped")
             await self.telegram.notify_bot_status("stopped")
             await self.cleanup()
