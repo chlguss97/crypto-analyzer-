@@ -267,7 +267,10 @@ async def _signal_loop():
 
 @app.on_event("startup")
 async def startup():
-    global _bg_task, executor
+    global _bg_task, executor, db, redis
+    # 별도 스레드의 이벤트 루프에서 새로 생성 (메인 루프 충돌 방지)
+    db = Database()
+    redis = RedisClient()
     await db.connect()
     await redis.connect()
     # 캔들/시그널 루프는 main.py에서 실행 — 대시보드는 조회만
