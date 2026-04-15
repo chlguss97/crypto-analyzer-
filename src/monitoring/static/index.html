@@ -643,7 +643,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
     <!-- Row 1: Signal + Market -->
     <div class="grid" style="grid-template-columns: 1fr 1fr;">
       <div class="card">
-        <div class="card-header"><div style="display:flex;align-items:center;"><span class="card-title" data-i18n="signal.title">Combined Signal Score</span><span class="help" data-tip="14개 Swing 시그널 합산 결과입니다.&#10;Long/Short 점수 + 컨플루언스 보너스로 0~10점 산출.">?</span></div></div>
+        <div class="card-header"><div style="display:flex;align-items:center;"><span class="card-title" data-i18n="signal.title">Signal Analysis</span><span class="help" data-tip="TradeEngine 시그널 분석 결과입니다.">?</span></div></div>
         <div class="big-num neutral" id="infoSignalScore">--</div>
         <div class="big-sub">Score / 10</div>
         <div style="margin-top: 18px;">
@@ -706,35 +706,23 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
   <!-- ══ Machine Learning Tab ══ -->
   <div class="tab-content" id="tab-ml">
 
-    <!-- ML Status Bar -->
+    <!-- TradeEngine Status Bar -->
     <div class="card" style="margin-bottom:14px;padding:16px 22px;">
       <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;">
         <div style="display:flex;align-items:center;gap:10px;">
-          <div id="mlPulse" style="width:10px;height:10px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);animation:pulse 2s infinite;"></div>
-          <span style="font-size:14px;font-weight:600;">ML Engine</span>
-          <label class="toggle-switch">
-            <input type="checkbox" id="mlToggle" onchange="toggleML()" checked>
-            <span class="toggle-slider"></span>
-          </label>
-          <span class="auto-status" id="mlStatus" style="color:var(--green)">ON</span>
+          <div style="width:10px;height:10px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);animation:pulse 2s infinite;"></div>
+          <span style="font-size:14px;font-weight:600;">TradeEngine v1</span>
         </div>
         <div style="width:1px;height:24px;background:var(--border);"></div>
         <div style="display:flex;align-items:center;gap:8px;">
-          <span style="font-size:12px;color:var(--text-muted);font-weight:600;">Model:</span>
-          <span class="metric-value" id="mlActiveModel" style="font-size:14px;">BOTH</span>
+          <span style="font-size:12px;color:var(--text-muted);font-weight:600;">Mode:</span>
+          <span style="font-size:14px;font-weight:600;color:var(--green);">Setup ABC</span>
         </div>
         <div style="width:1px;height:24px;background:var(--border);"></div>
         <div style="display:flex;align-items:center;gap:8px;">
-          <span style="font-size:12px;color:var(--text-muted);font-weight:600;">Swing:</span>
-          <span id="mlSwingLive" style="font-size:12px;font-weight:600;color:var(--text-muted);">--</span>
+          <span style="font-size:12px;color:var(--text-muted);font-weight:600;">ML:</span>
+          <span style="font-size:12px;font-weight:600;color:var(--yellow);">Raw Signal (No ML)</span>
         </div>
-        <div style="display:flex;align-items:center;gap:8px;">
-          <span style="font-size:12px;color:var(--text-muted);font-weight:600;">Scalp:</span>
-          <span id="mlScalpLive" style="font-size:12px;font-weight:600;color:var(--text-muted);">--</span>
-        </div>
-        <div style="flex:1"></div>
-        <button class="btn btn-resume" onclick="retrainML()" style="padding:6px 14px;font-size:11px;">Retrain Now</button>
-        <div id="mlRetrainMsg" style="font-size:11px;color:var(--text-muted);"></div>
       </div>
     </div>
     <style>@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}</style>
@@ -765,103 +753,26 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
       </div>
     </div>
 
-    <!-- Swing Regime Performance -->
+    <!-- TradeEngine Setup Status -->
     <div class="card" style="margin-bottom:24px;">
-      <div class="card-header"><div style="display:flex;align-items:center;"><span class="card-title" data-i18n="swing_regime.title">Swing AI — by Market</span><span class="help" data-tip="Swing 모델의 마켓 레짐별 성능입니다.&#10;• Trades: 학습 거래 수&#10;• WR: 승률&#10;• OOS: 검증 정확도 (실전 신뢰도)&#10;• Model: 해당 레짐 모델 생성 여부 (20건+)">?</span></div></div>
-      <div class="grid" style="grid-template-columns: repeat(4, 1fr); gap: 12px;">
-        <div style="text-align:center;padding:12px;border-radius:8px;background:var(--bg-surface);">
-          <div style="font-size:11px;font-weight:700;color:var(--green);margin-bottom:6px;">TRENDING UP</div>
-          <div id="swRegUp" style="font-size:11px;color:var(--text-secondary);">--</div>
+      <div class="card-header"><div style="display:flex;align-items:center;"><span class="card-title">Active Setups</span><span class="help" data-tip="TradeEngine 셋업 매칭 현황&#10;&#10;Setup A: 추세 모멘텀 (15m추세+5mBOS+1m모멘텀+거래량)&#10;Setup B: OB 리테스트 (MSB OB+프레시+ChoCH+유동성)&#10;Setup C: 브레이크아웃 (레인지돌파+거래량2x+리테스트)&#10;&#10;횡보장 = 매매 안 함">?</span></div></div>
+      <div class="grid" style="grid-template-columns: repeat(3, 1fr); gap: 12px;">
+        <div style="text-align:center;padding:16px;border-radius:8px;background:var(--bg-surface);">
+          <div style="font-size:13px;font-weight:700;color:var(--green);margin-bottom:8px;">SETUP A</div>
+          <div style="font-size:11px;color:var(--text-secondary);">Trend Momentum</div>
+          <div style="font-size:10px;color:var(--text-muted);margin-top:4px;">15m Trend + 5m BOS + Volume</div>
         </div>
-        <div style="text-align:center;padding:12px;border-radius:8px;background:var(--bg-surface);">
-          <div style="font-size:11px;font-weight:700;color:var(--red);margin-bottom:6px;">TRENDING DOWN</div>
-          <div id="swRegDown" style="font-size:11px;color:var(--text-secondary);">--</div>
+        <div style="text-align:center;padding:16px;border-radius:8px;background:var(--bg-surface);">
+          <div style="font-size:13px;font-weight:700;color:var(--accent);margin-bottom:8px;">SETUP B</div>
+          <div style="font-size:11px;color:var(--text-secondary);">OB Retest</div>
+          <div style="font-size:10px;color:var(--text-muted);margin-top:4px;">MSB OB + Fresh + ChoCH + Limit Order</div>
         </div>
-        <div style="text-align:center;padding:12px;border-radius:8px;background:var(--bg-surface);">
-          <div style="font-size:11px;font-weight:700;color:var(--yellow);margin-bottom:6px;">RANGING</div>
-          <div id="swRegRange" style="font-size:11px;color:var(--text-secondary);">--</div>
-        </div>
-        <div style="text-align:center;padding:12px;border-radius:8px;background:var(--bg-surface);">
-          <div style="font-size:11px;font-weight:700;color:var(--accent);margin-bottom:6px;">VOLATILE</div>
-          <div id="swRegVol" style="font-size:11px;color:var(--text-secondary);">--</div>
-        </div>
-      </div>
-      <div style="margin-top:12px;">
-        <div class="metric"><span class="metric-label">Train Accuracy</span><span class="metric-value" id="swTrainAcc">--</span></div>
-        <div class="metric"><span class="metric-label">OOS Accuracy (Walk-Forward)</span><span class="metric-value" id="swOOSAcc">--</span></div>
-        <div class="metric"><span class="metric-label">Ensemble Models</span><span class="metric-value" id="swEnsemble">--</span></div>
-      </div>
-    </div>
-
-    <!-- Scalp Regime Performance -->
-    <div class="card" style="margin-bottom:24px;">
-      <div class="card-header"><div style="display:flex;align-items:center;"><span class="card-title" data-i18n="scalp_regime.title">Scalp AI — by Market</span><span class="help" data-tip="Scalp 모델의 마켓 레짐별 성능입니다.&#10;레짐별로 다른 모델이 학습됩니다.">?</span></div></div>
-      <div class="grid" style="grid-template-columns: repeat(4, 1fr); gap: 12px;">
-        <div style="text-align:center;padding:12px;border-radius:8px;background:var(--bg-surface);">
-          <div style="font-size:11px;font-weight:700;color:var(--green);margin-bottom:6px;">TRENDING UP</div>
-          <div id="scRegUp" style="font-size:11px;color:var(--text-secondary);">--</div>
-        </div>
-        <div style="text-align:center;padding:12px;border-radius:8px;background:var(--bg-surface);">
-          <div style="font-size:11px;font-weight:700;color:var(--red);margin-bottom:6px;">TRENDING DOWN</div>
-          <div id="scRegDown" style="font-size:11px;color:var(--text-secondary);">--</div>
-        </div>
-        <div style="text-align:center;padding:12px;border-radius:8px;background:var(--bg-surface);">
-          <div style="font-size:11px;font-weight:700;color:var(--yellow);margin-bottom:6px;">RANGING</div>
-          <div id="scRegRange" style="font-size:11px;color:var(--text-secondary);">--</div>
-        </div>
-        <div style="text-align:center;padding:12px;border-radius:8px;background:var(--bg-surface);">
-          <div style="font-size:11px;font-weight:700;color:var(--accent);margin-bottom:6px;">VOLATILE</div>
-          <div id="scRegVol" style="font-size:11px;color:var(--text-secondary);">--</div>
+        <div style="text-align:center;padding:16px;border-radius:8px;background:var(--bg-surface);">
+          <div style="font-size:13px;font-weight:700;color:var(--yellow);margin-bottom:8px;">SETUP C</div>
+          <div style="font-size:11px;color:var(--text-secondary);">Breakout</div>
+          <div style="font-size:10px;color:var(--text-muted);margin-top:4px;">Range Break + Volume 2x + Retest Hold</div>
         </div>
       </div>
-      <div style="margin-top:12px;">
-        <div class="metric"><span class="metric-label">Train Accuracy</span><span class="metric-value" id="scTrainAcc">--</span></div>
-        <div class="metric"><span class="metric-label">OOS Accuracy (Walk-Forward)</span><span class="metric-value" id="scOOSAcc">--</span></div>
-        <div class="metric"><span class="metric-label">Ensemble Models</span><span class="metric-value" id="scEnsemble">--</span></div>
-      </div>
-    </div>
-
-    <!-- ML Models -->
-    <div class="grid" style="grid-template-columns: 1fr 1fr;">
-
-      <div class="card">
-        <div class="card-header"><div style="display:flex;align-items:center;"><span class="card-title" data-i18n="swing_model.title">Swing Model</span><span class="help" data-tip="Swing 매매 ML 모델 상태.&#10;• OOS: 미래 데이터 예측 정확도 (실전 신뢰도)&#10;• Trained: 학습된 데이터 건수&#10;• Status: TRAINED/LEARNING&#10;• Entry Threshold: 진입 임계값 (자동 조정)&#10;• Recent Win Rate: 최근 승률">?</span></div></div>
-        <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:4px;">
-          <div class="big-num" id="mlSwingOOS" style="font-size:32px;">--</div>
-          <span class="big-sub">OOS Accuracy (신뢰도)</span>
-        </div>
-        <div style="margin-top:14px;">
-          <div class="metric"><span class="metric-label">Trained</span><span class="metric-value" id="mlSwingTrades">--</span></div>
-          <div class="metric"><span class="metric-label">Status</span><span class="metric-value" id="mlSwingStatus">--</span></div>
-          <div class="metric"><span class="metric-label">Entry Threshold</span><span class="metric-value" id="mlSwingThreshold">--</span></div>
-          <div class="metric"><span class="metric-label">Recent Win Rate</span><span class="metric-value" id="mlSwingWR">--</span></div>
-          <div class="metric"><span class="metric-label">Data Buffer</span><span class="metric-value" id="mlSwingBuffer">--</span></div>
-        </div>
-        <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);">
-          <span class="card-title">Weights</span>
-          <div id="mlSwingWeights" style="margin-top:10px;"></div>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="card-header"><div style="display:flex;align-items:center;"><span class="card-title" data-i18n="scalp_model.title">Scalp Model</span><span class="help" data-tip="Scalp 매매 ML 모델 상태. Swing과 동일 구조.">?</span></div></div>
-        <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:4px;">
-          <div class="big-num" id="mlScalpOOS" style="font-size:32px;">--</div>
-          <span class="big-sub">OOS Accuracy (신뢰도)</span>
-        </div>
-        <div style="margin-top:14px;">
-          <div class="metric"><span class="metric-label">Trained</span><span class="metric-value" id="mlScalpTrades">--</span></div>
-          <div class="metric"><span class="metric-label">Status</span><span class="metric-value" id="mlScalpStatus">--</span></div>
-          <div class="metric"><span class="metric-label">Entry Threshold</span><span class="metric-value" id="mlScalpThreshold">--</span></div>
-          <div class="metric"><span class="metric-label">Recent Win Rate</span><span class="metric-value" id="mlScalpWR">--</span></div>
-          <div class="metric"><span class="metric-label">Data Buffer</span><span class="metric-value" id="mlScalpBuffer">--</span></div>
-        </div>
-        <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);">
-          <span class="card-title">Weights</span>
-          <div id="mlScalpWeights" style="margin-top:10px;"></div>
-        </div>
-      </div>
-
     </div>
 
     <!-- Auto Backtest Results -->
