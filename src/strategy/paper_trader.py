@@ -393,6 +393,21 @@ class PaperTrader:
                 pos.signals_snapshot, net_pnl_pct, mode=pos.mode, regime=regime
             )
 
+        # 셋업 성과 추적 (페이퍼 포함)
+        if hasattr(self, 'setup_tracker') and self.setup_tracker and pos.signals_snapshot:
+            setup = None
+            for key in ("setup_a", "setup_b", "setup_c"):
+                if key in pos.signals_snapshot:
+                    setup = key[-1].upper()
+                    break
+            if setup:
+                trend = pos.signals_snapshot.get("context", {}).get("trend", "neutral")
+                self.setup_tracker.record_trade(
+                    setup=setup, direction=pos.direction, pnl_pct=net_pnl_pct,
+                    pnl_usdt=pnl_usdt, hold_min=hold_min,
+                    exit_reason=reason, trend=trend,
+                )
+
         self._stats["total"] += 1
         if net_pnl_pct > 0:
             self._stats["wins"] += 1

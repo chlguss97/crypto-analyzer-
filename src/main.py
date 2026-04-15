@@ -149,6 +149,7 @@ class CryptoAnalyzer:
 
         # 셋업 성과 추적 (자기개선)
         self.setup_tracker = SetupTracker()
+        self.paper_trader.setup_tracker = self.setup_tracker
 
         # 스캘핑 리스크 관리
         self._scalp_daily_pnl = 0.0         # 일일 스캘핑 P&L (%)
@@ -1174,6 +1175,8 @@ class CryptoAnalyzer:
         cooldown_cfg = self.config.get("cooldown", {})
         min_interval = cooldown_cfg.get("min_interval_sec", 60)
         if now - self._unified_last_trade_time < min_interval:
+            elapsed = now - self._unified_last_trade_time
+            logger.debug(f"[TRADE] 최소진입간격 쿨다운 → 대기 ({elapsed:.0f}s < {min_interval}s)")
             return
 
         # 방향 전환 쿨다운
@@ -1313,6 +1316,16 @@ class CryptoAnalyzer:
         if pos:
             self._unified_last_trade_time = _t.time()
             self._unified_last_dir = direction
+
+            # trades.jsonl 진입 기록
+            try:
+                self.trade_logger.log_entry(
+                    direction, f"SETUP-{setup}", score,
+                    pos.entry_price, pos.sl_price,
+                    leverage, margin
+                )
+            except Exception as e:
+                logger.error(f"trade_logger.log_entry 실패: {e}")
 
             await self.telegram.notify_entry(
                 direction, f"SETUP-{setup}", score,
