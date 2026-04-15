@@ -832,15 +832,16 @@ async def get_meta():
 
 @app.post("/api/meta/run")
 async def trigger_meta():
-    """수동 메타 학습 실행"""
-    from src.strategy.meta_learner import MetaLearner
-    swing, scalp = _get_ml_instances()
-    ml = MetaLearner(swing, scalp)
-    result = await ml.run_meta_learning()
-    swing.save()
-    scalp.save()
-    await redis.set("sys:last_meta", result, ttl=604800)
-    return result
+    """레거시 — TradeEngine에서는 SetupTracker가 대체"""
+    return {"status": "disabled", "note": "Use /api/setup-tracker instead"}
+
+
+@app.get("/api/setup-tracker")
+async def get_setup_tracker():
+    """SetupTracker 셋업별 성과 조회"""
+    from src.strategy.setup_tracker import SetupTracker
+    tracker = SetupTracker()
+    return tracker.get_summary()
 
 
 @app.get("/api/backtest")
@@ -855,13 +856,8 @@ async def get_backtest():
 
 @app.post("/api/backtest/run")
 async def trigger_backtest():
-    """수동 백테스트 실행"""
-    from src.strategy.auto_backtest import AutoBacktest
-    swing, scalp = _get_ml_instances()
-    bt = AutoBacktest(db, swing, scalp)
-    result = await bt.run(days=30)
-    await redis.set("sys:last_backtest", result, ttl=86400)
-    return result
+    """레거시 — TradeEngine 백테스트 미구현"""
+    return {"status": "disabled", "note": "TradeEngine backtest not yet implemented"}
 
 
 @app.get("/api/news")

@@ -805,14 +805,12 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
       </div>
     </div>
 
-    <!-- Meta Learner Results -->
+    <!-- Setup Performance Tracker -->
     <div class="card" style="margin-bottom:24px;">
       <div class="card-header">
-        <div style="display:flex;align-items:center;"><span class="card-title">Self-Improving AI</span><span class="help" data-tip="매주 일요일 자동 실행되는 AI 자가 업그레이드.&#10;• 하이퍼파라미터 자동 튜닝&#10;• 약한 시그널 가중치 자동 조정&#10;• 모델 종류 자동 선택 (GBM/RF/LR)&#10;• OOS 저하 시 자동 복구">?</span></div>
-        <button onclick="runMetaLearner()" style="padding:4px 12px;font-size:11px;background:var(--bg-surface);border:1px solid var(--border);border-radius:4px;color:var(--text-muted);cursor:pointer;">Run Now</button>
+        <div style="display:flex;align-items:center;"><span class="card-title">Setup Performance (Self-Improving)</span><span class="help" data-tip="셋업 A/B/C별 실제 매매 성과 추적.&#10;• 10건 이상 + 승률 35% 미만 → 자동 비활성화&#10;• 감지 vs 실행 비율 추적&#10;• 시간대/추세/방향별 분석">?</span></div>
       </div>
-      <div id="metaSummary" style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">아직 실행 안 됨 (매주 일요일 자동 실행)</div>
-      <div id="metaResults" style="font-size:11px;color:var(--text-secondary);"></div>
+      <div id="setupTrackerContent" style="font-size:12px;color:var(--text-muted);">매매 데이터 축적 중...</div>
     </div>
 
     <!-- Signal Contribution Tracker -->
@@ -1685,9 +1683,30 @@ async function updateMeta() {
 }
 
 async function runMetaLearner() {
-  document.getElementById('metaSummary').textContent = '실행 중... (5~10분)';
-  await fetch('/api/meta/run', {method:'POST'});
-  setTimeout(updateMeta, 300000);
+  // 레거시 — SetupTracker로 대체됨
+}
+
+async function updateSetupTracker() {
+  const data = await api('/api/setup-tracker');
+  if (!data) return;
+  const el = document.getElementById('setupTrackerContent');
+  let html = '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">';
+  for (const [setup, info] of Object.entries(data)) {
+    const color = info.enabled ? 'var(--green)' : 'var(--red)';
+    const status = info.enabled ? 'ACTIVE' : 'DISABLED';
+    const wr = (info.win_rate * 100).toFixed(0);
+    html += `<div style="padding:12px;border-radius:8px;background:var(--bg-surface);text-align:center;">
+      <div style="font-size:13px;font-weight:700;color:${color};margin-bottom:4px;">Setup ${setup} — ${status}</div>
+      <div style="font-size:11px;color:var(--text-secondary);">${info.name}</div>
+      <div style="margin-top:8px;font-size:11px;">
+        ${info.total} trades | ${info.wins}W/${info.losses}L | WR: ${wr}%<br>
+        PnL: ${info.total_pnl_pct.toFixed(1)}% | Avg Hold: ${info.avg_hold_min}m<br>
+        Detected: ${info.detections} | Exec Rate: ${(info.exec_rate*100).toFixed(0)}%
+      </div>
+    </div>`;
+  }
+  html += '</div>';
+  el.innerHTML = html;
 }
 
 // ── Signal Contribution Tracker ──
@@ -1904,7 +1923,7 @@ updateSignalTracker();
 updateRiskState();
 updateNews();
 updateBacktest();
-updateMeta();
+updateSetupTracker();
 updateSystemStatus();
 setInterval(refreshAll, 5000);
 setInterval(updateTicker, 2000);
@@ -1916,7 +1935,7 @@ setInterval(updateRegime, 15000);
 setInterval(updateSignalTracker, 30000);
 setInterval(updateNews, 60000);
 setInterval(updateBacktest, 60000);
-setInterval(updateMeta, 120000);
+setInterval(updateSetupTracker, 30000);
 setInterval(updateSystemStatus, 5000);
 
 // ── Language Toggle ──
