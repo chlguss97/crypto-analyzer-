@@ -111,13 +111,29 @@ class TelegramNotifier:
         elif cmd == "/clear":
             await self._cmd_clear()
 
+        elif cmd == "/market":
+            await self._cmd_market()
+
+        elif cmd == "/stats":
+            await self._cmd_stats()
+
+        elif cmd == "/trades":
+            await self._cmd_trades()
+
+        elif cmd == "/risk":
+            await self._cmd_risk()
+
         elif cmd == "/help":
             await self._send(
-                "<b>Commands</b>\n\n"
+                "<b>TradeEngine v1 Commands</b>\n\n"
                 "\U0001f7e2 /on — Autotrading ON\n"
                 "\U0001f534 /off — Autotrading OFF\n"
                 "\U0001f4ca /status — Bot Status\n"
                 "\U0001f4b0 /balance — Check Balance\n"
+                "\U0001f310 /market — Market Overview\n"
+                "\U0001f4c8 /stats — Today's Stats\n"
+                "\U0001f4cb /trades — Recent 5 Trades\n"
+                "\U0001f6e1 /risk — Risk Status\n"
                 "\U0001f6d1 /close — Close All Positions\n"
                 "\U0001f9f9 /clear — Force Clear Zombie\n"
                 "\u2753 /help — Command List"
@@ -235,6 +251,182 @@ class TelegramNotifier:
             f"OKX 직접 확인 권장"
         )
         logger.info(f"[TG-CMD] /clear 완료: {count}건 강제 정리")
+
+    # ── 새 명령어 (04-15) ──
+
+    async def _cmd_market(self):
+        """시장 상태 한눈에"""
+        try:
+            price_str = await self.redis.get("rt:price:BTC-USDT-SWAP") if self.redis else None
+            price = float(price_str) if price_str else 0
+
+            # TradeEngine 상태
+            state = await self.redis.get_json("sys:trade_state") if self.redis else None
+
+            # 거래량
+            vel = await self.redis.hgetall("rt:velocity:BTC-USDT-SWAP") if self.redis else {}
+            range_60s = float(vel.get("range_60s", 0)) if vel else 0
+            move_60s = float(vel.get("move_60s", 0)) if vel else 0
+
+            trend = state.get("trend", "?") if state else "?"
+            structure = state.get("structure", "?") if state else "?"
+            setup = state.get("setup", "none") if state else "none"
+
+            trend_icon = "\U0001f7e2" if trend == "up" else "\U0001f534" if trend == "down" else "\u26aa"
+
+            text = (
+                f"\U0001f310 <b>Market Overview</b>\n\n"
+                f"BTC: <b>${price:,.1f}</b>\n"
+                f"Trend: {trend_icon} {trend.upper()}\n"
+                f"Structure: {structure}\n"
+                f"Active Setup: {setup or 'none'}\n"
+                f"\n"
+                f"60s Range: ${range_60s:,.0f}\n"
+                f"60s Move: ${move_60s:+,.0f}"
+            )
+            await self._send(text)
+        except Exception as e:
+            await self._send(f"\u26a0\ufe0f Market 조회 실패: {e}")
+
+    async def _cmd_stats(self):
+        """오늘 매매 통계"""
+        try:
+            import json
+            trades_file = "/app/data/logs/trades.jsonl"
+            today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+            real_today = []
+            paper_today = []
+            try:
+                with open(trades_file) as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        d = json.loads(line)
+                        if d.get("ts_iso", "")[:10] != today_str:
+                            continue
+                        if d.get("type") == "exit":
+                            real_today.append(d)
+                        elif d.get("type") == "paper_exit":
+                            paper_today.append(d)
+            except FileNotFoundError:
+                pass
+
+            # Real
+            r_w = sum(1 for t in real_today if t["pnl_usdt"] > 0)
+            r_l = sum(1 for t in real_today if t["pnl_usdt"] < 0)
+            r_pnl = sum(t["pnl_usdt"] for t in real_today)
+            r_fee = sum(t.get("fee", 0) for t in real_today)
+
+            # Paper
+            p_w = sum(1 for t in paper_today if t["pnl_usdt"] > 0)
+            p_l = sum(1 for t in paper_today if t["pnl_usdt"] < 0)
+            p_pnl = sum(t["pnl_usdt"] for t in paper_today)
+
+            r_wr = r_w / (r_w + r_l) * 100 if r_w + r_l > 0 else 0
+            p_wr = p_w / (p_w + p_l) * 100 if p_w + p_l > 0 else 0
+
+            text = (
+                f"\U0001f4c8 <b>Today's Stats ({today_str})</b>\n\n"
+                f"<b>Real:</b> {len(real_today)} trades\n"
+                f"  {r_w}W / {r_l}L ({r_wr:.0f}%)\n"
+                f"  PnL: {r_pnl:+.2f} USDT\n"
+                f"  Fee: {r_fee:.2f} USDT\n"
+                f"  Net: {r_pnl - r_fee:+.2f} USDT\n\n"
+                f"<b>Paper:</b> {len(paper_today)} trades\n"
+                f"  {p_w}W / {p_l}L ({p_wr:.0f}%)\n"
+                f"  PnL: {p_pnl:+.2f}"
+            )
+            await self._send(text)
+        except Exception as e:
+            await self._send(f"\u26a0\ufe0f Stats 조회 실패: {e}")
+
+    async def _cmd_trades(self):
+        """최근 5건 매매 내역"""
+        try:
+            import json
+            trades_file = "/app/data/logs/trades.jsonl"
+            recent = []
+            try:
+                with open(trades_file) as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        d = json.loads(line)
+                        if d.get("type") == "exit":
+                            recent.append(d)
+                recent = recent[-5:]
+            except FileNotFoundError:
+                pass
+
+            if not recent:
+                await self._send("\U0001f4cb 매매 내역 없음")
+                return
+
+            lines = ["\U0001f4cb <b>Recent 5 Trades</b>\n"]
+            for t in recent:
+                icon = "\U0001f7e2" if t["pnl_usdt"] > 0 else "\U0001f534"
+                ts = t.get("ts_iso", "?")[:16]
+                dr = t["direction"][:1].upper()
+                reason = t["exit_reason"][:15]
+                pnl = t["pnl_usdt"]
+                hold = t.get("hold_min", 0)
+                lines.append(f"{icon} {ts} {dr} {reason} {pnl:+.2f} ({hold}m)")
+
+            await self._send("\n".join(lines))
+        except Exception as e:
+            await self._send(f"\u26a0\ufe0f Trades 조회 실패: {e}")
+
+    async def _cmd_risk(self):
+        """리스크 상태"""
+        try:
+            state = await self.redis.get_json("sys:trade_state") if self.redis else {}
+            streak = state.get("streak", 0) if state else 0
+
+            balance = 0
+            if self.executor:
+                balance = await self.executor.get_balance()
+
+            positions = len(self.position_manager.positions) if self.position_manager else 0
+
+            # 사이즈 축소 계산
+            if streak >= 10:
+                size_pct = "25%"
+            elif streak >= 5:
+                size_pct = "50%"
+            elif streak >= 3:
+                size_pct = "70%"
+            else:
+                size_pct = "100%"
+
+            text = (
+                f"\U0001f6e1 <b>Risk Status</b>\n\n"
+                f"Balance: ${balance:,.2f}\n"
+                f"Open Positions: {positions}\n"
+                f"Loss Streak: {streak}\n"
+                f"Position Size: {size_pct}\n"
+                f"Margin Mode: 30% of balance"
+            )
+            await self._send(text)
+        except Exception as e:
+            await self._send(f"\u26a0\ufe0f Risk 조회 실패: {e}")
+
+    async def notify_setup_detected(self, setup: str, direction: str, score: float,
+                                     price: float, reason: str):
+        """셋업 감지 알림 (진입 전)"""
+        icon = "\U0001f4c8" if direction == "long" else "\U0001f4c9"
+        setup_names = {"A": "Trend Momentum", "B": "OB Retest", "C": "Breakout"}
+        name = setup_names.get(setup, setup)
+        text = (
+            f"\U0001f50d <b>Setup {setup} Detected</b>\n\n"
+            f"{icon} {direction.upper()} @ ${price:,.1f}\n"
+            f"Type: {name}\n"
+            f"Score: {score:.1f}/10\n"
+            f"Reason: {reason}"
+        )
+        await self._send(text)
 
     # ── 진입 알림 ──
 

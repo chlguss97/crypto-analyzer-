@@ -1114,6 +1114,17 @@ class CryptoAnalyzer:
                 f"trend={trend} structure={structure} streak={self._unified_streak}"
             )
 
+        # TradeEngine 상태 Redis 저장 (대시보드 + 텔레그램)
+        await self.redis.set("sys:trade_state", {
+            "setup": result.get("setup"),
+            "direction": result.get("direction", "neutral"),
+            "score": result.get("score", 0),
+            "trend": ctx.get("trend", "neutral"),
+            "structure": ctx.get("structure", "unknown"),
+            "streak": self._unified_streak,
+            "hold_mode": result.get("hold_mode", "standard"),
+        }, ttl=30)
+
         # 셋업 없으면 리턴
         if not result.get("setup"):
             return
@@ -1121,6 +1132,12 @@ class CryptoAnalyzer:
         setup = result["setup"]
         direction = result["direction"]
         score = result["score"]
+
+        # 셋업 감지 텔레그램 알림
+        price_now = float(df_5m["close"].iloc[-1])
+        await self.telegram.notify_setup_detected(
+            setup, direction, score, price_now, result.get("reason", "")
+        )
 
         if direction == "neutral":
             return
@@ -1247,11 +1264,16 @@ class CryptoAnalyzer:
             logger.info(f"[TRADE] 사이즈 부족 ({size_btc} BTC) → 차단")
             return
 
+        # 셋업 B(OB 리테스트) = 리밋 오더 (maker 0.02%), 나머지 = 마켓
+        # executor: grade B+이하 + entry_price 있으면 리밋, 없으면 마켓
+        entry_price_limit = round(price, 1) if setup == "B" else None
+
         trade_req = {
             "symbol": self.symbol, "direction": direction,
-            "grade": f"UNIFIED_{setup}", "score": score,
+            "grade": "B+", "score": score,
             "size": size_btc,
-            "leverage": leverage, "entry_price": None,
+            "leverage": leverage,
+            "entry_price": entry_price_limit,
             "sl_price": round(sl, 1),
             "tp1_price": round(tp1, 1),
             "tp2_price": round(tp2, 1),
