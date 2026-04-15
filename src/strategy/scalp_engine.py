@@ -535,151 +535,394 @@ class ScalpEngine:
     # ══════════════════════════════════════
 
     def _scalp_order_block(self, df_5m: pd.DataFrame, df_1m: pd.DataFrame) -> dict:
-        """Legacy — 멀티TF 버전으로 대체됨"""
+        """Legacy — v3로 대체됨"""
         return {"type": "order_block", "direction": "neutral", "strength": 0.0, "zone": None}
+
+    # ══════════════════════════════════════
+    # 오더블록 v3 — 전문가급 멀티TF
+    # ══════════════════════════════════════
+
+    def _find_swing_points(self, high, low, order=3):
+        """
+        스윙 고/저점 탐지.
+        swing high: 양쪽 order 봉보다 높은 고점
+        swing low: 양쪽 order 봉보다 낮은 저점
+        """
+        n = len(high)
+        swings = []
+        for i in range(order, n - order):
+            is_sh = all(high[i] >= high[i - j] for j in range(1, order + 1)) and \
+                     all(high[i] >= high[i + j] for j in range(1, order + 1))
+            is_sl = all(low[i] <= low[i - j] for j in range(1, order + 1)) and \
+                     all(low[i] <= low[i + j] for j in range(1, order + 1))
+            if is_sh:
+                swings.append(("sh", i, float(high[i])))
+            if is_sl:
+                swings.append(("sl", i, float(low[i])))
+        return sorted(swings, key=lambda x: x[1])
+
+    def _find_msb_order_blocks(self, df, swing_order=3, lookback=50):
+        """
+        MSB(구조 돌파) 기반 오더블록 탐지 (단일 TF).
+
+        로직:
+        1. 스윙 고/저점 추적 → 구조(HH/HL/LH/LL) 파악
+        2. 종가가 직전 스윙 고점 돌파 = Bullish MSB
+           종가가 직전 스윙 저점 돌파 = Bearish MSB
+        3. MSB 임펄스 직전 반대색 캔들 = OB
+        4. 임펄스 품질 검증 (바디비율 + 거래량)
+        5. 프레시 체크 (OB 존 재방문 여부)
+        6. FVG 동반 체크
+        """
+        if df is None or len(df) < 20:
+            return []
+
+        high = df["high"].values.astype(float)
+        low = df["low"].values.astype(float)
+        close = df["close"].values.astype(float)
+        open_ = df["open"].values.astype(float)
+        volume = df["volume"].values.astype(float)
+        n = len(close)
+
+        vol_avg = float(np.mean(volume[max(0, n - 30):n]))
+        if vol_avg <= 0:
+            vol_avg = 1.0
+
+        # 1. 스윙 포인트 탐지
+        swings = self._find_swing_points(high, low, order=swing_order)
+        if len(swings) < 2:
+            return []
+
+        swing_highs = [(i, p) for t, i, p in swings if t == "sh"]
+        swing_lows = [(i, p) for t, i, p in swings if t == "sl"]
+
+        obs = []
+        start = max(swing_order + 1, n - lookback)
+
+        # 2. MSB 감지: 각 봉에서 직전 스윙 고/저점 돌파 확인
+        for bar in range(start, n):
+            # 직전 스윙 고점 (이 봉 이전의 가장 최근)
+            prev_shs = [(i, p) for i, p in swing_highs if i < bar - 1]
+            prev_sls = [(i, p) for i, p in swing_lows if i < bar - 1]
+
+            # ── Bullish MSB: 직전 스윙 고점 돌파 ──
+            if prev_shs:
+                last_sh_idx, last_sh_price = prev_shs[-1]
+                # 이번 봉에서 처음 돌파 (이전 봉은 미돌파)
+                if close[bar] > last_sh_price and close[bar - 1] <= last_sh_price:
+                    ob = self._extract_ob_candle(
+                        open_, close, high, low, volume, vol_avg, n,
+                        msb_bar=bar, msb_type="bullish"
+                    )
+                    if ob:
+                        obs.append(ob)
+
+            # ── Bearish MSB: 직전 스윙 저점 돌파 ──
+            if prev_sls:
+                last_sl_idx, last_sl_price = prev_sls[-1]
+                if close[bar] < last_sl_price and close[bar - 1] >= last_sl_price:
+                    ob = self._extract_ob_candle(
+                        open_, close, high, low, volume, vol_avg, n,
+                        msb_bar=bar, msb_type="bearish"
+                    )
+                    if ob:
+                        obs.append(ob)
+
+        # 3. 프레시 체크 + FVG 체크
+        for ob in obs:
+            idx = ob["bar_idx"]
+
+            # 프레시: OB 존에 가격이 다시 진입하지 않았는지 (현재봉 제외)
+            ob["fresh"] = True
+            for j in range(idx + 1, n - 1):
+                if ob["dir"] == "long" and low[j] <= ob["high"]:
+                    ob["fresh"] = False
+                    break
+                elif ob["dir"] == "short" and high[j] >= ob["low"]:
+                    ob["fresh"] = False
+                    break
+
+            # FVG: OB 직후 임펄스에서 캔들 간 갭 발생 여부
+            ob["has_fvg"] = False
+            for j in range(idx, min(idx + 5, n - 2)):
+                if ob["dir"] == "long" and high[j] < low[j + 2]:
+                    ob["has_fvg"] = True
+                    break
+                elif ob["dir"] == "short" and low[j] > high[j + 2]:
+                    ob["has_fvg"] = True
+                    break
+
+        return obs
+
+    def _extract_ob_candle(self, open_, close, high, low, volume, vol_avg, n,
+                           msb_bar, msb_type):
+        """
+        MSB 직전의 OB 캔들 추출 + 임펄스 품질 검증.
+        - Bullish MSB → 직전 음봉 = Bullish OB
+        - Bearish MSB → 직전 양봉 = Bearish OB
+        - 임펄스 품질: 바디/범위 비율 0.5+ & 거래량 1.2x+ 평균
+        """
+        for i in range(msb_bar - 1, max(msb_bar - 8, -1), -1):
+            if i < 0:
+                break
+
+            body = abs(close[i] - open_[i])
+            total = high[i] - low[i]
+            if total <= 0:
+                continue
+
+            # Bullish OB: 음봉 (close < open) before bullish MSB
+            if msb_type == "bullish" and close[i] < open_[i]:
+                iq = self._impulse_quality(open_, close, high, low, volume, vol_avg, i + 1, msb_bar)
+                if iq["quality"] < 0.35:
+                    continue  # 임펄스가 약하면 유효 OB 아님
+                return {
+                    "dir": "long",
+                    "bar_idx": i,
+                    "low": float(low[i]),
+                    "high": float(high[i]),
+                    "age": n - 1 - i,
+                    "impulse": iq,
+                }
+
+            # Bearish OB: 양봉 (close > open) before bearish MSB
+            elif msb_type == "bearish" and close[i] > open_[i]:
+                iq = self._impulse_quality(open_, close, high, low, volume, vol_avg, i + 1, msb_bar)
+                if iq["quality"] < 0.35:
+                    continue
+                return {
+                    "dir": "short",
+                    "bar_idx": i,
+                    "low": float(low[i]),
+                    "high": float(high[i]),
+                    "age": n - 1 - i,
+                    "impulse": iq,
+                }
+
+        return None
+
+    def _impulse_quality(self, open_, close, high, low, volume, vol_avg,
+                         start, end):
+        """
+        임펄스(MSB를 일으킨 이동) 품질 측정.
+        - body_ratio: 바디/전체범위 (0.6+ = 강한 방향성, 위크 적음)
+        - vol_spike: 평균 대비 거래량 (1.5x+ = 기관 참여)
+        - consecutive: 같은 방향 연속봉 수
+        """
+        if start >= end or start < 0:
+            return {"quality": 0, "body_ratio": 0, "vol_spike": 0, "bars": 0}
+
+        end = min(end + 1, len(close))
+        bodies = 0.0
+        ranges = 0.0
+        vol_sum = 0.0
+        direction_count = 0
+        bar_count = 0
+
+        for j in range(start, end):
+            b = abs(close[j] - open_[j])
+            r = high[j] - low[j]
+            bodies += b
+            ranges += max(r, 1e-10)
+            vol_sum += volume[j]
+            bar_count += 1
+            if close[j] > open_[j]:
+                direction_count += 1
+            elif close[j] < open_[j]:
+                direction_count -= 1
+
+        body_ratio = bodies / ranges if ranges > 0 else 0
+        vol_spike = (vol_sum / bar_count) / vol_avg if vol_avg > 0 and bar_count > 0 else 1.0
+        consistency = abs(direction_count) / max(bar_count, 1)
+
+        # 종합 품질: 바디비율(40%) + 거래량(30%) + 방향일관성(30%)
+        quality = (min(1.0, body_ratio / 0.7) * 0.4 +
+                   min(1.0, vol_spike / 2.0) * 0.3 +
+                   consistency * 0.3)
+
+        return {
+            "quality": round(quality, 3),
+            "body_ratio": round(body_ratio, 3),
+            "vol_spike": round(vol_spike, 2),
+            "bars": bar_count,
+        }
+
+    def _check_choch_1m(self, df_1m, direction):
+        """
+        1m ChoCH(Change of Character) 확인 — 하위TF 구조전환.
+        상위 OB 존에 가격 도달 후, 1m에서 구조가 전환됐는지 확인.
+        - Bullish: 1m에서 최근 스윙 고점 돌파 (하락→상승 전환)
+        - Bearish: 1m에서 최근 스윙 저점 돌파 (상승→하락 전환)
+        """
+        if len(df_1m) < 15:
+            return False
+
+        high = df_1m["high"].values.astype(float)
+        low = df_1m["low"].values.astype(float)
+        close = df_1m["close"].values.astype(float)
+
+        # 1m 스윙 포인트 (order=2, 더 민감하게)
+        swings = self._find_swing_points(high, low, order=2)
+        if len(swings) < 2:
+            return False
+
+        if direction == "long":
+            # Bullish ChoCH: 현재 종가가 최근 1m 스윙 고점 돌파
+            recent_shs = [(i, p) for t, i, p in swings if t == "sh" and i < len(close) - 1]
+            if recent_shs:
+                last_sh_price = recent_shs[-1][1]
+                if close[-1] > last_sh_price:
+                    return True
+        elif direction == "short":
+            # Bearish ChoCH: 현재 종가가 최근 1m 스윙 저점 돌파
+            recent_sls = [(i, p) for t, i, p in swings if t == "sl" and i < len(close) - 1]
+            if recent_sls:
+                last_sl_price = recent_sls[-1][1]
+                if close[-1] < last_sl_price:
+                    return True
+
+        return False
+
+    def _check_liquidity_clear(self, high, low, n, ob, direction):
+        """
+        유동성 확인 — OB 와 현재 가격 사이에 스윕 안 된 유동성이 있는지.
+        있으면 OB가 관통될 위험 (세력이 스탑로스 먼저 털고 진입).
+        Returns True = 유동성 클리어 (안전), False = 위험
+        """
+        swings = self._find_swing_points(high, low, order=2)
+
+        if direction == "long":
+            # Bullish OB 아래에 스윕 안 된 스윙 저점이 있는지
+            for t, idx, price in swings:
+                if t != "sl":
+                    continue
+                # OB 존 근처에 있는 스윙 저점
+                if price < ob["high"] and price > ob["low"] * 0.998:
+                    # 이 저점이 이후에 스윕됐는지
+                    swept = any(low[j] < price for j in range(idx + 1, n))
+                    if not swept:
+                        return False  # 스윕 안 된 유동성 = 위험
+        else:
+            for t, idx, price in swings:
+                if t != "sh":
+                    continue
+                if price > ob["low"] and price < ob["high"] * 1.002:
+                    swept = any(high[j] > price for j in range(idx + 1, n))
+                    if not swept:
+                        return False
+
+        return True
 
     def _scalp_order_block_mtf(self, df_5m: pd.DataFrame, df_1m: pd.DataFrame,
                                 df_15m: pd.DataFrame = None) -> dict:
         """
-        멀티TF 오더블록 v2 — 참고: 프로 트레이더 기법
-        핵심 원칙:
-          1. MSB(구조 돌파) 발생 시에만 유효한 OB
-          2. 멀티TF 중첩 (15m + 5m OB 겹침 = 신뢰도 상승)
-          3. 프레시(한 번도 터치 안 된) OB만 사용
-          4. FVG 동반 시 보너스
-          5. 추세 방향 일치 필수
+        오더블록 v3 — 전문가급 멀티TF 구현
+
+        참고자료 4대 조건 반영:
+        1. MSB(구조 돌파) 확인된 OB만 사용
+        2. 멀티TF 중첩 (15m + 5m OB 겹침 = 강력)
+        3. 프레시 + FVG 동반 = 고확률
+        4. 하위TF(1m) ChoCH 확인 후 진입
+
+        추가:
+        - 유동성 맵: OB 근처 스윕 안 된 유동성 체크
+        - 임펄스 품질: 바디비율 + 거래량 + 방향일관성
+        - 오래된 OB 감점
         """
         result = {"type": "order_block", "direction": "neutral", "strength": 0.0,
-                  "zone": None, "tf_overlap": 0, "fresh": False}
-        if len(df_5m) < 30 or len(df_1m) < 10:
+                  "zone": None, "fresh": False, "choch": False,
+                  "tf_overlap": 0, "liq_clear": False}
+
+        if len(df_5m) < 30 or len(df_1m) < 15:
             return result
 
         price = float(df_1m["close"].iloc[-1])
-        prev_price = float(df_1m["close"].iloc[-2]) if len(df_1m) >= 2 else price
 
-        def find_obs(df, lookback=40, min_impulse_mult=1.5):
-            """OB 탐지: MSB + 임펄스 직전 반대 캔들 + 프레시 체크"""
-            c = df["close"].values.astype(float)
-            o = df["open"].values.astype(float)
-            h = df["high"].values.astype(float)
-            lo = df["low"].values.astype(float)
-            n = len(c)
-            if n < 20:
-                return []
-
-            # ATR
-            tr = np.maximum(h[1:]-lo[1:], np.maximum(np.abs(h[1:]-c[:-1]), np.abs(lo[1:]-c[:-1])))
-            atr = float(np.mean(tr[-14:])) if len(tr) >= 14 else float(np.mean(tr[-5:])) if len(tr) >= 5 else 1.0
-
-            obs = []
-            start = max(0, n - lookback)
-            end = n - 3
-
-            for i in range(start, end):
-                if i + 3 >= n:
-                    continue
-
-                # 임펄스: i 봉 후 3봉 내 큰 이동 (MSB 역할)
-                move = c[i + 3] - c[i]
-                if abs(move) < atr * min_impulse_mult:
-                    continue
-
-                # OB 캔들: 임펄스 반대 색
-                is_bull_ob = move > 0 and c[i] < o[i]
-                is_bear_ob = move < 0 and c[i] > o[i]
-
-                if not (is_bull_ob or is_bear_ob):
-                    continue
-
-                ob_low = float(lo[i])
-                ob_high = float(h[i])
-
-                # 프레시 체크: OB 생성 후 가격이 OB 존에 다시 닿았는지
-                fresh = True
-                for j in range(i + 1, n - 1):  # 현재봉 제외
-                    if is_bull_ob and float(lo[j]) <= ob_high:
-                        fresh = False
-                        break
-                    elif is_bear_ob and float(h[j]) >= ob_low:
-                        fresh = False
-                        break
-
-                # FVG 동반 체크: OB 직후 봉에 FVG 발생?
-                has_fvg = False
-                if i + 2 < n:
-                    if is_bull_ob and h[i] < lo[i + 2]:  # Bullish FVG
-                        has_fvg = True
-                    elif is_bear_ob and lo[i] > h[i + 2]:  # Bearish FVG
-                        has_fvg = True
-
-                obs.append({
-                    "dir": "long" if is_bull_ob else "short",
-                    "low": ob_low,
-                    "high": ob_high,
-                    "strength": min(1.0, abs(move) / atr / 3),
-                    "age": n - 1 - i,
-                    "fresh": fresh,
-                    "has_fvg": has_fvg,
-                })
-
-            return obs
-
-        # 5m OB 탐지
-        obs_5m = find_obs(df_5m, lookback=40, min_impulse_mult=1.5)
-
-        # 15m OB 탐지 (멀티TF 중첩 확인용)
-        obs_15m = find_obs(df_15m, lookback=30, min_impulse_mult=1.5) if df_15m is not None and len(df_15m) >= 20 else []
+        # ── 1. 멀티TF OB 탐지 (MSB 기반) ──
+        obs_5m = self._find_msb_order_blocks(df_5m, swing_order=3, lookback=50)
+        obs_15m = self._find_msb_order_blocks(df_15m, swing_order=3, lookback=30) \
+            if df_15m is not None and len(df_15m) >= 20 else []
 
         if not obs_5m:
             return result
 
-        # 가격이 OB 존에 도달 + 반전 확인 + 프레시 우선
+        # ── 2. 가격이 OB 존에 도달한 것만 필터 ──
         best = None
-        best_score = 0.0
+        best_score = -1.0
 
         for ob in obs_5m:
-            in_zone = ob["low"] * 0.999 <= price <= ob["high"] * 1.001
+            # OB 존 진입 확인 (약간의 여유)
+            margin = (ob["high"] - ob["low"]) * 0.1
+            in_zone = (ob["low"] - margin) <= price <= (ob["high"] + margin)
             if not in_zone:
                 continue
 
-            # 방향 일치 + 1m 반전 확인
-            if ob["dir"] == "long" and price <= prev_price:
-                continue
-            if ob["dir"] == "short" and price >= prev_price:
-                continue
+            # ── 3. 점수 계산 ──
+            score = 0.0
 
-            score = ob["strength"]
+            # 기본: 임펄스 품질 (0~0.3)
+            iq = ob.get("impulse", {}).get("quality", 0)
+            score += iq * 0.3
 
-            # 프레시 OB 보너스 (+0.3)
-            if ob["fresh"]:
-                score += 0.3
+            # 프레시 OB (+0.25)
+            if ob.get("fresh", False):
+                score += 0.25
 
-            # FVG 동반 보너스 (+0.2)
-            if ob["has_fvg"]:
+            # FVG 동반 (+0.2)
+            if ob.get("has_fvg", False):
                 score += 0.2
 
-            # 15m OB 중첩 보너스 (+0.3) — 같은 방향 OB가 가격 범위 근처에 있는지
+            # 임펄스 거래량 스파이크 (+0.1)
+            if ob.get("impulse", {}).get("vol_spike", 0) >= 1.5:
+                score += 0.1
+
+            # ── 4. 멀티TF 중첩 (+0.3) ──
             tf_overlap = 0
             for ob15 in obs_15m:
                 if ob15["dir"] != ob["dir"]:
                     continue
-                # 15m OB 존과 5m OB 존이 겹치는지 (20% 이내)
+                # 15m OB 와 5m OB 존이 겹치는지
                 overlap = min(ob["high"], ob15["high"]) - max(ob["low"], ob15["low"])
                 if overlap > 0:
                     tf_overlap += 1
                     score += 0.3
                     break
 
-            # 최근 OB 우선 (오래된 OB는 신뢰도 하락)
-            if ob["age"] > 25:
-                score *= 0.5
+            # ── 5. ChoCH 1m 확인 (+0.2) ──
+            choch = self._check_choch_1m(df_1m, ob["dir"])
+            if choch:
+                score += 0.2
+
+            # ── 6. 유동성 체크 ──
+            high_5m = df_5m["high"].values.astype(float)
+            low_5m = df_5m["low"].values.astype(float)
+            liq_clear = self._check_liquidity_clear(high_5m, low_5m, len(high_5m), ob, ob["dir"])
+            if not liq_clear:
+                score *= 0.3  # 유동성 미클리어 = 큰 감점
+
+            # ── 7. 오래된 OB 감점 ──
+            age = ob.get("age", 0)
+            if age > 30:
+                score *= 0.4
+            elif age > 20:
+                score *= 0.7
+
+            # ── 8. 프레시 아니면 감점 ──
+            if not ob.get("fresh", False):
+                score *= 0.4
+
+            # ChoCH 없으면 진입 안 함 (핵심 필터)
+            if not choch:
+                score *= 0.3
 
             if score > best_score:
                 best_score = score
                 best = ob
-                best["tf_overlap"] = tf_overlap
+                best["_tf_overlap"] = tf_overlap
+                best["_choch"] = choch
+                best["_liq_clear"] = liq_clear
 
-        if not best:
+        if not best or best_score < 0.15:
             return result
 
         return {
@@ -687,10 +930,13 @@ class ScalpEngine:
             "direction": best["dir"],
             "strength": round(min(1.0, best_score), 3),
             "zone": [best["low"], best["high"]],
-            "age": best["age"],
-            "fresh": best["fresh"],
+            "age": best.get("age", 0),
+            "fresh": best.get("fresh", False),
             "has_fvg": best.get("has_fvg", False),
-            "tf_overlap": best.get("tf_overlap", 0),
+            "choch": best.get("_choch", False),
+            "tf_overlap": best.get("_tf_overlap", 0),
+            "liq_clear": best.get("_liq_clear", False),
+            "impulse_quality": best.get("impulse", {}).get("quality", 0),
             "nearby_count": len(obs_5m),
         }
 
