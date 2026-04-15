@@ -39,121 +39,119 @@ class ScalpEngine:
         _macro_trend = "up" if (_price_now > _ema50_5m and _ema50_5m > _ema200_5m) else \
                        "down" if (_price_now < _ema50_5m and _ema50_5m < _ema200_5m) else "neutral"
 
-        # ── 기본 시그널 (1~5) ──
+        # ═══════════════════════════════════════════════════════════════
+        # 04-15 전면 개편: 추세추종 중심 (기존 73% 방향 틀림 = MR 과다)
+        # 원칙: 매크로 추세 방향으로만 진입, 역추세 시그널 최소화
+        # ═══════════════════════════════════════════════════════════════
+
+        # ── A. 추세추종 시그널 (핵심, 높은 가중치) ──
         ema_sig = self._ema_cross(candles_5m)
         signals["ema_cross"] = ema_sig
-        score_long += ema_sig["strength"] * 2.5 if ema_sig["direction"] == "long" else 0
-        score_short += ema_sig["strength"] * 2.5 if ema_sig["direction"] == "short" else 0
+        score_long += ema_sig["strength"] * 5.0 if ema_sig["direction"] == "long" else 0   # 2.5→5.0
+        score_short += ema_sig["strength"] * 5.0 if ema_sig["direction"] == "short" else 0
 
-        rsi_sig = self._rsi_reversal(candles_1m)
-        signals["rsi_reversal"] = rsi_sig
-        score_long += rsi_sig["strength"] * 2.0 if rsi_sig["direction"] == "long" else 0
-        score_short += rsi_sig["strength"] * 2.0 if rsi_sig["direction"] == "short" else 0
+        mom_sig = self._momentum(candles_1m)
+        signals["momentum"] = mom_sig
+        score_long += mom_sig["strength"] * 4.0 if mom_sig["direction"] == "long" else 0   # 1.5→4.0
+        score_short += mom_sig["strength"] * 4.0 if mom_sig["direction"] == "short" else 0
 
-        bb_sig = self._bb_breakout(candles_5m)
-        signals["bb_breakout"] = bb_sig
-        score_long += bb_sig["strength"] * 3.0 if bb_sig["direction"] == "long" else 0
-        score_short += bb_sig["strength"] * 3.0 if bb_sig["direction"] == "short" else 0
+        bos_sig = self._break_of_structure(candles_1m)
+        signals["bos"] = bos_sig
+        score_long += bos_sig["strength"] * 5.0 if bos_sig["direction"] == "long" else 0   # 3.5→5.0
+        score_short += bos_sig["strength"] * 5.0 if bos_sig["direction"] == "short" else 0
 
-        # 거래량은 5m 사용 (1m은 너무 작음)
+        range_brk = self._range_breakout(candles_5m, candles_1m)
+        signals["range_breakout"] = range_brk
+        score_long += range_brk["strength"] * 5.0 if range_brk["direction"] == "long" else 0  # 3.5→5.0
+        score_short += range_brk["strength"] * 5.0 if range_brk["direction"] == "short" else 0
+
+        rapid = self._rapid_momentum(candles_1m)
+        signals["rapid_momentum"] = rapid
+        score_long += rapid["strength"] * 4.0 if rapid["direction"] == "long" else 0   # 2.5→4.0
+        score_short += rapid["strength"] * 4.0 if rapid["direction"] == "short" else 0
+
+        vol_explode = self._volatility_explosion(candles_5m)
+        signals["vol_explosion"] = vol_explode
+        score_long += vol_explode["strength"] * 4.0 if vol_explode["direction"] == "long" else 0  # 3.5→4.0
+        score_short += vol_explode["strength"] * 4.0 if vol_explode["direction"] == "short" else 0
+
+        # ── B. SMC 시그널 (추세 방향 일치 시에만) ──
+        ob_sig = self._scalp_order_block_mtf(candles_5m, candles_1m, candles_15m)
+        signals["order_block"] = ob_sig
+        _ob_w = 6.0  # 멀티TF OB 최고 가중치
+        if ob_sig["direction"] == "long" and _macro_trend == "down":
+            _ob_w = 0.0
+        elif ob_sig["direction"] == "short" and _macro_trend == "up":
+            _ob_w = 0.0
+        score_long += ob_sig["strength"] * _ob_w if ob_sig["direction"] == "long" else 0
+        score_short += ob_sig["strength"] * _ob_w if ob_sig["direction"] == "short" else 0
+
+        liq_sig = self._liquidity_sweep(candles_1m)
+        signals["liquidity_sweep"] = liq_sig
+        _liq_w = 4.0  # 3.5→4.0 (유동성 스윕은 추세추종)
+        if liq_sig["direction"] == "long" and _macro_trend == "down":
+            _liq_w = 0.0
+        elif liq_sig["direction"] == "short" and _macro_trend == "up":
+            _liq_w = 0.0
+        score_long += liq_sig["strength"] * _liq_w if liq_sig["direction"] == "long" else 0
+        score_short += liq_sig["strength"] * _liq_w if liq_sig["direction"] == "short" else 0
+
+        fvg_sig = self._fvg(candles_1m)
+        signals["fvg"] = fvg_sig
+        score_long += fvg_sig["strength"] * 3.0 if fvg_sig["direction"] == "long" else 0   # 2.5→3.0
+        score_short += fvg_sig["strength"] * 3.0 if fvg_sig["direction"] == "short" else 0
+
+        # ── C. 보조 시그널 (낮은 가중치) ──
         vol_sig = self._volume_spike(candles_5m)
         signals["volume_spike"] = vol_sig
         score_long += vol_sig["strength"] * 2.0 if vol_sig["direction"] == "long" else 0
         score_short += vol_sig["strength"] * 2.0 if vol_sig["direction"] == "short" else 0
 
-        mom_sig = self._momentum(candles_1m)
-        signals["momentum"] = mom_sig
-        score_long += mom_sig["strength"] * 1.5 if mom_sig["direction"] == "long" else 0
-        score_short += mom_sig["strength"] * 1.5 if mom_sig["direction"] == "short" else 0
-
-        # ── 급변동 시그널 (6~9) ──
-        vol_explode = self._volatility_explosion(candles_5m)
-        signals["vol_explosion"] = vol_explode
-        score_long += vol_explode["strength"] * 3.5 if vol_explode["direction"] == "long" else 0
-        score_short += vol_explode["strength"] * 3.5 if vol_explode["direction"] == "short" else 0
-
-        range_brk = self._range_breakout(candles_5m, candles_1m)
-        signals["range_breakout"] = range_brk
-        score_long += range_brk["strength"] * 3.5 if range_brk["direction"] == "long" else 0
-        score_short += range_brk["strength"] * 3.5 if range_brk["direction"] == "short" else 0
-
         candle_sig = self._candle_pattern(candles_1m)
         signals["candle_pattern"] = candle_sig
-        score_long += candle_sig["strength"] * 2.0 if candle_sig["direction"] == "long" else 0
-        score_short += candle_sig["strength"] * 2.0 if candle_sig["direction"] == "short" else 0
-
-        rapid = self._rapid_momentum(candles_1m)
-        signals["rapid_momentum"] = rapid
-        score_long += rapid["strength"] * 2.5 if rapid["direction"] == "long" else 0
-        score_short += rapid["strength"] * 2.5 if rapid["direction"] == "short" else 0
-
-        # ── SMC 시그널 (10~12) ──
-        ob_sig = self._scalp_order_block(candles_5m, candles_1m)
-        signals["order_block"] = ob_sig
-        score_long += ob_sig["strength"] * 4.0 if ob_sig["direction"] == "long" else 0
-        score_short += ob_sig["strength"] * 4.0 if ob_sig["direction"] == "short" else 0
-
-        liq_sig = self._liquidity_sweep(candles_1m)
-        signals["liquidity_sweep"] = liq_sig
-        score_long += liq_sig["strength"] * 3.5 if liq_sig["direction"] == "long" else 0
-        score_short += liq_sig["strength"] * 3.5 if liq_sig["direction"] == "short" else 0
-
-        fvg_sig = self._fvg(candles_1m)
-        signals["fvg"] = fvg_sig
-        score_long += fvg_sig["strength"] * 2.5 if fvg_sig["direction"] == "long" else 0
-        score_short += fvg_sig["strength"] * 2.5 if fvg_sig["direction"] == "short" else 0
-
-        # ── 강화 시그널 (13~15) ──
-        vwap_sig = self._vwap_levels(candles_5m, candles_1m)
-        signals["vwap_levels"] = vwap_sig
-        score_long += vwap_sig["strength"] * 3.0 if vwap_sig["direction"] == "long" else 0
-        score_short += vwap_sig["strength"] * 3.0 if vwap_sig["direction"] == "short" else 0
+        score_long += candle_sig["strength"] * 1.5 if candle_sig["direction"] == "long" else 0  # 2.0→1.5
+        score_short += candle_sig["strength"] * 1.5 if candle_sig["direction"] == "short" else 0
 
         pivot_sig = self._pivot_points(candles_5m)
         signals["pivot_points"] = pivot_sig
-        score_long += pivot_sig["strength"] * 2.5 if pivot_sig["direction"] == "long" else 0
-        score_short += pivot_sig["strength"] * 2.5 if pivot_sig["direction"] == "short" else 0
+        score_long += pivot_sig["strength"] * 2.0 if pivot_sig["direction"] == "long" else 0  # 2.5→2.0
+        score_short += pivot_sig["strength"] * 2.0 if pivot_sig["direction"] == "short" else 0
 
-        bos_sig = self._break_of_structure(candles_1m)
-        signals["bos"] = bos_sig
-        score_long += bos_sig["strength"] * 3.5 if bos_sig["direction"] == "long" else 0
-        score_short += bos_sig["strength"] * 3.5 if bos_sig["direction"] == "short" else 0
+        # VWAP 돌파만 (평균회귀 제거) — VWAP 돌파는 추세추종
+        vwap_sig = self._vwap_levels(candles_5m, candles_1m)
+        signals["vwap_levels"] = vwap_sig
+        score_long += vwap_sig["strength"] * 2.0 if vwap_sig["direction"] == "long" else 0  # 3.0→2.0
+        score_short += vwap_sig["strength"] * 2.0 if vwap_sig["direction"] == "short" else 0
 
-        # ── 해외 유명 기법 (19~21) ──
+        # ── D. 평균회귀 시그널 (최소 가중치, 추세 방향 일치 시에만) ──
+        rsi_sig = self._rsi_reversal(candles_1m)
+        signals["rsi_reversal"] = rsi_sig
+        _rsi_w = 1.0 if _macro_trend == "neutral" else 0.0  # 2.0→1.0, 추세 시 비활성
+        score_long += rsi_sig["strength"] * _rsi_w if rsi_sig["direction"] == "long" else 0
+        score_short += rsi_sig["strength"] * _rsi_w if rsi_sig["direction"] == "short" else 0
+
+        bb_sig = self._bb_breakout(candles_5m)
+        signals["bb_breakout"] = bb_sig
+        _bb_w = 1.0 if _macro_trend == "neutral" else 0.0  # 3.0→1.0, 추세 시 비활성
+        score_long += bb_sig["strength"] * _bb_w if bb_sig["direction"] == "long" else 0
+        score_short += bb_sig["strength"] * _bb_w if bb_sig["direction"] == "short" else 0
+
         rsi2_sig = self._rsi2_extreme(candles_1m, candles_5m)
         signals["rsi2_extreme"] = rsi2_sig
-        # 추세 필터: 상승장 숏 / 하락장 롱 차단 (평균회귀 역추세 방지)
-        _rsi2_w = 4.0
-        if rsi2_sig["direction"] == "short" and _macro_trend == "up":
-            _rsi2_w = 0.0  # 상승장 숏 완전 차단
-        elif rsi2_sig["direction"] == "long" and _macro_trend == "down":
-            _rsi2_w = 0.0  # 하락장 롱 완전 차단
-        score_long += rsi2_sig["strength"] * _rsi2_w if rsi2_sig["direction"] == "long" else 0
-        score_short += rsi2_sig["strength"] * _rsi2_w if rsi2_sig["direction"] == "short" else 0
+        score_long += 0  # 4.0→0: 완전 비활성 (73% 방향 틀림의 주범)
+        score_short += 0
 
         vwap_mr_sig = self._vwap_mean_reversion(candles_5m, candles_1m)
         signals["vwap_mean_reversion"] = vwap_mr_sig
-        # 추세 필터: 상승장 숏 / 하락장 롱 차단
-        _vwap_mr_w = 3.5
-        if vwap_mr_sig["direction"] == "short" and _macro_trend == "up":
-            _vwap_mr_w = 0.0
-        elif vwap_mr_sig["direction"] == "long" and _macro_trend == "down":
-            _vwap_mr_w = 0.0
-        score_long += vwap_mr_sig["strength"] * _vwap_mr_w if vwap_mr_sig["direction"] == "long" else 0
-        score_short += vwap_mr_sig["strength"] * _vwap_mr_w if vwap_mr_sig["direction"] == "short" else 0
+        score_long += 0  # 3.5→0: 완전 비활성
+        score_short += 0
 
         liq_cascade_sig = self._liquidation_cascade_fade(candles_1m)
         signals["liq_cascade_fade"] = liq_cascade_sig
-        # 추세 필터 + 가중치 하향 (4.5→2.5)
-        _cascade_w = 2.5
-        if liq_cascade_sig["direction"] == "short" and _macro_trend == "up":
-            _cascade_w = 0.0
-        elif liq_cascade_sig["direction"] == "long" and _macro_trend == "down":
-            _cascade_w = 0.0
-        score_long += liq_cascade_sig["strength"] * _cascade_w if liq_cascade_sig["direction"] == "long" else 0
-        score_short += liq_cascade_sig["strength"] * _cascade_w if liq_cascade_sig["direction"] == "short" else 0
+        score_long += 0  # 2.5→0: 완전 비활성
+        score_short += 0
 
-        # ── 실시간 급등락 감지 (22) — WebSocket 가격 변속도 기반 ──
+        # ── E. 실시간 급등락 감지 ──
         spike_sig = self._realtime_spike(rt_velocity)
         signals["realtime_spike"] = spike_sig
         score_long += spike_sig["strength"] * 5.0 if spike_sig["direction"] == "long" else 0
@@ -173,9 +171,8 @@ class ScalpEngine:
             trend_filter = "long" if candles_15m["close"].iloc[-1] > ema50 else "short"
 
         # ── 점수 계산 ──
-        # 22 시그널 (18기본 + 3해외기법 + 1실시간스파이크)
-        # 정규화 분모 20.0 (스파이크 5.0 추가, 캐스케이드 4.5→2.5 감소)
-        max_possible = 20.0
+        # 04-15 개편: 추세추종 가중치 합 ~57, 실측 한 방향 raw 8~15
+        max_possible = 25.0
         # 04-13 개선: 0.8→0.6 완화 + 충돌 시에도 dominant 방향 감점 진입
         dominant = max(score_long, score_short)
         minor = min(score_long, score_short)
@@ -538,98 +535,163 @@ class ScalpEngine:
     # ══════════════════════════════════════
 
     def _scalp_order_block(self, df_5m: pd.DataFrame, df_1m: pd.DataFrame) -> dict:
+        """Legacy — 멀티TF 버전으로 대체됨"""
+        return {"type": "order_block", "direction": "neutral", "strength": 0.0, "zone": None}
+
+    def _scalp_order_block_mtf(self, df_5m: pd.DataFrame, df_1m: pd.DataFrame,
+                                df_15m: pd.DataFrame = None) -> dict:
         """
-        1m/5m 오더블록 — 정확한 인덱싱 (양수 인덱스 사용)
-        - 5m에서 OB 탐지: 임펄스 직전 반대 캔들
-        - 1m 가격이 OB 존에 도달 + 반전 → 진입
+        멀티TF 오더블록 v2 — 참고: 프로 트레이더 기법
+        핵심 원칙:
+          1. MSB(구조 돌파) 발생 시에만 유효한 OB
+          2. 멀티TF 중첩 (15m + 5m OB 겹침 = 신뢰도 상승)
+          3. 프레시(한 번도 터치 안 된) OB만 사용
+          4. FVG 동반 시 보너스
+          5. 추세 방향 일치 필수
         """
+        result = {"type": "order_block", "direction": "neutral", "strength": 0.0,
+                  "zone": None, "tf_overlap": 0, "fresh": False}
         if len(df_5m) < 30 or len(df_1m) < 10:
-            return {"type": "order_block", "direction": "neutral", "strength": 0.0, "zone": None}
+            return result
 
-        close_5m = df_5m["close"].values
-        open_5m = df_5m["open"].values
-        high_5m = df_5m["high"].values
-        low_5m = df_5m["low"].values
-        n = len(df_5m)
-
-        # ATR (5m)
-        tr = np.maximum(high_5m[1:] - low_5m[1:], np.maximum(
-            np.abs(high_5m[1:] - close_5m[:-1]), np.abs(low_5m[1:] - close_5m[:-1])))
-        atr = float(np.mean(tr[-14:])) if len(tr) >= 14 else float(np.mean(tr)) if len(tr) > 0 else 1.0
-
-        # OB 탐지: 양수 인덱스 사용 (최근 30봉 중 최근 5봉은 제외 — OB는 발생 후 시간 필요)
-        obs = []
-        start = max(0, n - 30)
-        end = n - 5  # 최근 5봉은 제외 (OB가 형성될 시간 필요)
-
-        for i in range(start, end):
-            # i 봉 이후 3봉 이내에 임펄스 발생 체크
-            if i + 3 >= n:
-                continue
-
-            # 임펄스: i+1 ~ i+3 봉의 최대 이동
-            future_close = close_5m[i + 3]
-            move = future_close - close_5m[i]
-
-            if abs(move) < atr * 1.2:
-                continue
-
-            # OB 캔들: i 봉이 임펄스 방향과 반대 색이어야 함
-            is_bull_ob = move > 0 and close_5m[i] < open_5m[i]  # 음봉 후 강한 상승
-            is_bear_ob = move < 0 and close_5m[i] > open_5m[i]  # 양봉 후 강한 하락
-
-            if is_bull_ob:
-                obs.append({
-                    "dir": "long",
-                    "low": float(low_5m[i]),
-                    "high": float(high_5m[i]),
-                    "strength": min(1.0, abs(move) / atr / 3),
-                    "age": n - 1 - i,
-                })
-            elif is_bear_ob:
-                obs.append({
-                    "dir": "short",
-                    "low": float(low_5m[i]),
-                    "high": float(high_5m[i]),
-                    "strength": min(1.0, abs(move) / atr / 3),
-                    "age": n - 1 - i,
-                })
-
-        if not obs:
-            return {"type": "order_block", "direction": "neutral", "strength": 0.0,
-                    "zone": None, "nearby_count": 0}
-
-        # 현재 1m 가격
         price = float(df_1m["close"].iloc[-1])
         prev_price = float(df_1m["close"].iloc[-2]) if len(df_1m) >= 2 else price
 
-        # 가격이 OB 존에 도달 + 반전 확인
-        best = None
-        for ob in obs:
-            in_zone = ob["low"] * 0.999 <= price <= ob["high"] * 1.001
+        def find_obs(df, lookback=40, min_impulse_mult=1.5):
+            """OB 탐지: MSB + 임펄스 직전 반대 캔들 + 프레시 체크"""
+            c = df["close"].values.astype(float)
+            o = df["open"].values.astype(float)
+            h = df["high"].values.astype(float)
+            lo = df["low"].values.astype(float)
+            n = len(c)
+            if n < 20:
+                return []
 
+            # ATR
+            tr = np.maximum(h[1:]-lo[1:], np.maximum(np.abs(h[1:]-c[:-1]), np.abs(lo[1:]-c[:-1])))
+            atr = float(np.mean(tr[-14:])) if len(tr) >= 14 else float(np.mean(tr[-5:])) if len(tr) >= 5 else 1.0
+
+            obs = []
+            start = max(0, n - lookback)
+            end = n - 3
+
+            for i in range(start, end):
+                if i + 3 >= n:
+                    continue
+
+                # 임펄스: i 봉 후 3봉 내 큰 이동 (MSB 역할)
+                move = c[i + 3] - c[i]
+                if abs(move) < atr * min_impulse_mult:
+                    continue
+
+                # OB 캔들: 임펄스 반대 색
+                is_bull_ob = move > 0 and c[i] < o[i]
+                is_bear_ob = move < 0 and c[i] > o[i]
+
+                if not (is_bull_ob or is_bear_ob):
+                    continue
+
+                ob_low = float(lo[i])
+                ob_high = float(h[i])
+
+                # 프레시 체크: OB 생성 후 가격이 OB 존에 다시 닿았는지
+                fresh = True
+                for j in range(i + 1, n - 1):  # 현재봉 제외
+                    if is_bull_ob and float(lo[j]) <= ob_high:
+                        fresh = False
+                        break
+                    elif is_bear_ob and float(h[j]) >= ob_low:
+                        fresh = False
+                        break
+
+                # FVG 동반 체크: OB 직후 봉에 FVG 발생?
+                has_fvg = False
+                if i + 2 < n:
+                    if is_bull_ob and h[i] < lo[i + 2]:  # Bullish FVG
+                        has_fvg = True
+                    elif is_bear_ob and lo[i] > h[i + 2]:  # Bearish FVG
+                        has_fvg = True
+
+                obs.append({
+                    "dir": "long" if is_bull_ob else "short",
+                    "low": ob_low,
+                    "high": ob_high,
+                    "strength": min(1.0, abs(move) / atr / 3),
+                    "age": n - 1 - i,
+                    "fresh": fresh,
+                    "has_fvg": has_fvg,
+                })
+
+            return obs
+
+        # 5m OB 탐지
+        obs_5m = find_obs(df_5m, lookback=40, min_impulse_mult=1.5)
+
+        # 15m OB 탐지 (멀티TF 중첩 확인용)
+        obs_15m = find_obs(df_15m, lookback=30, min_impulse_mult=1.5) if df_15m is not None and len(df_15m) >= 20 else []
+
+        if not obs_5m:
+            return result
+
+        # 가격이 OB 존에 도달 + 반전 확인 + 프레시 우선
+        best = None
+        best_score = 0.0
+
+        for ob in obs_5m:
+            in_zone = ob["low"] * 0.999 <= price <= ob["high"] * 1.001
             if not in_zone:
                 continue
 
-            # 방향 일치 + 반전 확인
-            if ob["dir"] == "long" and price > prev_price:
-                if best is None or ob["strength"] > best["strength"]:
-                    best = ob
-            elif ob["dir"] == "short" and price < prev_price:
-                if best is None or ob["strength"] > best["strength"]:
-                    best = ob
+            # 방향 일치 + 1m 반전 확인
+            if ob["dir"] == "long" and price <= prev_price:
+                continue
+            if ob["dir"] == "short" and price >= prev_price:
+                continue
+
+            score = ob["strength"]
+
+            # 프레시 OB 보너스 (+0.3)
+            if ob["fresh"]:
+                score += 0.3
+
+            # FVG 동반 보너스 (+0.2)
+            if ob["has_fvg"]:
+                score += 0.2
+
+            # 15m OB 중첩 보너스 (+0.3) — 같은 방향 OB가 가격 범위 근처에 있는지
+            tf_overlap = 0
+            for ob15 in obs_15m:
+                if ob15["dir"] != ob["dir"]:
+                    continue
+                # 15m OB 존과 5m OB 존이 겹치는지 (20% 이내)
+                overlap = min(ob["high"], ob15["high"]) - max(ob["low"], ob15["low"])
+                if overlap > 0:
+                    tf_overlap += 1
+                    score += 0.3
+                    break
+
+            # 최근 OB 우선 (오래된 OB는 신뢰도 하락)
+            if ob["age"] > 25:
+                score *= 0.5
+
+            if score > best_score:
+                best_score = score
+                best = ob
+                best["tf_overlap"] = tf_overlap
 
         if not best:
-            return {"type": "order_block", "direction": "neutral", "strength": 0.0,
-                    "zone": None, "nearby_count": len(obs)}
+            return result
 
         return {
             "type": "order_block",
             "direction": best["dir"],
-            "strength": round(best["strength"], 2),
+            "strength": round(min(1.0, best_score), 3),
             "zone": [best["low"], best["high"]],
             "age": best["age"],
-            "nearby_count": len(obs),
+            "fresh": best["fresh"],
+            "has_fvg": best.get("has_fvg", False),
+            "tf_overlap": best.get("tf_overlap", 0),
+            "nearby_count": len(obs_5m),
         }
 
     def _liquidity_sweep(self, df: pd.DataFrame) -> dict:
@@ -763,10 +825,8 @@ class ScalpEngine:
         elif prev_price > vwap > current_price:
             direction = "short"
             strength = 0.7
-        # 평균회귀
-        elif abs(distance_pct) > 1.0:
-            direction = "short" if distance_pct > 0 else "long"
-            strength = min(0.6, abs(distance_pct) / 2.0)
+        # 04-15: 평균회귀 제거 — VWAP 돌파만 추세추종으로 사용
+        # (기존 평균회귀가 73% 역방향의 원인 중 하나)
 
         return {"type": "vwap_levels", "direction": direction, "strength": round(strength, 2),
                 "vwap": round(vwap, 1), "distance_pct": round(distance_pct, 3)}
