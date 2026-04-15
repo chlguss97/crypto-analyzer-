@@ -46,6 +46,7 @@ from src.strategy.historical_learner import HistoricalLearner
 from src.strategy.auto_backtest import AutoBacktest
 from src.strategy.meta_learner import MetaLearner
 from src.strategy.signal_tracker import SignalTracker
+from src.strategy.setup_tracker import SetupTracker
 from src.engine.regime_detector import MarketRegimeDetector
 from src.trading.news_filter import NewsFilter
 
@@ -58,7 +59,7 @@ logger = logging.getLogger("CryptoAnalyzer")
 
 
 class CryptoAnalyzer:
-    """메인 봇 — Swing + Scalp 듀얼 모델 + AdaptiveML"""
+    """메인 봇 — TradeEngine v1 (Setup ABC) + SetupTracker 자기개선"""
 
     def __init__(self):
         load_env()
@@ -145,6 +146,9 @@ class CryptoAnalyzer:
         # 시그널 기여도 추적
         self.signal_tracker = SignalTracker()
         self.paper_trader.signal_tracker = self.signal_tracker
+
+        # 셋업 성과 추적 (자기개선)
+        self.setup_tracker = SetupTracker()
 
         # 스캘핑 리스크 관리
         self._scalp_daily_pnl = 0.0         # 일일 스캘핑 P&L (%)
@@ -897,8 +901,9 @@ class CryptoAnalyzer:
 
     async def record_ml_trade(self, mode: str, signals: dict, pnl_pct: float,
                              fee_pct: float = 0.0, direction: str = "",
-                             exit_reason: str = ""):
-        """실거래 결과 → 연패 관리 + 시그널 기여도 추적 (ML 콜드스타트: 학습 안 함)"""
+                             exit_reason: str = "", pnl_usdt: float = 0.0,
+                             hold_min: float = 0.0):
+        """실거래 결과 → 연패 관리 + 셋업 추적 (ML 비활성)"""
         # 통합 모델 연패/쿨다운 관리
         self._unified_record_result(pnl_pct, exit_reason)
 
@@ -906,6 +911,20 @@ class CryptoAnalyzer:
         regime = self._current_regime["regime"] if self._current_regime else "ranging"
         if self.signal_tracker:
             self.signal_tracker.record_trade(signals, pnl_pct, mode="unified", regime=regime)
+
+        # 셋업 성과 추적
+        setup = None
+        for key in ("setup_a", "setup_b", "setup_c"):
+            if key in signals:
+                setup = key[-1].upper()
+                break
+        if setup:
+            trend = signals.get("context", {}).get("trend", "neutral")
+            self.setup_tracker.record_trade(
+                setup=setup, direction=direction, pnl_pct=pnl_pct,
+                pnl_usdt=pnl_usdt, hold_min=hold_min,
+                exit_reason=exit_reason, trend=trend,
+            )
 
         logger.info(f"[실거래] PnL {pnl_pct:+.2f}% 연패:{self._unified_streak} 레짐:{regime}")
 
@@ -1133,6 +1152,14 @@ class CryptoAnalyzer:
         setup = result["setup"]
         direction = result["direction"]
         score = result["score"]
+
+        # 셋업 자동 비활성 체크
+        if not self.setup_tracker.is_setup_enabled(setup):
+            logger.info(f"[TRADE] Setup {setup} 비활성 (성과 부진) → 스킵")
+            return
+
+        # 셋업 감지 기록
+        self.setup_tracker.record_detection(setup, direction, score, float(df_5m["close"].iloc[-1]))
 
         # 셋업 감지 텔레그램 알림
         price_now = float(df_5m["close"].iloc[-1])
@@ -1433,6 +1460,7 @@ class CryptoAnalyzer:
                 self._unified_streak = 0
                 self._unified_cooldown_until = 0
                 self._unified_last_dir = None
+                self._loss_warning_sent = False  # 일일 손실 경고 플래그 리셋
 
                 # 일일 리포트 — DB에서 어제 거래 집계 (정확)
                 try:
@@ -1585,7 +1613,8 @@ class CryptoAnalyzer:
         finally:
             self._running = False
             self.ws_stream.stop()
-            # ML 콜드스타트 — 저장할 모델 없음
+            self.setup_tracker.save()
+            self.signal_tracker.save()
             await self.redis.set("sys:bot_status", "stopped")
             await self.telegram.notify_bot_status("stopped")
             await self.cleanup()

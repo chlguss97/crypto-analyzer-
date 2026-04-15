@@ -1161,14 +1161,15 @@ class PositionManager:
 
         # ML 학습 콜백 (실거래 시그널 데이터 포함 + 수수료율 + 방향/사유)
         if self.on_trade_closed:
-            mode = "scalp" if pos.grade == "SCALP" else "swing"
-            # 04-13: remaining_size 기준 마진 (C1 일관성)
+            mode = "unified"  # TradeEngine 통합 모델
             margin = pos.remaining_size * pos.entry_price / pos.leverage if pos.leverage > 0 else 0
             fee_pct = (pos.total_fee + pos.funding_cost) / margin * 100 if margin > 0 else 0
+            hold_min = (time.time() * 1000 - pos.entry_time) / 60000 if pos.entry_time > 0 else 0
             try:
                 await self.on_trade_closed(mode, pos.signals_snapshot, pnl_pct,
                                            fee_pct=fee_pct, direction=pos.direction,
-                                           exit_reason=reason)
+                                           exit_reason=reason, pnl_usdt=pnl_usdt,
+                                           hold_min=hold_min)
             except Exception as e:
                 logger.error(f"ML 콜백 에러: {e}")
 

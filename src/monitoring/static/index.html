@@ -1760,32 +1760,24 @@ async function updateScalpState() {
   const data = await api('/api/scalp/state');
   if (!data) return;
 
-  document.getElementById('scalpScore').textContent = (data.score||0).toFixed(1);
+  document.getElementById('scalpScore').textContent = data.setup || 'none';
   const dirEl = document.getElementById('scalpDir');
   dirEl.textContent = (data.direction||'--').toUpperCase();
   dirEl.style.color = data.direction==='long'?'var(--green)':data.direction==='short'?'var(--red)':'var(--text-muted)';
 
   const pnlEl = document.getElementById('scalpDailyPnl');
-  const pnl = data.daily_pnl||0;
-  pnlEl.textContent = (pnl>=0?'+':'')+pnl.toFixed(1)+'%';
-  pnlEl.style.color = pnl>=0?'var(--green)':'var(--red)';
+  pnlEl.textContent = (data.score||0).toFixed(1);
 
   const streakEl = document.getElementById('scalpStreak');
-  streakEl.textContent = data.streak||0;
-  streakEl.style.color = (data.streak||0)>=3?'var(--red)':'var(--text-primary)';
+  streakEl.textContent = (data.trend||'--').toUpperCase();
+  streakEl.style.color = data.trend==='up'?'var(--green)':data.trend==='down'?'var(--red)':'var(--text-muted)';
 
   const expEl = document.getElementById('scalpExplosive');
-  expEl.textContent = data.explosive?'ON':'OFF';
-  expEl.style.color = data.explosive?'var(--yellow)':'var(--text-muted)';
+  expEl.textContent = data.structure || '--';
 
   const smcEl = document.getElementById('scalpSMC');
-  smcEl.textContent = data.smc?'ON':'OFF';
-  smcEl.style.color = data.smc?'var(--green)':'var(--text-muted)';
-
-  const badge = document.getElementById('scalpSessionBadge');
-  const sq = {'best':'var(--green)','good':'var(--accent)','normal':'var(--text-secondary)','low':'var(--yellow)','poor':'var(--red)'};
-  badge.textContent = (data.session||'--').toUpperCase();
-  badge.style.color = sq[data.session_quality||'low']||'var(--text-muted)';
+  smcEl.textContent = data.streak || 0;
+  smcEl.style.color = (data.streak||0)>=3?'var(--red)':'var(--text-primary)';
 
   document.getElementById('scalpCooldown').style.display = data.cooldown?'block':'none';
   document.getElementById('scalpStopped').style.display = (data.daily_pnl||0)<=-10?'block':'none';
