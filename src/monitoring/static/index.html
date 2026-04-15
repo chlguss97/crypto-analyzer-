@@ -552,12 +552,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
       </label>
       <span class="auto-status" id="autoStatus" style="color:var(--text-muted)">OFF</span>
       <div style="width:1px;height:24px;background:var(--border);margin:0 8px;"></div>
-      <span style="font-size:12px;color:var(--text-muted);font-weight:600;">Model:</span>
-      <div class="unit-toggle" id="modelToggle">
-        <button class="unit-btn" onclick="selectModel('swing',this)">Swing</button>
-        <button class="unit-btn" onclick="selectModel('scalp',this)">Scalp</button>
-        <button class="unit-btn active" onclick="selectModel('both',this)">Both</button>
-      </div>
+      <span style="font-size:12px;color:var(--green);font-weight:600;">TradeEngine v1</span>
       <div style="flex:1"></div>
       <button class="btn-close-pos" onclick="closeAllPositions()">Close All Positions</button>
       <button class="btn-close-pos" onclick="closeLong()">Close Long</button>
@@ -592,43 +587,36 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
   </div>
 
 
-  <!-- Scalping Status -->
+  <!-- TradeEngine Status -->
   <div class="card" style="margin-bottom:24px;">
     <div class="card-header">
-      <div style="display:flex;align-items:center;"><span class="card-title" data-i18n="scalping.title">Live Scalping Status</span><span class="help" data-tip="실시간 스캘핑 시그널 상태입니다.&#10;• Score: 18종 시그널 합산 점수 (0~10)&#10;• Direction: 진입 방향&#10;• Daily P&L: 오늘 가상매매 손익&#10;• Streak: 연패 카운터 (3연패면 5분 쿨다운)&#10;• Explosive: 변동성 폭발 모드 활성화&#10;• SMC Entry: 오더블록/유동성 스윕 진입">?</span></div>
-      <span id="scalpSessionBadge" style="font-size:11px;padding:3px 8px;border-radius:4px;background:var(--bg-surface);color:var(--text-muted);font-weight:600;">--</span>
+      <div style="display:flex;align-items:center;"><span class="card-title">TradeEngine Status</span><span class="help" data-tip="Setup ABC 매칭 상태&#10;• Setup: 현재 활성 셋업 (A=추세모멘텀, B=OB리테스트, C=브레이크아웃)&#10;• Direction: 진입 방향&#10;• Score: 셋업 신뢰도 (0~10)&#10;• Trend: HTF 추세 방향&#10;• Structure: 5m 스윙 구조&#10;• Streak: 연패 카운터">?</span></div>
     </div>
     <div class="grid" style="grid-template-columns: repeat(6, 1fr); gap: 12px; margin-bottom:12px;">
       <div style="text-align:center;">
         <div class="big-num" id="scalpScore" style="font-size:24px;">--</div>
-        <span class="big-sub" data-i18n="scalping.score">Score</span>
+        <span class="big-sub">Setup</span>
       </div>
       <div style="text-align:center;">
         <div class="big-num" id="scalpDir" style="font-size:24px;">--</div>
-        <span class="big-sub" data-i18n="scalping.direction">Direction</span>
+        <span class="big-sub">Direction</span>
       </div>
       <div style="text-align:center;">
-        <div class="big-num" id="scalpDailyPnl" style="font-size:24px;">0%</div>
-        <span class="big-sub">Daily P&L</span>
+        <div class="big-num" id="scalpDailyPnl" style="font-size:24px;">--</div>
+        <span class="big-sub">Score</span>
       </div>
       <div style="text-align:center;">
-        <div class="big-num" id="scalpStreak" style="font-size:24px;">0</div>
-        <span class="big-sub" data-i18n="scalping.streak">Streak</span>
+        <div class="big-num" id="scalpStreak" style="font-size:24px;">--</div>
+        <span class="big-sub">Trend</span>
       </div>
       <div style="text-align:center;">
-        <div class="big-num" id="scalpExplosive" style="font-size:20px;color:var(--text-muted);">OFF</div>
-        <span class="big-sub" data-i18n="scalping.explosive">Explosive</span>
+        <div class="big-num" id="scalpExplosive" style="font-size:20px;color:var(--text-muted);">--</div>
+        <span class="big-sub">Structure</span>
       </div>
       <div style="text-align:center;">
-        <div class="big-num" id="scalpSMC" style="font-size:20px;color:var(--text-muted);">OFF</div>
-        <span class="big-sub" data-i18n="scalping.smc">SMC Entry</span>
+        <div class="big-num" id="scalpSMC" style="font-size:20px;color:var(--text-muted);">0</div>
+        <span class="big-sub">Streak</span>
       </div>
-    </div>
-    <div id="scalpCooldown" style="display:none;text-align:center;padding:8px;background:var(--red);color:white;border-radius:6px;font-weight:700;font-size:12px;">
-      COOLDOWN ACTIVE — Waiting...
-    </div>
-    <div id="scalpStopped" style="display:none;text-align:center;padding:8px;background:var(--red);color:white;border-radius:6px;font-weight:700;font-size:12px;">
-      DAILY LOSS LIMIT (-10%) — Scalping Stopped
     </div>
   </div>
 

@@ -900,12 +900,11 @@ async def get_risk_state():
 
 @app.get("/api/scalp/state")
 async def get_scalp_state():
-    """스캘핑 실시간 상태"""
-    state = await redis.get_json("sys:scalp_state")
+    """TradeEngine 실시간 상태 (레거시 엔드포인트명 유지)"""
+    state = await redis.get_json("sys:trade_state")
     if not state:
-        state = {"daily_pnl": 0, "streak": 0, "cooldown": False,
-                 "score": 0, "direction": "neutral", "explosive": False,
-                 "smc": False, "session": "unknown"}
+        state = {"setup": None, "direction": "neutral", "score": 0,
+                 "trend": "neutral", "structure": "unknown", "streak": 0}
     return state
 
 
@@ -923,15 +922,14 @@ async def get_regime():
 
 @app.get("/api/ml/status")
 async def ml_status():
-    """ML 모델 상태 조회"""
-    swing, scalp = _get_ml_instances()
+    """TradeEngine 상태 조회"""
     regime = await redis.get("sys:regime") or "ranging"
-
     return {
-        "swing": swing.get_stats(),
-        "scalp": scalp.get_stats(),
-        "active_model": await redis.get("sys:active_model") or "both",
-        "ml_enabled": (await redis.get("sys:ml_enabled") or "on") == "on",
+        "engine": "TradeEngine v1",
+        "mode": "setup_abc",
+        "ml_status": "cold_start",
+        "active_model": "trade_engine",
+        "ml_enabled": False,
         "current_regime": regime,
     }
 
@@ -946,58 +944,24 @@ async def toggle_ml():
 
 
 class ModelSelectRequest(BaseModel):
-    model: str  # 'swing' | 'scalp' | 'both'
+    model: str
 
 @app.post("/api/ml/model")
 async def select_model(req: ModelSelectRequest):
-    """활성 모델 선택"""
-    if req.model not in ("swing", "scalp", "both"):
-        raise HTTPException(400, "model must be swing, scalp, or both")
-    await redis.set("sys:active_model", req.model)
-    logger.info(f"활성 모델: {req.model.upper()}")
-    return {"active_model": req.model}
+    """모델 선택 (레거시 — TradeEngine에서는 단일 모델)"""
+    return {"active_model": "trade_engine", "note": "unified model, no selection needed"}
 
 
 @app.post("/api/ml/retrain")
 async def retrain_ml():
-    """ML 수동 재학습 트리거"""
-    swing, scalp = _get_ml_instances()
-    _ml_cache["loaded_at"] = 0  # 강제 리로드
-
-    result = {}
-    if len(swing.X_buffer) >= swing.min_trades_to_train:
-        swing.train()
-        result["swing"] = f"Trained with {len(swing.X_buffer)} samples"
-    else:
-        result["swing"] = f"Not enough data ({len(swing.X_buffer)}/{swing.min_trades_to_train})"
-
-    if len(scalp.X_buffer) >= scalp.min_trades_to_train:
-        scalp.train()
-        result["scalp"] = f"Trained with {len(scalp.X_buffer)} samples"
-    else:
-        result["scalp"] = f"Not enough data ({len(scalp.X_buffer)}/{scalp.min_trades_to_train})"
-
-    return result
+    """ML 재학습 (TradeEngine — 현재 비활성)"""
+    return {"status": "cold_start", "note": "ML disabled, using raw signals"}
 
 
 @app.post("/api/ml/history-learn")
 async def trigger_history_learn():
-    """수동 역사 백필 학습 트리거"""
-    swing, scalp = _get_ml_instances()
-    _ml_cache["loaded_at"] = 0
-
-    from src.strategy.historical_learner import HistoricalLearner
-    learner = HistoricalLearner(db, swing, scalp)
-    stats = await learner.run_backfill("15m", lookback=2000, step=5)
-
-    return {
-        "total_learned": stats["total"],
-        "wins": stats["wins"],
-        "losses": stats["losses"],
-        "win_rate": stats["wins"] / max(stats["total"], 1) * 100,
-        "swing_buffer": len(swing.X_buffer),
-        "scalp_buffer": len(scalp.X_buffer),
-    }
+    """역사 학습 (TradeEngine — 현재 비활성)"""
+    return {"status": "disabled", "note": "ML cold start, historical learning disabled"}
 
 
 @app.get("/api/ml/history")
