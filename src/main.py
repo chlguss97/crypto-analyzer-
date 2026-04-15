@@ -730,11 +730,15 @@ class CryptoAnalyzer:
 
         balance = risk_state.get("balance", 0)
         sl_dist_indicator = scalp_sig["sl_distance"]
-        leverage = 25
+        # 04-15: 고정 25x → 동적 레버리지 (연패 감소 적용)
+        atr_pct = scalp_sig.get("atr_pct", 0.3)
+        lev_result = self.leverage_calc.calculate("B+", atr_pct, self._scalp_streak)
+        leverage = lev_result["leverage"]
         # ranging → trending 전환 초기: 레버리지 부스트
         if self._regime_transition == "to_trending":
-            leverage = min(30, int(leverage * 1.5))
-            logger.info(f"[SCALP] 🚀 trending 전환 부스트 → 레버리지 {leverage}x")
+            max_lev = self.config["risk"]["leverage_range"][1]
+            leverage = min(max_lev, int(leverage * 1.2))
+            logger.info(f"[SCALP] trending 전환 부스트 → 레버리지 {leverage}x")
         if balance <= 0 or sl_dist_indicator <= 0 or price <= 0:
             return
 
@@ -744,18 +748,17 @@ class CryptoAnalyzer:
         if sizing_mode == "margin_loss_cap":
             margin_pct = risk_cfg.get("margin_pct", 0.95)
 
-            # ── EXPLOSIVE Quick Mode: 짧은 SL/TP + 5분 timeout ──
+            # ── EXPLOSIVE Quick Mode: SL/TP + 5분 timeout ──
             if is_explosive:
-                # SL: 마진 -3% (가격 0.12% @ 25x), TP1: 마진 +5% (가격 0.20%)
-                # 수수료 (-2.5%) 고려: 순 익절 +2.5% / 순 손실 -5.5% / BE 68%
-                sl_dist = price * (3.0 / leverage / 100)  # 마진 3% / 25x
-                tp1_dist = price * (5.0 / leverage / 100)  # 마진 5% / 25x
+                # 04-15 수정: SL 5% / TP 10% (RR 2.0) — 기존 SL 3%/TP 5% (RR 1.67 but 수수료 후 <1)
+                sl_dist = price * (5.0 / leverage / 100)   # 마진 5%
+                tp1_dist = price * (10.0 / leverage / 100)  # 마진 10% (RR 2.0)
                 tp2_dist = tp1_dist * 1.5
                 tp3_dist = tp1_dist * 2
-                margin = balance * margin_pct  # 정상 사이즈 (explosive 신뢰)
+                margin = balance * margin_pct
                 logger.info(
-                    f"[SCALP-EXPLOSIVE-QUICK] SL 마진-3% (${sl_dist:.1f}) | "
-                    f"TP1 마진+5% (${tp1_dist:.1f}) | 5분 timeout"
+                    f"[SCALP-EXPLOSIVE] SL 마진-5% (${sl_dist:.1f}) | "
+                    f"TP1 마진+10% (${tp1_dist:.1f}) | lev {leverage}x | 5분 timeout"
                 )
             else:
                 # ── 일반 Mode (옛 방식) ──
@@ -814,8 +817,18 @@ class CryptoAnalyzer:
 
         logger.info(
             f"[SCALP] {direction.upper()} @ ${price:.0f} SL ${sl:.0f} "
-            f"TP1 ${tp1:.0f} TP2 ${tp2:.0f} TP3 ${tp3:.0f}"
+            f"TP1 ${tp1:.0f} TP2 ${tp2:.0f} TP3 ${tp3:.0f} | lev {leverage}x"
         )
+
+        # 04-15: 수수료 대비 기대수익 필터 — TP1 도달 시 수수료 뺀 순수익이 양수인지 확인
+        taker_fee = self.config.get("fees", {}).get("taker", 0.0005)
+        fee_cost_pct = taker_fee * 2 * leverage  # 진입+청산 수수료 (마진 대비 %)
+        tp1_gain_margin_pct = tp1_dist / price * leverage * 100  # TP1 마진 수익%
+        if tp1_gain_margin_pct <= fee_cost_pct * 100:
+            logger.info(
+                f"[SCALP] TP1 수익({tp1_gain_margin_pct:.1f}%) <= 수수료({fee_cost_pct*100:.1f}%) → 진입 차단"
+            )
+            return
 
         # OKX 0.01 BTC 단위 floor 스냅
         raw_size = margin * leverage / price
@@ -1105,11 +1118,11 @@ class CryptoAnalyzer:
             except Exception as e:
                 logger.error(f"포지션 체크 에러: {e}")
 
-            # 학습 중 + 활성 실거래 포지션 → 5초 폴링
-            if learning and self.position_manager.positions:
-                await asyncio.sleep(5)
+            # 04-15: 포지션 체크 항상 5초 (15초→5초) — sl_failsafe 지연 최소화
+            if self.position_manager.positions:
+                await asyncio.sleep(3)   # 활성 포지션 있으면 3초
             else:
-                await asyncio.sleep(15)
+                await asyncio.sleep(10)  # 없으면 10초
 
     async def periodic_oi_funding(self):
         """OI/펀딩비 수집 (5분마다)"""

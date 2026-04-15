@@ -18,25 +18,25 @@ risk:
   # SL/TP 모두 "마진 손익 %" 기준으로 결정 → 가격 거리 = % / leverage
   # 매물대 SL 은 더 가까울 때만 보호 차원에서 사용
   margin_pct: 0.90              # 04-13: 95→90% (H19: 여유 5% 확보, 소규모 계좌 호환)
-  max_margin_loss_pct: 12.0     # 10→12%: SL 확대에 맞춰 마진 손실 한도 상향 (04-10)
+  max_margin_loss_pct: 8.0      # 12→8%: SL 가격거리 확대를 위해 마진 손실 한도 하향 (04-15)
+                                # 15x에서 8%/15 = 0.53% 가격거리 (~$400 BTC)
   use_indicator_sl: true        # true 면 매물대 SL 과 마진 한도 SL 중 가까운 것 사용
 
   # TP 마진 손익 % (TP1 만 등록, TP2/TP3 는 러너 트레일에 위임)
-  tp1_margin_gain_pct: 20.0     # TP1: 마진 +20% → 수수료 차감 후 실질 RR 1.6:1 (04-10 상향)
+  tp1_margin_gain_pct: 15.0     # 20→15%: RR 1.5+ 보장 (SL 8% 대비 TP 15% = RR 1.87) (04-15)
   # 트레일링 (러너 모드 활성화 후)
-  trail_margin_pct: 5.0         # 러너 SL 트레일 거리 = 마진 5% 만큼 뒤에 추격
-  trail_min_price_pct: 0.5      # 트레일 최소 가격 % — 25x 에서 floor (BTC 5m ATR 0.25% 의 2배, 노이즈 방어)
+  trail_margin_pct: 4.0         # 5→4%: 러너 SL 트레일 거리 축소 (더 빠른 본절) (04-15)
+  trail_min_price_pct: 0.3      # 0.5→0.3%: 트레일 최소 축소 (이익 보호) (04-15)
 
   # min_indicator_sl_pct: 매물대 SL 이 너무 가까우면 무시 (즉시 청산 방지)
-  # 04-09 노이즈 SL 즉사 패턴 발견 후 0.05 → 0.30 상향
-  # BTC 5분 ATR(활발 시간) ~0.25%, 1분 ATR ~0.05~0.1% → 0.3% 미만 SL 은 노이즈
-  min_indicator_sl_price_pct: 0.40   # 0.30→0.40: 노이즈 방어 강화 (04-10)
+  # 04-15: 0.40→0.50 상향 — 0.12% SL 즉사 근절 (BTC $75k 기준 $375 이하 SL 차단)
+  min_indicator_sl_price_pct: 0.50   # 0.40→0.50: 최소 SL 가격거리 0.5% (04-15)
 
   # ── mode_a: risk_per_trade (옛, backtest 호환) ──
   risk_per_trade: 0.005
 
   # ── 공통 ──
-  leverage_range: [10, 30]
+  leverage_range: [5, 15]        # [10,30]→[5,15]: 과도한 레버리지 근절 (04-15)
   sl_atr_multiplier: 1.8      # 1.2→1.8: SL 노이즈 즉사 방지 (04-10, 승률 35%→55% 목표)
   sl_min_pct: 0.003
   sl_max_pct: 0.015

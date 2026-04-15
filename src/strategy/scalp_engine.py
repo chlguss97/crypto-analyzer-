@@ -21,9 +21,9 @@ class ScalpEngine:
 
     def __init__(self):
         self.name = "scalp"
-        self.default_leverage = 25
-        self.sl_atr_mult = 1.5    # 0.8→1.5: SL 노이즈 즉사 방지 (04-10)
-        self.tp_rr = 2.5          # 2.0→2.5: RR 개선
+        self.default_leverage = 15  # 25→15: 과도한 레버리지 축소 (04-15)
+        self.sl_atr_mult = 2.0    # 1.5→2.0: SL 거리 확대 (노이즈 즉사 방지) (04-15)
+        self.tp_rr = 3.0          # 2.5→3.0: RR 개선 (04-15)
 
     async def analyze(self, candles_1m: pd.DataFrame, candles_5m: pd.DataFrame,
                       candles_15m: pd.DataFrame = None,
@@ -246,8 +246,9 @@ class ScalpEngine:
             tp_mult = self.tp_rr        # 2.5
             use_trailing = False
 
-        # 최소 SL 가격 0.15% — 노이즈 즉사 방지 (04-10)
-        min_sl_dist = candles_5m["close"].iloc[-1] * 0.0015
+        # 최소 SL 가격 0.35% — 노이즈 즉사 방지 (04-15: 0.15%→0.35%)
+        # BTC $75k 기준 $262 — 1분 ATR 노이즈 충분히 방어
+        min_sl_dist = candles_5m["close"].iloc[-1] * 0.0035
         sl_dist = max(atr * sl_mult, min_sl_dist)
 
         return {
