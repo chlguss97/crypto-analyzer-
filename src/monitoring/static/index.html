@@ -970,10 +970,10 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
 const API = '';
 
 async function api(path) {
-  try { const r = await fetch(API + path); return await r.json(); } catch(e) { return null; }
+  try { const r = await fetch(API + path, {credentials:'include'}); return await r.json(); } catch(e) { return null; }
 }
 async function apiPost(path) {
-  try { const r = await fetch(API + path, { method: 'POST' }); return await r.json(); } catch(e) { return null; }
+  try { const r = await fetch(API + path, {method:'POST', credentials:'include'}); return await r.json(); } catch(e) { return null; }
 }
 
 function fmt(n, d=0) { return n != null ? Number(n).toLocaleString('en', {minimumFractionDigits:d, maximumFractionDigits:d}) : '--'; }
