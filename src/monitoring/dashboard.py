@@ -65,11 +65,11 @@ async def index():
     """메인 대시보드 페이지"""
     return FileResponse(STATIC_DIR / "index.html")
 
-# 전역 인스턴스 (uvicorn 시작 시 초기화)
+# 전역 — lazy init에서 생성 (모듈 로드 시 인스턴스 생성 안 함)
 load_env()
-db = Database()
-redis = RedisClient()
 config = load_config()
+db = None
+redis = None
 collector: CandleCollector | None = None
 executor: OrderExecutor | None = None
 _bg_task = None
