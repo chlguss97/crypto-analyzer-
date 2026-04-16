@@ -104,6 +104,7 @@ class CryptoAnalyzer:
         self._unified_last_dir = None
         self._unified_last_trade_time = 0
         self._unified_last_exit_reason = None
+        self._unified_last_entry_price = 0.0
 
         # 매매 엔진 (executor 먼저 생성 → risk_manager 가 참조)
         self.leverage_calc = LeverageCalculator()
@@ -1185,6 +1186,13 @@ class CryptoAnalyzer:
             logger.debug(f"[TRADE] 최소진입간격 쿨다운 → 대기 ({elapsed:.0f}s < {min_interval}s)")
             return
 
+        # 같은 가격대 재진입 방지 (SL 맞고 같은 자리 재진입 차단)
+        if self._unified_last_exit_reason and "sl" in self._unified_last_exit_reason:
+            last_trade_price = getattr(self, "_unified_last_entry_price", 0)
+            if last_trade_price > 0 and abs(price - last_trade_price) / price < 0.003:
+                logger.info(f"[TRADE] 같은 가격대 재진입 차단 (${price:.0f} ≈ ${last_trade_price:.0f})")
+                return
+
         # 방향 전환 쿨다운
         if self._unified_last_dir and self._unified_last_dir != direction:
             flip_cd = cooldown_cfg.get("direction_flip_sec", 300)
@@ -1322,6 +1330,7 @@ class CryptoAnalyzer:
         if pos:
             self._unified_last_trade_time = _t.time()
             self._unified_last_dir = direction
+            self._unified_last_entry_price = pos.entry_price
 
             # trades.jsonl 진입 기록
             try:

@@ -236,13 +236,16 @@ class TradeEngine:
         r = {"match": False, "direction": "neutral", "score": 0.0,
              "reason": "", "sl_dist": 0, "tp_dist": 0, "reject_reason": ""}
 
-        # 조건 1: 추세 명확
+        # 조건 1: 추세 명확 + 구조 횡보 차단
         if ctx["trend"] == "neutral":
             r["reject_reason"] = "no_trend"
             return r
+        if ctx["structure"] == "range":
+            r["reject_reason"] = "range_structure"
+            return r
         direction = "long" if ctx["trend"] == "up" else "short"
 
-        # 조건 2: 5m EMA20 정렬 (추세 방향에 가격이 위치)
+        # 조건 2: 5m EMA20 정렬
         price = ctx["price"]
         ema20 = ctx.get("ema20_5m", 0)
         if direction == "long" and price <= ema20:
@@ -255,7 +258,6 @@ class TradeEngine:
         # 조건 3: 1m 모멘텀 OR 5m 최근 캔들 방향 일치
         mom = self._check_momentum_1m(df_1m, direction)
         if not mom["confirmed"]:
-            # 5m 최근 3봉 중 2봉 이상이 추세 방향인지
             close_5m = df_5m["close"].values.astype(float)
             open_5m = df_5m["open"].values.astype(float)
             recent_dir = 0
@@ -268,13 +270,12 @@ class TradeEngine:
                 r["reject_reason"] = "no_momentum_no_candles"
                 return r
 
-        # 조건 4: 거래량 (완화: 1.0x 이상이면 OK)
-        if ctx["volume_ratio"] < 0.8:
-            r["reject_reason"] = f"very_low_volume({ctx['volume_ratio']:.1f}x)"
+        # 조건 4: 거래량 >= 평균
+        if ctx["volume_ratio"] < 1.0:
+            r["reject_reason"] = f"low_volume({ctx['volume_ratio']:.1f}x)"
             return r
 
         # 전부 충족 → 진입
-        # SL: 5m EMA50 또는 직전 스윙 저점
         high_5m = df_5m["high"].values.astype(float)
         low_5m = df_5m["low"].values.astype(float)
         swings = self._find_swing_points(high_5m, low_5m, order=3)
@@ -288,14 +289,14 @@ class TradeEngine:
 
         sl_dist = abs(price - sl_level)
         sl_dist = max(sl_dist, price * 0.0035)     # 최소 0.35%
-        sl_dist = min(sl_dist, price * 0.008)       # 최대 0.8% (너무 넓으면 제한)
-        tp_dist = sl_dist * 1.5                     # RR 1.5
+        sl_dist = min(sl_dist, price * 0.01)        # 최대 1.0%
+        tp_dist = sl_dist * 1.5
 
         score = 5.0
         score += min(1.5, ctx["trend_strength"] * 2)
         if mom["confirmed"]:
             score += min(1.0, mom["strength"])
-        score += min(1.0, (ctx["volume_ratio"] - 0.8) * 3)
+        score += min(1.0, (ctx["volume_ratio"] - 1.0) * 3)
         if ctx["structure"] in ("hh_hl", "lh_ll"):
             score += 1.0
 
@@ -306,7 +307,6 @@ class TradeEngine:
             "reason": f"trend_follow: ema20+mom+vol({ctx['volume_ratio']:.1f}x)",
             "sl_dist": round(sl_dist, 1),
             "tp_dist": round(tp_dist, 1),
-            "bos": bos,
             "momentum": mom,
         })
         return r
@@ -357,14 +357,23 @@ class TradeEngine:
             r["reject_reason"] = "no_ob_in_zone"
             return r
 
-        # 조건 4: 1m 반전 확인 (ChoCH 완화 → 단순 반전 캔들)
-        c1m = df_1m.iloc[-1]
+        # 조건 4: 1m 반전 확인 (ChoCH OR 최근 2봉 중 1봉+ 반전 방향)
         choch = self._check_choch_1m(df_1m, direction)
-        candle_confirm = (direction == "long" and float(c1m["close"]) > float(c1m["open"])) or \
-                         (direction == "short" and float(c1m["close"]) < float(c1m["open"]))
-        if not choch and not candle_confirm:
-            r["reject_reason"] = "no_reversal_candle"
+        c1m_cur = df_1m.iloc[-1]
+        c1m_prev = df_1m.iloc[-2] if len(df_1m) >= 2 else c1m_cur
+        cur_confirm = (direction == "long" and float(c1m_cur["close"]) > float(c1m_cur["open"])) or \
+                      (direction == "short" and float(c1m_cur["close"]) < float(c1m_cur["open"]))
+        prev_confirm = (direction == "long" and float(c1m_prev["close"]) > float(c1m_prev["open"])) or \
+                       (direction == "short" and float(c1m_prev["close"]) < float(c1m_prev["open"]))
+        if not choch and not (cur_confirm and prev_confirm):
+            r["reject_reason"] = "no_reversal_2candles"
             return r
+
+        # 비프레시 OB 감점
+        if not best_ob.get("fresh", False):
+            # 비프레시 = 이미 한 번 터치된 OB → 신뢰도 낮음
+
+            pass  # 아래 score에서 감점
 
         # 조건 5: 유동성 클리어 (감점만, 차단 안 함)
         h5 = df_5m["high"].values.astype(float)
@@ -394,10 +403,12 @@ class TradeEngine:
         score += min(1.0, best_ob.get("impulse", {}).get("quality", 0) * 1.5)
         if best_ob.get("has_fvg", False):
             score += 0.5
+        if not best_ob.get("fresh", False):
+            score -= 1.5  # 비프레시 OB 감점
         if liq_clear:
             score += 0.5
         else:
-            score -= 1.5  # 유동성 위험
+            score -= 1.0  # 유동성 위험 (1.5→1.0 완화)
 
         # 15m OB 중첩 확인
         if df_15m is not None and len(df_15m) >= 20:
@@ -469,7 +480,7 @@ class TradeEngine:
             r["reject_reason"] = "no_breakout"
             return r
 
-        if overshoot < 0.03:  # 0.05→0.03 완화
+        if overshoot < 0.05:
             r["reject_reason"] = f"low_overshoot({overshoot:.2f})"
             return r
 
@@ -483,11 +494,11 @@ class TradeEngine:
         vol_current = float(vol.iloc[-1])
         vol_ratio = vol_current / vol_avg if vol_avg > 0 else 1.0
 
-        if vol_ratio < 1.2:  # 1.5→1.2 완화
+        if vol_ratio < 1.3:
             r["reject_reason"] = f"low_volume({vol_ratio:.1f}x)"
             return r
 
-        # 조건 4: 리테스트 체크 제거 — 돌파 + 거래량으로 충분
+        # 조건 4: 현재 봉이 레인지 밖에 있는지 (페이크아웃 방지)
         c1m = df_1m["close"].values.astype(float)
         if direction == "long":
             retested_inside = any(c1m[i] < range_high for i in range(-3, 0))
