@@ -1569,12 +1569,14 @@ class CryptoAnalyzer:
         env["PYTHONPATH"] = "/app"
 
         # uvicorn을 별도 프로세스로 직접 실행 — asyncio 루프 완전 격리
+        log_path = "/app/data/logs/dashboard.log" if os.path.isdir("/app/data/logs") else None
+        stderr_target = open(log_path, "w") if log_path else subprocess.DEVNULL
         proc = subprocess.Popen(
             ["python", "-m", "uvicorn", "src.monitoring.dashboard:app",
-             "--host", "0.0.0.0", "--port", "8000", "--log-level", "warning"],
+             "--host", "0.0.0.0", "--port", "8000", "--log-level", "info"],
             env=env,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stdout=stderr_target,
+            stderr=stderr_target,
         )
         self._dashboard_proc = proc
         logger.info(f"대시보드 시작 (별도 프로세스 PID={proc.pid}): http://localhost:8000")
