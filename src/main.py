@@ -1561,28 +1561,23 @@ class CryptoAnalyzer:
     # ── 대시보드 서버 ──
 
     def start_dashboard_thread(self):
-        """uvicorn 대시보드를 별도 스레드로 실행 (메인 루프 블로킹 방지)"""
-        import uvicorn
-        import threading
-        import src.monitoring.dashboard as dash_module
-        from src.monitoring.dashboard import app
+        """uvicorn 대시보드를 별도 프로세스로 실행 (이벤트 루프 충돌 근절)"""
+        import subprocess
+        import os
 
-        # 다른 스레드에서 PositionManager 호출용 — 이벤트 루프 + 인스턴스 주입
-        dash_module.position_manager = self.position_manager
-        dash_module.executor = self.executor
-        dash_module.main_event_loop = asyncio.get_running_loop()
-        dash_module.telegram_bot = self.telegram  # 자동매매 토글 알림용
+        env = os.environ.copy()
+        env["PYTHONPATH"] = "/app"
 
-        def _run():
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            config = uvicorn.Config(app, host="0.0.0.0", port=8000, log_level="warning", loop="asyncio")
-            server = uvicorn.Server(config)
-            loop.run_until_complete(server.serve())
-
-        t = threading.Thread(target=_run, daemon=True)
-        t.start()
-        logger.info("대시보드 시작 (별도 스레드): http://localhost:8000")
+        # uvicorn을 별도 프로세스로 직접 실행 — asyncio 루프 완전 격리
+        proc = subprocess.Popen(
+            ["python", "-m", "uvicorn", "src.monitoring.dashboard:app",
+             "--host", "0.0.0.0", "--port", "8000", "--log-level", "warning"],
+            env=env,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        self._dashboard_proc = proc
+        logger.info(f"대시보드 시작 (별도 프로세스 PID={proc.pid}): http://localhost:8000")
 
     # ── 메인 ──
 
@@ -1652,6 +1647,17 @@ class CryptoAnalyzer:
     async def cleanup(self):
         # Graceful Shutdown 강화
         logger.info("=== Graceful Shutdown 시작 ===")
+
+        # 대시보드 프로세스 종료
+        if hasattr(self, '_dashboard_proc') and self._dashboard_proc:
+            try:
+                self._dashboard_proc.terminate()
+                self._dashboard_proc.wait(timeout=5)
+            except Exception:
+                try:
+                    self._dashboard_proc.kill()
+                except Exception:
+                    pass
 
         # 1) ML 모델 + 시그널 트래커 저장 (가장 먼저, 데이터 손실 방지)
         try:
