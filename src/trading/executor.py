@@ -91,16 +91,25 @@ class OrderExecutor:
         return size_btc / cs
 
     async def set_leverage(self, leverage: int, direction: str):
-        """레버리지 설정"""
-        try:
-            side = "long" if direction == "long" else "short"
-            await self.exchange.set_leverage(
-                leverage, self.symbol, params={"mgnMode": "isolated", "posSide": side}
-            )
-            logger.info(f"레버리지 설정: {leverage}x ({side})")
-        except Exception as e:
-            logger.error(f"레버리지 설정 실패: {e}")
-            raise
+        """레버리지 설정 — 알고 주문 충돌 시 자동 정리 후 재시도"""
+        side = "long" if direction == "long" else "short"
+        for attempt in range(3):
+            try:
+                await self.exchange.set_leverage(
+                    leverage, self.symbol, params={"mgnMode": "isolated", "posSide": side}
+                )
+                logger.info(f"레버리지 설정: {leverage}x ({side})")
+                return
+            except Exception as e:
+                err_str = str(e)
+                if "59668" in err_str and attempt < 2:
+                    # OKX: 기존 알고 주문 때문에 레버리지 변경 불가 → 알고 정리 후 재시도
+                    logger.warning(f"레버리지 설정 충돌 → 알고 주문 정리 후 재시도 ({attempt+1}/3)")
+                    await self.cancel_all_algos()
+                    await asyncio.sleep(1)
+                else:
+                    logger.error(f"레버리지 설정 실패: {e}")
+                    raise
 
     async def open_position(self, direction: str, size: float, grade: str,
                             entry_price: float = None, sl_price: float = None,
