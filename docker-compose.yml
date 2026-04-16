@@ -13,8 +13,25 @@ services:
   bot:
     build: .
     restart: always
-    # SIGTERM 후 cleanup (ML save + db.close) 시간 확보 — DB 손상 예방
     stop_grace_period: 30s
+    depends_on:
+      - redis
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+      - ./config:/app/config
+    environment:
+      - REDIS_HOST=redis
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  dashboard:
+    build: .
+    restart: always
     depends_on:
       - redis
     env_file:
@@ -26,11 +43,12 @@ services:
       - ./config:/app/config
     environment:
       - REDIS_HOST=redis
+    command: ["python", "-m", "uvicorn", "src.monitoring.dashboard:app", "--host", "0.0.0.0", "--port", "8000", "--log-level", "info"]
     logging:
       driver: "json-file"
       options:
-        max-size: "50m"
-        max-file: "5"
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   redis_data:

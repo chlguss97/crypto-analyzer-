@@ -1589,7 +1589,8 @@ class CryptoAnalyzer:
         self._current_day = datetime.now(timezone.utc).day
 
         logger.info("봇 시작 — TradeEngine v1 (Setup ABC)")
-        self.start_dashboard_thread()  # 대시보드 별도 스레드
+        # 대시보드는 별도 컨테이너(docker-compose dashboard 서비스)에서 실행
+        # self.start_dashboard_thread()
         await self.redis.set("sys:bot_status", "running")
         await self.redis.set("sys:autotrading", "on")  # 초기 ON (텔레그램 /off 로 끄기)
         await self.redis.set("sys:ml_enabled", "on")
