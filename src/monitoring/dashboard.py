@@ -6,34 +6,44 @@ import secrets
 import time as _time
 from pathlib import Path
 from datetime import datetime, timezone
-from fastapi import FastAPI, HTTPException, Depends, status
+from fastapi import FastAPI, HTTPException, Depends, status, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from pydantic import BaseModel
 from typing import Optional
 
 from src.data.storage import Database, RedisClient
-from src.data.candle_collector import CandleCollector
-from src.trading.executor import OrderExecutor
 from src.utils.helpers import load_config, load_env
 
 logger = logging.getLogger(__name__)
 
 STATIC_DIR = Path(__file__).parent / "static"
 
-# ── Basic Auth (앱 생성 전에 정의) ──
+# ── Basic Auth — /health 는 bypass (모니터링/헬스체크용) ──
 load_env()
-security = HTTPBasic()
+_security = HTTPBasic(auto_error=False)
 DASHBOARD_USER = os.getenv("DASHBOARD_USER", "admin")
 DASHBOARD_PASS = os.getenv("DASHBOARD_PASS", "")
 
-def verify_auth(credentials: HTTPBasicCredentials = Depends(security)):
-    """대시보드 Basic Auth 검증"""
+_PUBLIC_PATHS = {"/health", "/openapi.json", "/docs", "/redoc", "/docs/oauth2-redirect"}
+
+
+async def verify_auth(
+    request: Request,
+    credentials: Optional[HTTPBasicCredentials] = Depends(_security),
+):
+    """Basic Auth — /health 등 public path는 bypass"""
+    if request.url.path in _PUBLIC_PATHS:
+        return None
+    if credentials is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Auth required",
+            headers={"WWW-Authenticate": "Basic"},
+        )
     if not DASHBOARD_PASS:
-        # 04-13: 비밀번호 미설정 시 읽기 전용만 허용, 매매 API는 차단 (H15)
-        logger.warning("DASHBOARD_PASS 미설정 — 읽기 전용 모드")
+        # 비밀번호 미설정 시 읽기 전용 모드 (매매 API 는 _require_auth 에서 별도 차단)
         return credentials.username
     correct_user = secrets.compare_digest(credentials.username, DASHBOARD_USER)
     correct_pass = secrets.compare_digest(credentials.password, DASHBOARD_PASS)
@@ -60,24 +70,31 @@ app.add_middleware(
 )
 
 
+@app.get("/health")
+async def health():
+    """컨테이너 헬스체크 — 인증 불필요. uvicorn 이벤트 루프 살아있으면 즉시 200"""
+    return {
+        "status": "ok",
+        "initialized": _initialized,
+        "db": db is not None and db._db is not None,
+        "redis": redis is not None and redis.connected,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
+
 @app.get("/")
 async def index():
     """메인 대시보드 페이지"""
     return FileResponse(STATIC_DIR / "index.html")
 
-# 전역 — lazy init에서 생성 (모듈 로드 시 인스턴스 생성 안 함)
+# 전역 — lazy init 에서 생성
 load_env()
 config = load_config()
-db = None
-redis = None
-collector: CandleCollector | None = None
-executor: OrderExecutor | None = None
-_bg_task = None
+db: Optional[Database] = None
+redis: Optional[RedisClient] = None
+executor = None  # 별도 컨테이너에서는 항상 None (매매 엔드포인트 비활성)
 
-# main.py 에서 주입 (다른 스레드에서 PositionManager 호출용)
-position_manager = None
-main_event_loop = None
-telegram_bot = None  # main.py 에서 주입 — 자동매매 토글 알림용
+logger.info(f"Dashboard 모듈 로드 완료 — user={DASHBOARD_USER} pass_set={bool(DASHBOARD_PASS)}")
 
 
 # ── Request Models ──
@@ -96,209 +113,64 @@ class CloseRequest(BaseModel):
     close_pct: float = 1.0  # 0~1 (부분 청산)
 
 
-async def _candle_loop():
-    """백그라운드 캔들 수집 (30초마다)"""
-    global collector
-    collector = CandleCollector(db)
-    try:
-        await collector.init_exchange()
-        logger.info("실시간 캔들 수집 시작")
-    except Exception as e:
-        logger.error(f"캔들 수집기 초기화 실패: {e}")
-        return
-
-    while True:
-        try:
-            for tf in ["15m", "1h", "4h"]:
-                candles = await collector.fetch_candles(tf, limit=5)
-                if candles:
-                    await db.insert_candles(collector.symbol, tf, candles)
-
-            # 마켓 데이터도 같이 캐싱
-            await _update_market_cache()
-        except Exception as e:
-            logger.error(f"캔들 갱신 에러: {e}")
-        await asyncio.sleep(30)
-
-
-# 마켓 데이터 메모리 캐시 (Redis 없이도 동작)
-_market_cache = {}
-
-
-async def _update_market_cache():
-    """OKX에서 마켓 데이터 가져와서 캐시"""
-    global _market_cache
-    if not collector or not collector.exchange:
-        return
-    try:
-        symbol = config["exchange"]["symbol"]
-        t = await collector.exchange.fetch_ticker(symbol)
-        _market_cache["ticker"] = {
-            "last": str(t.get("last", 0)),
-            "bid": str(t.get("bid", 0)),
-            "ask": str(t.get("ask", 0)),
-            "high24h": str(t.get("high", 0)),
-            "low24h": str(t.get("low", 0)),
-            "vol24h": str(t.get("quoteVolume", 0)),
-        }
-    except Exception as e:
-        logger.debug(f"마켓 데이터 캐시 실패: {e}")
-
-
-async def _signal_loop():
-    """백그라운드 시그널 분석 (60초마다)"""
-    import pandas as pd
-    from src.engine.fast.ema import EMAIndicator
-    from src.engine.fast.rsi import RSIIndicator
-    from src.engine.fast.bollinger import BollingerIndicator
-    from src.engine.fast.vwap import VWAPIndicator
-    from src.engine.fast.market_structure import MarketStructureIndicator
-    from src.engine.fast.atr import ATRIndicator
-    from src.engine.fast.fractal import FractalIndicator
-    from src.engine.slow.order_block import OrderBlockIndicator
-    from src.engine.slow.fvg import FVGIndicator
-    from src.engine.slow.volume_pattern import VolumePatternIndicator
-    from src.engine.slow.funding_rate import FundingRateIndicator
-    from src.engine.slow.open_interest import OpenInterestIndicator
-    from src.engine.slow.liquidation import LiquidationIndicator
-    from src.engine.slow.long_short_ratio import LongShortRatioIndicator
-    from src.engine.slow.cvd import CVDIndicator
-    from src.engine.base import BaseIndicator
-    from src.signal_engine.aggregator import SignalAggregator
-    from src.signal_engine.grader import SignalGrader
-
-    fast_engines = [
-        EMAIndicator(), RSIIndicator(), BollingerIndicator(),
-        VWAPIndicator(), MarketStructureIndicator(), ATRIndicator(),
-        FractalIndicator(),
-    ]
-    slow_engines = [
-        OrderBlockIndicator(), FVGIndicator(), VolumePatternIndicator(),
-        FundingRateIndicator(), OpenInterestIndicator(),
-        LiquidationIndicator(), LongShortRatioIndicator(), CVDIndicator(),
-    ]
-    aggregator = SignalAggregator()
-    grader = SignalGrader()
-
-    await asyncio.sleep(10)  # 캔들 수집 대기
-
-    while True:
-        try:
-            symbol = config["exchange"]["symbol"]
-            candles_raw = await db.get_candles(symbol, "15m", limit=300)
-            if not candles_raw or len(candles_raw) < 50:
-                await asyncio.sleep(30)
-                continue
-
-            df = BaseIndicator.to_dataframe(candles_raw)
-
-            # 1H 추세
-            candles_1h = await db.get_candles(symbol, "1h", limit=100)
-            htf_trend = "unknown"
-            if candles_1h and len(candles_1h) >= 20:
-                df_1h = BaseIndicator.to_dataframe(candles_1h)
-                ms = MarketStructureIndicator()
-                htf_result = await ms.calculate(df_1h)
-                htf_trend = htf_result.get("trend", "unknown")
-
-            context = {"htf_trend": htf_trend}
-
-            # Fast Path
-            fast_signals = {}
-            for engine in fast_engines:
-                try:
-                    result = await engine.calculate(df, context)
-                    fast_signals[result["type"]] = result
-                    if result["type"] == "bollinger":
-                        context["bb_position"] = result["bb_position"]
-                except Exception:
-                    pass
-
-            # Slow Path
-            slow_context = {
-                "funding_rate": 0, "funding_next_min": 999,
-                "oi_current": 0, "oi_history": [],
-                "ls_ratio_account": 1.0, "ls_history": [],
-                "cvd_15m": 0, "cvd_1h": 0, "funding_history": [],
-            }
-            slow_signals = {}
-            for engine in slow_engines:
-                try:
-                    result = await engine.calculate(df, slow_context)
-                    slow_signals[result["type"]] = result
-                    if result["type"] == "order_block" and result.get("ob_zone"):
-                        slow_context["ob_zones"] = [result["ob_zone"]]
-                    if result["type"] == "open_interest":
-                        slow_context["oi_spike"] = result.get("oi_spike", False)
-                except Exception:
-                    pass
-
-            # 합산 + 등급
-            aggregated = aggregator.aggregate(fast_signals, slow_signals)
-            grade_result = grader.grade(aggregated, {
-                "daily_pnl_pct": 0, "current_drawdown_pct": 0,
-                "open_positions": 0, "same_direction_count": 0,
-                "streak": 0, "cooldown_active": False,
-                "funding_blackout": False, "has_same_symbol": False,
-            })
-
-            # Redis에 저장 (또는 메모리 캐시)
-            await redis.set(f"sig:fast:{symbol}", fast_signals, ttl=120)
-            await redis.set(f"sig:slow:{symbol}", slow_signals, ttl=120)
-            await redis.set(f"sig:aggregated:{symbol}", {
-                "aggregated": aggregated, "grade": grade_result,
-            }, ttl=120)
-
-            # 메모리에도 보관 (Redis 없을 때용)
-            _market_cache["fast_signals"] = fast_signals
-            _market_cache["slow_signals"] = slow_signals
-            _market_cache["aggregated"] = {"aggregated": aggregated, "grade": grade_result}
-
-            logger.info(
-                f"시그널 분석: {aggregated['direction'].upper()} "
-                f"점수 {aggregated['score']:.1f} 등급 {grade_result['grade']}"
-            )
-
-        except Exception as e:
-            logger.error(f"시그널 분석 에러: {e}")
-
-        await asyncio.sleep(60)  # 60초마다 갱신
-
+# ── Lazy Init (race-safe + timeout) ──
 
 _initialized = False
+_init_lock = asyncio.Lock()
+
 
 async def _ensure_initialized():
-    """첫 API 호출 시 lazy 초기화 — startup hang 방지"""
+    """첫 API 호출 시 lazy DB/Redis 연결. Lock 으로 race 차단 + timeout 으로 hang 방지."""
     global _initialized, db, redis
-    if _initialized:
+    if _initialized and db is not None and redis is not None:
         return
-    _initialized = True
-    try:
-        db = Database()
-        redis = RedisClient()
-        await db.connect()
-        await redis.connect()
-        logger.info("Dashboard DB/Redis 연결 완료")
-    except Exception as e:
-        logger.warning(f"Dashboard 초기화 에러 (일부 API 미작동): {e}")
+    async with _init_lock:
+        if _initialized and db is not None and redis is not None:
+            return
+        try:
+            _db = Database()
+            _rd = RedisClient()
+            # 각 connect 에 8초 timeout — 네트워크 이슈로 이벤트 루프 행 방지
+            try:
+                await asyncio.wait_for(_db.connect(), timeout=8.0)
+            except asyncio.TimeoutError:
+                logger.error("Dashboard DB connect timeout (8s) — 일부 API 불가")
+            try:
+                await asyncio.wait_for(_rd.connect(), timeout=5.0)
+            except asyncio.TimeoutError:
+                logger.error("Dashboard Redis connect timeout (5s) — 일부 API 불가")
+            db = _db
+            redis = _rd
+            _initialized = True
+            logger.info(
+                f"Dashboard lazy-init 완료 — "
+                f"db={'OK' if db._db else 'FAIL'} redis={'OK' if redis.connected else 'FAIL'}"
+            )
+        except Exception as e:
+            logger.exception(f"Dashboard 초기화 에러: {e}")
+
 
 @app.on_event("startup")
 async def startup():
-    global executor
-    executor = None
-    logger.info("Dashboard 시작 (read-only, lazy init)")
+    port = os.getenv("DASHBOARD_PORT", "8000")
+    logger.info(f"Dashboard 시작 — uvicorn listening on 0.0.0.0:{port} (lazy init mode)")
+    # Redis 를 백그라운드에서 미리 초기화해둠 — 첫 요청 지연 방지. 실패해도 서버는 뜸.
+    asyncio.create_task(_ensure_initialized())
 
 
 @app.on_event("shutdown")
 async def shutdown():
-    if _bg_task:
-        _bg_task.cancel()
-    if collector:
-        await collector.close()
-    if executor:
-        await executor.close()
-    await db.close()
-    await redis.close()
+    logger.info("Dashboard 종료 중...")
+    if db is not None:
+        try:
+            await db.close()
+        except Exception as e:
+            logger.debug(f"DB close 에러: {e}")
+    if redis is not None:
+        try:
+            await redis.close()
+        except Exception as e:
+            logger.debug(f"Redis close 에러: {e}")
 
 
 # ── GET 엔드포인트 ──
@@ -355,14 +227,6 @@ async def get_signals():
     fast = await redis.get_json(f"sig:fast:{symbol}")
     slow = await redis.get_json(f"sig:slow:{symbol}")
     aggregated = await redis.get_json(f"sig:aggregated:{symbol}")
-
-    # Redis 없으면 메모리 캐시
-    if not fast:
-        fast = _market_cache.get("fast_signals")
-    if not slow:
-        slow = _market_cache.get("slow_signals")
-    if not aggregated:
-        aggregated = _market_cache.get("aggregated")
 
     return {
         "fast_signals": fast,
@@ -537,257 +401,138 @@ async def resume_bot():
 
 @app.post("/api/close-all")
 async def close_all():
+    """전 포지션 청산 (킬 스위치) — Redis 플래그 + 명령 큐"""
     await _ensure_initialized()
-    """전 포지션 청산 (킬 스위치)"""
     _require_auth()
     await redis.set("sys:bot_status", "stopped")
-    # 04-13: Redis 플래그 + 직접 청산 병행 (H16)
-    if position_manager and position_manager.positions:
-        try:
-            result = await _run_in_main_loop(position_manager.close_all("kill_switch_dashboard"))
-            logger.warning(f"킬 스위치: 직접 청산 실행 → {result}")
-        except Exception as e:
-            logger.error(f"킬 스위치 직접 청산 실패: {e} → main loop에서 처리 대기")
+    # bot 컨테이너가 명령 큐 구독 → close_all 실행
+    await redis.rpush("cmd:bot", json.dumps({"action": "close_all", "reason": "dashboard_kill"}))
     logger.warning("킬 스위치 작동 (대시보드)")
-    return {"status": "stopped", "message": "전 포지션 청산 실행됨"}
+    return {"status": "stopped", "message": "전 포지션 청산 요청 전송됨"}
 
 
 # ── 실시간 데이터 ──
 
 @app.get("/api/market")
 async def get_market():
+    """실시간 시장 데이터 (Redis 기반)"""
     await _ensure_initialized()
-    """실시간 시장 데이터 (Redis → OKX 직접 폴백)"""
-    # Redis에서 먼저 시도
     ticker = await redis.hgetall("rt:ticker:BTC-USDT-SWAP")
     oi = await redis.get("rt:oi:BTC-USDT-SWAP")
     funding = await redis.get("rt:funding:BTC-USDT-SWAP")
     ls_ratio = await redis.get("rt:ls_ratio:BTC-USDT-SWAP")
 
-    # Redis 데이터 없으면 메모리 캐시에서
-    if not ticker:
-        ticker = _market_cache.get("ticker", {})
-
     return {
-        "ticker": ticker,
+        "ticker": ticker or {},
         "open_interest": float(oi) if oi else None,
         "funding_rate": float(funding) if funding else None,
         "long_short_ratio": float(ls_ratio) if ls_ratio else None,
     }
 
 
-# ── 매매 엔드포인트 ──
+# ── 매매 엔드포인트 (별도 컨테이너: Redis 명령 큐 → bot 컨테이너가 실행) ──
 
 def _require_auth():
-    """04-13: 매매 API는 비밀번호 필수 (H15)"""
+    """매매 API는 비밀번호 필수"""
     if not DASHBOARD_PASS:
         raise HTTPException(403, "매매 API는 DASHBOARD_PASS 설정 필수")
 
+
 @app.post("/api/trade/open")
 async def manual_open(req: ManualOrderRequest):
-    """수동 매매 진입"""
+    """수동 매매 진입 — Redis 명령 큐로 bot 컨테이너에 위임"""
     _require_auth()
-    if not executor:
-        raise HTTPException(400, "OrderExecutor 미초기화 (API 키 확인)")
-
-    symbol = config["exchange"]["symbol"]
-    try:
-        # 레버리지 설정
-        await executor.set_leverage(req.leverage, req.direction)
-
-        # 수량 계산
-        positions = await executor.get_positions()
-        balance = await executor.get_balance()
-
-        # 현재가 조회
-        ticker = await executor.exchange.fetch_ticker(symbol)
-        current_price = ticker["last"]
-
-        size_usdt = req.margin_usdt * req.leverage
-        size_btc = size_usdt / current_price
-
-        # 주문 실행
-        side = "buy" if req.direction == "long" else "sell"
-        pos_side = req.direction
-
-        if req.order_type == "limit" and req.limit_price:
-            order = await executor.exchange.create_order(
-                symbol=symbol, type="limit", side=side,
-                amount=size_btc, price=req.limit_price,
-                params={"tdMode": "isolated", "posSide": pos_side},
-            )
-        else:
-            order = await executor.exchange.create_order(
-                symbol=symbol, type="market", side=side,
-                amount=size_btc,
-                params={"tdMode": "isolated", "posSide": pos_side},
-            )
-
-        fill_price = order.get("average") or order.get("price") or current_price
-
-        # SL 설정 (서버사이드 알고)
-        if req.sl_price:
-            sl_id = await executor.set_stop_loss(req.direction, size_btc, req.sl_price)
-            if not sl_id:
-                logger.error("수동 진입 SL 등록 실패 → 즉시 청산")
-                await executor.close_position(req.direction, size_btc, "manual_sl_failed")
-                return {"status": "error", "msg": "SL 등록 실패로 진입 취소"}
-
-        # DB 기록
-        await db.insert_trade({
-            "symbol": symbol,
-            "direction": req.direction,
-            "grade": "MANUAL",
-            "score": 0,
-            "entry_price": fill_price,
-            "entry_time": int(_time.time() * 1000),
-            "leverage": req.leverage,
-            "position_size": size_usdt,
-            "signals_snapshot": "{}",
-        })
-
-        logger.info(f"수동 매매: {req.direction.upper()} ${req.margin_usdt} x{req.leverage} @ ${fill_price}")
-
-        return {
-            "success": True,
-            "order_id": order.get("id"),
-            "direction": req.direction,
-            "fill_price": fill_price,
-            "size_btc": round(size_btc, 6),
-            "size_usdt": round(size_usdt, 2),
-            "leverage": req.leverage,
-            "sl_price": req.sl_price,
-        }
-
-    except Exception as e:
-        logger.error(f"수동 매매 실패: {e}")
-        raise HTTPException(500, str(e))
+    await _ensure_initialized()
+    await redis.rpush("cmd:bot", json.dumps({
+        "action": "open",
+        "direction": req.direction,
+        "leverage": req.leverage,
+        "margin_usdt": req.margin_usdt,
+        "sl_price": req.sl_price,
+        "tp_price": req.tp_price,
+        "order_type": req.order_type,
+        "limit_price": req.limit_price,
+    }))
+    return {"success": True, "queued": True, "msg": "bot 컨테이너에 명령 전달됨"}
 
 
 @app.post("/api/trade/close")
 async def manual_close(req: CloseRequest):
-    """수동 포지션 청산"""
-    if not executor:
-        raise HTTPException(400, "OrderExecutor 미초기화")
-
-    symbol = config["exchange"]["symbol"]
-    try:
-        positions = await executor.get_positions()
-        target = None
-        for p in positions:
-            if p["direction"] == req.direction:
-                target = p
-                break
-
-        if not target:
-            raise HTTPException(404, f"{req.direction} 포지션 없음")
-
-        close_size = target["size"] * req.close_pct
-        order = await executor.close_position(req.direction, close_size, "manual_web")
-
-        fill_price = order.get("average") or order.get("price") or 0 if order else 0
-        logger.info(f"수동 청산: {req.direction.upper()} {req.close_pct*100:.0f}% @ ${fill_price}")
-
-        return {
-            "success": True,
-            "direction": req.direction,
-            "close_pct": req.close_pct,
-            "fill_price": fill_price,
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"수동 청산 실패: {e}")
-        raise HTTPException(500, str(e))
+    """수동 포지션 청산 — Redis 명령 큐"""
+    _require_auth()
+    await _ensure_initialized()
+    await redis.rpush("cmd:bot", json.dumps({
+        "action": "close",
+        "direction": req.direction,
+        "close_pct": req.close_pct,
+    }))
+    return {"success": True, "queued": True, "msg": "bot 컨테이너에 명령 전달됨"}
 
 
 @app.get("/api/trade/positions")
 async def get_live_positions():
-    """거래소 실시간 포지션 조회"""
-    if not executor:
-        return {"positions": [], "balance": 0}
-
+    """거래소 실시간 포지션 조회 (Redis 캐시)"""
+    await _ensure_initialized()
+    symbol = config["exchange"]["symbol"]
+    pos_data = await redis.hgetall(f"pos:active:{symbol}")
+    balance_raw = await redis.get("sys:balance") or "0"
+    positions = []
+    if pos_data:
+        positions.append(pos_data)
     try:
-        positions = await executor.get_positions()
-        balance = await executor.get_balance()
-        return {"positions": positions, "balance": round(balance, 2)}
-    except Exception as e:
-        logger.error(f"포지션 조회 실패: {e}")
-        return {"positions": [], "balance": 0, "error": str(e)}
+        balance = float(balance_raw)
+    except (TypeError, ValueError):
+        balance = 0.0
+    return {"positions": positions, "balance": round(balance, 2)}
 
 
 @app.post("/api/autotrading")
 async def toggle_autotrading():
+    """자동매매 ON/OFF 토글 — Redis 플래그 + 알림 요청 큐"""
     await _ensure_initialized()
-    """자동매매 ON/OFF 토글 + 텔레그램 알림"""
     current = await redis.get("sys:autotrading") or "off"
     new_state = "off" if current == "on" else "on"
     await redis.set("sys:autotrading", new_state)
+    await redis.rpush("cmd:bot", json.dumps({
+        "action": "notify", "msg": f"자동매매 {new_state.upper()}",
+    }))
     logger.info(f"자동매매: {new_state.upper()}")
-
-    # 텔레그램 알림 (다른 스레드 → main loop 안전 호출)
-    if telegram_bot is not None and main_event_loop is not None:
-        try:
-            _run_in_main_loop(
-                telegram_bot.notify_bot_status(f"자동매매 {new_state.upper()}"),
-                timeout=5.0,
-            )
-        except Exception as e:
-            logger.debug(f"자동매매 토글 텔레그램 알림 실패: {e}")
-
     return {"autotrading": new_state}
 
 
-# ── 사용자 수동 SL/TP 수정 (대시보드에서 호출) ──
+# ── 사용자 수동 SL/TP 수정 ──
 
 class ManualSlRequest(BaseModel):
-    symbol: Optional[str] = None  # 기본: config 심볼
-    price: float                   # 새 SL 가격
+    symbol: Optional[str] = None
+    price: float
 
 class ManualTpRequest(BaseModel):
     symbol: Optional[str] = None
-    price: float                   # 새 TP1 가격
-
-
-def _run_in_main_loop(coro, timeout: float = 15.0):
-    """
-    다른 스레드(dashboard FastAPI)에서 main.py 이벤트 루프의 코루틴을 안전 실행.
-    asyncio.run_coroutine_threadsafe → Future → result()
-    timeout=15s — check_positions 가 lock 점유 중일 때도 충분 (BUG #H4)
-    """
-    import asyncio as _aio
-    if main_event_loop is None or position_manager is None:
-        return {"ok": False, "reason": "main_loop_not_injected"}
-    try:
-        future = _aio.run_coroutine_threadsafe(coro, main_event_loop)
-        return future.result(timeout=timeout)
-    except Exception as e:
-        return {"ok": False, "reason": f"exec_error: {e}"}
+    price: float
 
 
 @app.post("/api/position/sl")
 async def manual_update_sl(req: ManualSlRequest):
-    """사용자가 활성 포지션의 SL 가격 수동 수정"""
-    if position_manager is None:
-        raise HTTPException(503, "position_manager 미주입")
+    """사용자 SL 가격 수동 수정 — Redis 명령 큐"""
+    _require_auth()
+    await _ensure_initialized()
     sym = req.symbol or config["exchange"]["symbol"]
-    result = _run_in_main_loop(position_manager.manual_update_sl(sym, float(req.price)))
-    if not result.get("ok"):
-        raise HTTPException(400, result.get("reason", "unknown"))
-    return result
+    await redis.rpush("cmd:bot", json.dumps({
+        "action": "update_sl", "symbol": sym, "price": float(req.price),
+    }))
+    return {"ok": True, "queued": True, "symbol": sym, "price": req.price}
 
 
 @app.post("/api/position/tp")
 async def manual_update_tp(req: ManualTpRequest):
-    """사용자가 활성 포지션의 TP1 가격 수동 수정 (TP1 미체결 시만)"""
-    if position_manager is None:
-        raise HTTPException(503, "position_manager 미주입")
+    """사용자 TP1 가격 수동 수정 — Redis 명령 큐"""
+    _require_auth()
+    await _ensure_initialized()
     sym = req.symbol or config["exchange"]["symbol"]
-    result = _run_in_main_loop(position_manager.manual_update_tp(sym, float(req.price)))
-    if not result.get("ok"):
-        raise HTTPException(400, result.get("reason", "unknown"))
-    return result
+    await redis.rpush("cmd:bot", json.dumps({
+        "action": "update_tp", "symbol": sym, "price": float(req.price),
+    }))
+    return {"ok": True, "queued": True, "symbol": sym, "price": req.price}
 
 
 # ── 모델/ML 엔드포인트 ──

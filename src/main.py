@@ -1558,6 +1558,71 @@ class CryptoAnalyzer:
                 logger.debug(f"잔고 캐시 실패 (이전 값 유지): {e}")
             await asyncio.sleep(60)
 
+    async def periodic_dashboard_commands(self):
+        """대시보드(별도 컨테이너)가 Redis 큐로 보낸 명령 처리 — BLPOP 5초 블로킹"""
+        import json as _json
+        while self._running:
+            try:
+                if not self.redis._client:
+                    await asyncio.sleep(5)
+                    continue
+                raw = await self.redis._client.blpop("cmd:bot", timeout=5)
+                if not raw:
+                    continue
+                _, payload = raw
+                cmd = _json.loads(payload)
+                action = cmd.get("action")
+                logger.info(f"[DASH-CMD] {action}: {cmd}")
+
+                if action == "close_all":
+                    try:
+                        await self.position_manager.close_all(cmd.get("reason", "dashboard"))
+                    except Exception as e:
+                        logger.error(f"[DASH-CMD] close_all 실패: {e}")
+                elif action == "close":
+                    try:
+                        direction = cmd["direction"]
+                        close_pct = float(cmd.get("close_pct", 1.0))
+                        positions = await self.executor.get_positions()
+                        target = next((p for p in positions if p["direction"] == direction), None)
+                        if target:
+                            await self.executor.close_position(
+                                direction, target["size"] * close_pct, "dashboard_manual"
+                            )
+                    except Exception as e:
+                        logger.error(f"[DASH-CMD] close 실패: {e}")
+                elif action == "update_sl":
+                    try:
+                        result = await self.position_manager.manual_update_sl(
+                            cmd["symbol"], float(cmd["price"])
+                        )
+                        logger.info(f"[DASH-CMD] update_sl → {result}")
+                    except Exception as e:
+                        logger.error(f"[DASH-CMD] update_sl 실패: {e}")
+                elif action == "update_tp":
+                    try:
+                        result = await self.position_manager.manual_update_tp(
+                            cmd["symbol"], float(cmd["price"])
+                        )
+                        logger.info(f"[DASH-CMD] update_tp → {result}")
+                    except Exception as e:
+                        logger.error(f"[DASH-CMD] update_tp 실패: {e}")
+                elif action == "notify":
+                    try:
+                        await self.telegram._send(cmd.get("msg", ""))
+                    except Exception as e:
+                        logger.debug(f"[DASH-CMD] notify 실패: {e}")
+                elif action == "open":
+                    # 수동 진입은 복잡 — 로깅만, 필요 시 추후 구현
+                    logger.warning(f"[DASH-CMD] open 액션 미구현 (Telegram 사용 권장): {cmd}")
+                else:
+                    logger.warning(f"[DASH-CMD] 알 수 없는 action: {action}")
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.error(f"[DASH-CMD] 루프 에러: {e}")
+                await asyncio.sleep(2)
+
     # ── 대시보드 서버 ──
 
     def start_dashboard_thread(self):
@@ -1626,6 +1691,7 @@ class CryptoAnalyzer:
             asyncio.create_task(self.periodic_daily_reset()),
             # asyncio.create_task(self.periodic_study_scheduler()),  # ML 콜드스타트 — 학습 비활성
             asyncio.create_task(self.periodic_heartbeat()),
+            asyncio.create_task(self.periodic_dashboard_commands()),  # 대시보드 → bot 명령 큐
             asyncio.create_task(self.ws_stream.start()),
             asyncio.create_task(self.telegram.poll_commands()),  # 텔레그램 명령어 polling
         ]
