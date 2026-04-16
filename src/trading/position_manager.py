@@ -493,6 +493,8 @@ class PositionManager:
                     await self._move_sl(pos, new_sl, label="본절(서버TP)")
 
                     pos.runner_mode = True
+                    # 러너 모드 전환 → TP2/TP3 미사용 → 즉시 정리 (OKX 잔존 방지)
+                    await self._cancel_unused_tps(pos)
                     # 04-13: best_price를 최소 TP1 가격으로 설정
                     # 서버 TP1은 TP1가 이상에서 체결됐지만, 폴링 시점 가격은 이미 하락했을 수 있음
                     if pos.direction == "long":
@@ -626,6 +628,9 @@ class PositionManager:
                 pos.best_price = min(current_price, pos.tp1_price) if current_price > 0 else pos.tp1_price
             pos.trail_distance = self._get_trail_distance(pos, pos.best_price)
 
+            # 러너 모드 전환 → TP2/TP3 미사용 → 즉시 정리 (OKX 잔존 방지)
+            await self._cancel_unused_tps(pos)
+
             logger.info(
                 f"✅ TP1 익절 50% @ ${pos.tp1_price:.0f} → SL 본전 ${new_sl:.0f} | "
                 f"🏃 러너 모드 ON (best ${pos.best_price:.0f}, 트레일 ${pos.trail_distance:.1f} = "
@@ -740,6 +745,71 @@ class PositionManager:
         except Exception as e:
             logger.debug(f"잔존 알고 전체 정리 실패 (무시): {e}")
 
+    async def _cancel_unused_tps(self, pos: Position):
+        """
+        러너 모드 활성 or TP1 체결 후 미사용이 된 TP2/TP3 알고 정리.
+        봇이 TP2/TP3을 쓰지 않는 상태에서 이들이 OKX 서버에 살아있으면 '잔존 미체결 주문'
+        으로 남아 재진입 / 레버리지 변경 시 충돌 유발.
+        """
+        for key in ("tp2", "tp3"):
+            algo_id = pos.algo_ids.get(key)
+            if algo_id:
+                try:
+                    await self.executor.cancel_algo_order(algo_id)
+                except Exception as e:
+                    logger.debug(f"{key} 취소 예외: {e}")
+                pos.algo_ids[key] = None
+                logger.info(f"🧹 미사용 {key.upper()} 정리 (러너/TP1후)")
+
+    async def _resize_protection(self, pos: Position, label: str):
+        """
+        부분 청산 후 사이즈가 달라졌을 때 — SL/TP1 을 새 사이즈로 재등록.
+        기존 알고는 이전 사이즈로 등록되어 있어 reduce-only 충돌 가능.
+        TP2/TP3 는 러너 모드 or TP1 체결 후에는 미사용 → 정리.
+        """
+        if pos.remaining_size <= 0:
+            return
+
+        # SL 재등록 (새 사이즈)
+        old_sl = pos.algo_ids.get("sl")
+        try:
+            new_sl_id = await self.executor.update_stop_loss(
+                pos.direction, pos.remaining_size, pos.current_sl, old_sl
+            )
+            pos.algo_ids["sl"] = new_sl_id
+            if not new_sl_id:
+                logger.warning(f"⚠️  SL 사이즈 갱신 실패 ({label})")
+        except Exception as e:
+            logger.error(f"SL 사이즈 갱신 예외 ({label}): {e}")
+
+        # TP1 재등록 — 러너 아니고 TP1 미체결 시에만
+        if not pos.runner_mode and not pos.tp1_filled:
+            old_tp1 = pos.algo_ids.get("tp1")
+            if old_tp1:
+                try:
+                    await self.executor.cancel_algo_order(old_tp1)
+                except Exception:
+                    pass
+                pos.algo_ids["tp1"] = None
+            # 새 사이즈로 TP1 재등록
+            try:
+                small = pos.size < self.MIN_ORDER_SIZE_BTC * 2
+                tp1_size = pos.remaining_size if small else (pos.remaining_size * self.TP1_CLOSE_PCT)
+                tp1_size = math.floor(tp1_size / self.MIN_ORDER_SIZE_BTC) * self.MIN_ORDER_SIZE_BTC
+                tp1_size = round(tp1_size, 4)
+                if tp1_size >= self.MIN_ORDER_SIZE_BTC:
+                    new_tp1 = await self.executor.set_take_profit(
+                        pos.direction, tp1_size, pos.tp1_price, level=1
+                    )
+                    if new_tp1:
+                        pos.algo_ids["tp1"] = new_tp1
+                        logger.info(f"🔧 TP1 사이즈 갱신 ({label}): ${pos.tp1_price:.0f} sz={tp1_size}")
+            except Exception as e:
+                logger.error(f"TP1 재등록 예외 ({label}): {e}")
+
+        # TP2/TP3 는 항상 미사용 → 정리 (러너든 아니든 TP1 방식에서 더 이상 안 씀)
+        await self._cancel_unused_tps(pos)
+
     async def _reconcile_external_close(self, pos: Position, last_price: float):
         """외부에서 포지션이 전량 청산된 경우 DB/콜백 정리"""
         # 04-15: OKX 최근 체결에서 실제 exit price 조회 시도
@@ -798,7 +868,8 @@ class PositionManager:
             await self._partial_close(pos, close_pct, "time_2h")
             pos.time_2h_done = True  # 04-13: 반복 방지 (H12)
             if pos.remaining_size > 0:
-                await self._move_sl(pos, pos.current_sl, label="time_2h_resize")
+                # SL/TP1 전부 새 사이즈로 재등록 + TP2/TP3 정리
+                await self._resize_protection(pos, label="time_2h")
             return False
 
         # 1시간 → 수익 < 3% 시 50% 청산 (1회만)
@@ -811,7 +882,8 @@ class PositionManager:
             await self._partial_close(pos, close_pct, "time_1h")
             pos.time_1h_done = True  # 04-13: 반복 방지 (H12)
             if pos.remaining_size > 0:
-                await self._move_sl(pos, pos.current_sl, label="time_1h_resize")
+                # SL/TP1 전부 새 사이즈로 재등록 + TP2/TP3 정리
+                await self._resize_protection(pos, label="time_1h")
             return False
 
         return False
@@ -959,6 +1031,7 @@ class PositionManager:
         - remaining_size 가 이미 0 인 경우 (다른 경로로 청산 완료) → finalize 만
         - 청산 실패 시: SL 재등록 + 메모리 유지 (좀비 방지) + 다음 폴링 재시도
         - 청산 성공 시: 잔존 알고 정리 + finalize
+        - 예외 발생 시: 알고 정리 + 메모리 유지 (다음 폴링 재시도)
         """
         # entry_price 무결성 체크
         if not pos.entry_price or pos.entry_price <= 0:
@@ -972,10 +1045,20 @@ class PositionManager:
             await self._finalize_position(pos, reason, exit_price=0)
             return
 
-        # 청산 시도
-        order = await self.executor.close_position(
-            pos.direction, pos.remaining_size, reason
-        )
+        # 청산 시도 — 예외 포착으로 _finalize 누락 방지
+        try:
+            order = await self.executor.close_position(
+                pos.direction, pos.remaining_size, reason
+            )
+        except Exception as e:
+            logger.error(f"청산 중 예외 ({reason}): {e}")
+            pos.close_attempts += 1
+            # 예외 발생해도 OKX 알고는 확실히 정리
+            try:
+                await self._cancel_all_algos(pos)
+            except Exception as e2:
+                logger.error(f"예외 후 알고 정리도 실패: {e2}")
+            return  # 다음 폴링 재시도
 
         if not order:
             # 🚨 청산 실패 — 좀비 방지: SL 알고 긴급 재등록 + 메모리 유지
@@ -1056,11 +1139,30 @@ class PositionManager:
         청산된 포지션의 모든 정리 작업 — DB / Redis / 메모리 / 텔레그램 / ML 콜백.
         _full_close 와 외부 청산 감지 양쪽에서 호출.
         """
-        # ── 잔존 알고 주문 정리 (04-10 fix: 포지션 종료 후 트리거 주문 잔류 버그) ──
+        # ── 잔존 알고 주문 정리 (04-10 fix + 04-16 강화: 재시도 + 검증) ──
         try:
             await self._cancel_all_algos(pos)
         except Exception as e:
-            logger.debug(f"finalize 알고 정리 실패 (무시): {e}")
+            logger.error(f"finalize 알고 정리 예외: {e}")
+
+        # 04-16: 정리 검증 — 잔존 알고 여전히 있으면 2회 재시도
+        for verify_attempt in range(2):
+            try:
+                pending = await self.executor.exchange.private_get_trade_orders_algo_pending(
+                    {"instType": "SWAP",
+                     "instId": self.executor.exchange.market(pos.symbol)["id"]}
+                )
+                items = pending.get("data", []) if isinstance(pending, dict) else []
+                if not items:
+                    break
+                logger.warning(
+                    f"⚠️  finalize 후 알고 {len(items)}개 잔존 → 재정리 ({verify_attempt+1}/2)"
+                )
+                await self.executor.cancel_all_algos()
+                await asyncio.sleep(0.5)
+            except Exception as e:
+                logger.debug(f"잔존 알고 검증 실패 ({verify_attempt+1}): {e}")
+                break
 
         # ── exit_price 정확화 (BUG #1~3 fix) ──
         # 외부 청산 (서버 SL/TP 자동 발동) 또는 close 응답에 가격 없는 경우

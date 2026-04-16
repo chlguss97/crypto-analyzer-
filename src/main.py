@@ -1558,6 +1558,43 @@ class CryptoAnalyzer:
                 logger.debug(f"잔고 캐시 실패 (이전 값 유지): {e}")
             await asyncio.sleep(60)
 
+    async def periodic_orphan_algo_sweeper(self):
+        """
+        고아 알고 주기 정리 (120초마다).
+        봇 메모리 + OKX 양쪽에 포지션 0 인데 알고가 남아있으면 → 전량 취소.
+        네트워크 일시 장애로 finalize 정리가 실패했을 때 백스톱 역할.
+        """
+        while self._running:
+            await asyncio.sleep(120)
+            try:
+                # 봇 메모리에 포지션이 있으면 스킵 (활성 알고는 정상)
+                if self.position_manager.positions:
+                    continue
+                # OKX 실제 포지션 확인
+                try:
+                    ex_positions = await asyncio.wait_for(
+                        self.executor.get_positions(), timeout=5.0
+                    )
+                except Exception as e:
+                    logger.debug(f"sweeper 포지션 조회 실패: {e}")
+                    continue
+                has_ex_position = any(abs(float(p.get("size") or 0)) > 0 for p in ex_positions)
+                if has_ex_position:
+                    continue
+                # 포지션 완전 0 — 알고 있으면 고아
+                try:
+                    cleaned = await self.executor.cancel_all_algos()
+                    if cleaned:
+                        logger.warning(
+                            f"🧹 고아 알고 {len(cleaned)}개 발견 + 정리 (포지션 없음, sweeper)"
+                        )
+                except Exception as e:
+                    logger.debug(f"sweeper 정리 실패: {e}")
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.error(f"sweeper 루프 에러: {e}")
+
     async def periodic_dashboard_commands(self):
         """대시보드(별도 컨테이너)가 Redis 큐로 보낸 명령 처리 — BLPOP 5초 블로킹"""
         import json as _json
@@ -1691,6 +1728,7 @@ class CryptoAnalyzer:
             asyncio.create_task(self.periodic_daily_reset()),
             # asyncio.create_task(self.periodic_study_scheduler()),  # ML 콜드스타트 — 학습 비활성
             asyncio.create_task(self.periodic_heartbeat()),
+            asyncio.create_task(self.periodic_orphan_algo_sweeper()),  # 고아 알고 주기 정리 (120s)
             asyncio.create_task(self.periodic_dashboard_commands()),  # 대시보드 → bot 명령 큐
             asyncio.create_task(self.ws_stream.start()),
             asyncio.create_task(self.telegram.poll_commands()),  # 텔레그램 명령어 polling

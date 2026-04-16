@@ -519,24 +519,33 @@ class OrderExecutor:
     async def cancel_all_algos(self) -> list[dict]:
         """
         OKX 의 BTC-USDT-SWAP 활성 알고 주문 (SL/TP/trigger) 모두 cancel.
-        봇 재시작 시 옛 알고가 살아있고 self_heal 이 새 알고를 추가 등록하면
-        중복 SL/TP 가 됨 → sync_positions 에서 호출.
+        쿼리 실패 시 3회 재시도 (네트워크 일시 장애로 고아 알고 방치 방지).
 
         Returns: 정리한 알고 정보 list [{algo_id, ord_type, trigger_px, side, sz}, ...]
-                 운영자가 무엇이 cancel 됐는지 추적 가능
         """
         canceled_info = []
         try:
-            # OKX 알고 주문 조회 (private endpoint)
-            try:
-                resp = await self.exchange.private_get_trade_orders_algo_pending(
-                    {"instType": "SWAP", "instId": self.exchange.market(self.symbol)["id"]}
-                )
-                items = resp.get("data", []) if isinstance(resp, dict) else []
-            except Exception as e:
-                logger.debug(f"알고 조회 실패 (스킵): {e}")
+            # OKX 알고 주문 조회 — 실패 시 재시도 (silent skip 금지)
+            items = []
+            for attempt in range(3):
+                try:
+                    resp = await self.exchange.private_get_trade_orders_algo_pending(
+                        {"instType": "SWAP", "instId": self.exchange.market(self.symbol)["id"]}
+                    )
+                    items = resp.get("data", []) if isinstance(resp, dict) else []
+                    break
+                except Exception as e:
+                    if attempt < 2:
+                        logger.warning(f"알고 조회 실패 ({attempt+1}/3) → 재시도: {e}")
+                        await asyncio.sleep(0.5 * (attempt + 1))
+                    else:
+                        logger.error(f"알고 조회 3회 연속 실패 — 고아 알고 방치 위험: {e}")
+                        return []
+
+            if not items:
                 return []
 
+            failed_ids = []
             for item in items:
                 algo_id = item.get("algoId") or item.get("algoClOrdId")
                 if not algo_id:
@@ -557,14 +566,17 @@ class OrderExecutor:
                             f"옛 알고 정리: {info['ord_type']} {info['side']} "
                             f"sz={info['sz']} trigger=${info['trigger_px']} id={algo_id}"
                         )
+                    else:
+                        failed_ids.append(algo_id)
                 except Exception as e:
                     logger.debug(f"알고 cancel 실패 ({algo_id}): {e}")
+                    failed_ids.append(algo_id)
+
+            if failed_ids:
+                logger.warning(f"⚠️  알고 {len(failed_ids)}개 취소 실패 (확인 필요): {failed_ids[:5]}")
 
             if canceled_info:
-                logger.info(
-                    f"🧹 거래소 활성 알고 {len(canceled_info)}개 정리 완료 "
-                    f"(sync 단계 — 봇 재시작으로 옛 알고 무효화)"
-                )
+                logger.info(f"🧹 거래소 활성 알고 {len(canceled_info)}개 정리 완료")
         except Exception as e:
             logger.error(f"cancel_all_algos 에러: {e}")
         return canceled_info
