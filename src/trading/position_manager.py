@@ -1314,20 +1314,42 @@ class PositionManager:
                     pos.runner_mode = bool(int(redis_data.get("runner_mode", 0)))
                     pos.best_price = float(redis_data.get("best_price", ex_entry))
                     pos.trail_distance = float(redis_data.get("trail_distance", 0))
-                    # 기존 알고가 아직 살아있으면 유지, 없으면 즉시 재등록
+                    # 기존 OKX 알고 조회 → algo_ids 매핑 (중복 등록 방지)
                     pos.algo_ids = {"sl": None, "tp1": None, "tp2": None, "tp3": None}
+                    try:
+                        existing = await self.executor.cancel_all_algos()
+                        # 정리 후 새로 등록 (깨끗한 상태에서 1벌만)
+                        logger.info(f"🧹 기존 알고 {len(existing)}개 정리 → 새로 1벌 등록")
+                    except Exception as e:
+                        logger.debug(f"기존 알고 정리 실패: {e}")
+
                     self.positions[symbol] = pos
 
-                    # 즉시 SL 재등록 (15초 대기 제거 — 공백 최소화)
+                    # SL + TP1 즉시 등록 (1벌만)
                     try:
                         new_sl_id = await self.executor.update_stop_loss(
                             pos.direction, pos.remaining_size, pos.current_sl, None
                         )
                         if new_sl_id:
                             pos.algo_ids["sl"] = new_sl_id
-                            logger.info(f"🔧 SL 알고 즉시 복구: ${pos.current_sl:.0f} id={new_sl_id}")
+                            logger.info(f"🔧 SL 알고 등록: ${pos.current_sl:.0f} id={new_sl_id}")
                     except Exception as e:
-                        logger.error(f"SL 즉시 복구 실패: {e} — self_heal이 재시도")
+                        logger.error(f"SL 등록 실패: {e}")
+
+                    if not pos.tp1_filled and not pos.runner_mode:
+                        try:
+                            import math
+                            tp1_size = pos.remaining_size * 0.5
+                            tp1_size = math.floor(tp1_size / 0.01) * 0.01
+                            if tp1_size >= 0.01:
+                                new_tp_id = await self.executor.set_take_profit(
+                                    pos.direction, tp1_size, pos.tp1_price, level=1
+                                )
+                                if new_tp_id:
+                                    pos.algo_ids["tp1"] = new_tp_id
+                                    logger.info(f"🔧 TP1 알고 등록: ${pos.tp1_price:.0f} id={new_tp_id}")
+                        except Exception as e:
+                            logger.error(f"TP1 등록 실패: {e}")
 
                     logger.info(
                         f"✅ 포지션 복원 완료: {symbol} "
