@@ -726,12 +726,19 @@ class PositionManager:
             logger.warning(f"⚠️  SL 갱신 실패 ({label}) → 봇 내부 SL만 적용 (failsafe로 동작)")
 
     async def _cancel_all_algos(self, pos: Position):
-        """포지션의 모든 SL/TP 알고 주문 취소"""
+        """포지션의 모든 SL/TP 알고 주문 취소 + OKX 잔존 알고 정리"""
+        # 1. pos.algo_ids 기반 취소 (알려진 ID)
         for key in ("sl", "tp1", "tp2", "tp3"):
             algo_id = pos.algo_ids.get(key)
             if algo_id:
                 await self.executor.cancel_algo_order(algo_id)
                 pos.algo_ids[key] = None
+
+        # 2. OKX에 남아있는 모든 알고도 정리 (ID 모르는 잔존 알고 방지)
+        try:
+            await self.executor.cancel_all_algos()
+        except Exception as e:
+            logger.debug(f"잔존 알고 전체 정리 실패 (무시): {e}")
 
     async def _reconcile_external_close(self, pos: Position, last_price: float):
         """외부에서 포지션이 전량 청산된 경우 DB/콜백 정리"""
