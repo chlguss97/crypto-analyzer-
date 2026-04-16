@@ -160,8 +160,11 @@ class PaperTrader:
 
         size_usdt = 100.0
 
-        # 점수 구간별 grade 라벨
-        if score >= 6.0:
+        # grade 라벨
+        setup = signal_result.get("setup", "")
+        if mode == "unified" and setup:
+            grade_label = f"PAPER_SETUP_{setup}"  # PAPER_SETUP_A, PAPER_SETUP_B, PAPER_SETUP_C
+        elif score >= 6.0:
             grade_label = f"PAPER_{mode.upper()}"
         elif score >= 4.0:
             grade_label = f"PAPER_{mode.upper()}_MID"
