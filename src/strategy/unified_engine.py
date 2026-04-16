@@ -225,89 +225,128 @@ class TradeEngine:
 
     def _check_setup_a(self, df_1m, df_5m, ctx) -> dict:
         """
-        셋업 A: 추세 추종 (가장 빈번 — 하루 3~5회 목표)
-        조건 (완화):
-          1. 추세 명확 (2+ TF 일치)
-          2. 5m EMA20 위(롱) / 아래(숏) — 추세 방향 정렬
-          3. 1m 모멘텀 OR 5m 최근 3봉 중 2봉 추세 방향
-          4. 거래량 > 평균 (1.0x 이상)
-        BOS 제거: 이미 추세 중이어도 진입 가능
+        셋업 A: 추세 내 풀백 진입 (Buy the Dip / Sell the Rally)
+
+        핵심: 추세 방향은 맞지만 가격이 눌렸을 때 진입
+        → 꼭대기 추격 대신 저점 매수
+
+        조건:
+          1. 15m/5m 추세 명확 (2+ TF)
+          2. 가격이 5m EMA20 근처까지 풀백 (EMA20 ± 0.2% 이내)
+          3. 1m 반등 캔들 확인 (풀백 후 추세 방향 캔들)
+          4. 추세 구조 유지 (HH/HL 또는 LH/LL)
         """
         r = {"match": False, "direction": "neutral", "score": 0.0,
              "reason": "", "sl_dist": 0, "tp_dist": 0, "reject_reason": ""}
 
-        # 조건 1: 추세 명확 + 구조 횡보 차단
+        # 조건 1: 추세 명확
         if ctx["trend"] == "neutral":
             r["reject_reason"] = "no_trend"
             return r
-        if ctx["structure"] == "range":
-            r["reject_reason"] = "range_structure"
-            return r
         direction = "long" if ctx["trend"] == "up" else "short"
 
-        # 조건 2: 5m EMA20 정렬
+        # 추세 구조 확인 (횡보 차단)
+        if ctx["structure"] not in ("hh_hl", "lh_ll"):
+            r["reject_reason"] = f"no_trend_structure({ctx['structure']})"
+            return r
+        # 구조와 추세 방향 일치 확인
+        if direction == "long" and ctx["structure"] != "hh_hl":
+            r["reject_reason"] = "structure_mismatch"
+            return r
+        if direction == "short" and ctx["structure"] != "lh_ll":
+            r["reject_reason"] = "structure_mismatch"
+            return r
+
         price = ctx["price"]
         ema20 = ctx.get("ema20_5m", 0)
-        if direction == "long" and price <= ema20:
-            r["reject_reason"] = "below_ema20"
-            return r
-        if direction == "short" and price >= ema20:
-            r["reject_reason"] = "above_ema20"
-            return r
+        ema50 = ctx.get("ema50_5m", 0)
 
-        # 조건 3: 1m 모멘텀 OR 5m 최근 캔들 방향 일치
-        mom = self._check_momentum_1m(df_1m, direction)
-        if not mom["confirmed"]:
-            close_5m = df_5m["close"].values.astype(float)
-            open_5m = df_5m["open"].values.astype(float)
-            recent_dir = 0
-            for i in range(-3, 0):
-                if direction == "long" and close_5m[i] > open_5m[i]:
-                    recent_dir += 1
-                elif direction == "short" and close_5m[i] < open_5m[i]:
-                    recent_dir += 1
-            if recent_dir < 2:
-                r["reject_reason"] = "no_momentum_no_candles"
-                return r
-
-        # 조건 4: 거래량 >= 평균
-        if ctx["volume_ratio"] < 1.0:
-            r["reject_reason"] = f"low_volume({ctx['volume_ratio']:.1f}x)"
+        if ema20 <= 0:
+            r["reject_reason"] = "no_ema20"
             return r
 
-        # 전부 충족 → 진입
-        high_5m = df_5m["high"].values.astype(float)
-        low_5m = df_5m["low"].values.astype(float)
-        swings = self._find_swing_points(high_5m, low_5m, order=3)
+        # 조건 2: 풀백 확인 — 가격이 EMA20 근처 (± 0.3%)
+        distance_to_ema20 = (price - ema20) / ema20 * 100  # %
 
         if direction == "long":
-            sls = [p for t, _, p in swings if t == "sl"]
-            sl_level = sls[-1] if sls else ctx.get("ema50_5m", price * 0.995)
+            # 롱: 가격이 EMA20 바로 위 ~ EMA20 약간 아래 (풀백 상태)
+            # -0.1% ~ +0.3% 범위 = EMA20 터치 근처
+            if distance_to_ema20 > 0.3:
+                r["reject_reason"] = f"too_far_above_ema20({distance_to_ema20:+.2f}%)"
+                return r
+            if distance_to_ema20 < -0.3:
+                r["reject_reason"] = f"too_far_below_ema20({distance_to_ema20:+.2f}%)"
+                return r
         else:
-            shs = [p for t, _, p in swings if t == "sh"]
-            sl_level = shs[-1] if shs else ctx.get("ema50_5m", price * 1.005)
+            # 숏: 가격이 EMA20 바로 아래 ~ EMA20 약간 위 (풀백 상태)
+            if distance_to_ema20 < -0.3:
+                r["reject_reason"] = f"too_far_below_ema20({distance_to_ema20:+.2f}%)"
+                return r
+            if distance_to_ema20 > 0.3:
+                r["reject_reason"] = f"too_far_above_ema20({distance_to_ema20:+.2f}%)"
+                return r
+
+        # 조건 3: 1m 반등 캔들 확인 (풀백 후 추세 방향으로 반등)
+        c1m = df_1m.iloc[-1]
+        c1m_prev = df_1m.iloc[-2] if len(df_1m) >= 2 else c1m
+
+        if direction == "long":
+            # 이전 봉이 하락(풀백)이고 현재 봉이 양봉(반등)
+            prev_bearish = float(c1m_prev["close"]) < float(c1m_prev["open"])
+            cur_bullish = float(c1m["close"]) > float(c1m["open"])
+            bounce = prev_bearish and cur_bullish
+            # 또는: 현재 봉이 양봉이고 저가가 EMA20 근처
+            touch_ema = abs(float(c1m["low"]) - ema20) / ema20 * 100 < 0.15
+            if not (bounce or (cur_bullish and touch_ema)):
+                r["reject_reason"] = "no_bounce_candle"
+                return r
+        else:
+            prev_bullish = float(c1m_prev["close"]) > float(c1m_prev["open"])
+            cur_bearish = float(c1m["close"]) < float(c1m["open"])
+            bounce = prev_bullish and cur_bearish
+            touch_ema = abs(float(c1m["high"]) - ema20) / ema20 * 100 < 0.15
+            if not (bounce or (cur_bearish and touch_ema)):
+                r["reject_reason"] = "no_bounce_candle"
+                return r
+
+        # 전부 충족 → 풀백 저점에서 진입
+        # SL: 풀백 저점 아래 (롱) 또는 고점 위 (숏)
+        high_5m = df_5m["high"].values.astype(float)
+        low_5m = df_5m["low"].values.astype(float)
+
+        # 최근 5봉의 저점/고점을 SL로
+        if direction == "long":
+            recent_low = float(np.min(low_5m[-5:]))
+            sl_level = recent_low
+            # TP: 최근 5m 고점
+            recent_high = float(np.max(high_5m[-20:]))
+            tp_target = recent_high
+        else:
+            recent_high = float(np.max(high_5m[-5:]))
+            sl_level = recent_high
+            recent_low = float(np.min(low_5m[-20:]))
+            tp_target = recent_low
 
         sl_dist = abs(price - sl_level)
-        sl_dist = max(sl_dist, price * 0.0035)     # 최소 0.35%
-        sl_dist = min(sl_dist, price * 0.01)        # 최대 1.0%
-        tp_dist = sl_dist * 1.5
+        sl_dist = max(sl_dist, price * 0.002)      # 최소 0.2% (풀백이라 타이트)
+        sl_dist = min(sl_dist, price * 0.006)       # 최대 0.6%
+        tp_dist = abs(price - tp_target)
+        tp_dist = max(tp_dist, sl_dist * 1.5)       # 최소 RR 1.5
 
-        score = 5.0
+        score = 6.0  # 풀백 진입은 높은 기본 점수
         score += min(1.5, ctx["trend_strength"] * 2)
-        if mom["confirmed"]:
-            score += min(1.0, mom["strength"])
-        score += min(1.0, (ctx["volume_ratio"] - 1.0) * 3)
-        if ctx["structure"] in ("hh_hl", "lh_ll"):
-            score += 1.0
+        if bounce:
+            score += 1.0  # 반등 캔들 보너스
+        if touch_ema:
+            score += 0.5  # EMA 터치 보너스
 
         r.update({
             "match": True,
             "direction": direction,
             "score": round(min(10.0, score), 2),
-            "reason": f"trend_follow: ema20+mom+vol({ctx['volume_ratio']:.1f}x)",
+            "reason": f"pullback_entry: ema20_dist={distance_to_ema20:+.2f}% bounce={'Y' if bounce else 'N'}",
             "sl_dist": round(sl_dist, 1),
             "tp_dist": round(tp_dist, 1),
-            "momentum": mom,
         })
         return r
 
