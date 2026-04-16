@@ -667,13 +667,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
       </div>
     </div>
 
-    <!-- Row 2: Indicators Full Width -->
-    <div class="card" style="margin-bottom:14px;">
-      <div class="card-header"><div style="display:flex;align-items:center;"><span class="card-title" data-i18n="indicators.title" data-i18n="indicators.title">All 15 Signal Indicators</span><span class="help" data-tip="15개 기술적 지표의 현재 시그널 상태.&#10;방향 (Long/Short/Neutral) + 강도 표시.">?</span></div></div>
-      <div class="signal-grid" id="infoSignalGrid" style="grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));">
-        <div class="signal-item"><span class="signal-name" style="color:var(--text-muted)">Waiting for signals...</span></div>
-      </div>
-    </div>
+    <!-- 구 15 Signal Indicators 제거됨 (TradeEngine은 Setup ABC 사용) -->
 
     <!-- Row 3: Bot Control -->
     <div class="grid" style="grid-template-columns: 1fr 1fr;">
@@ -775,35 +769,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
       </div>
     </div>
 
-    <!-- Auto Backtest Results -->
-    <div class="card" style="margin-bottom:24px;">
-      <div class="card-header">
-        <div style="display:flex;align-items:center;"><span class="card-title">30-Day Strategy Backtest</span><span class="help" data-tip="최근 30일 데이터로 현재 전략을 시뮬레이션한 결과.&#10;• Trades: 거래 횟수&#10;• Win Rate: 승률&#10;• Total P&L: 총 손익&#10;• Sharpe: 위험 대비 수익률 (1.0+ 좋음)&#10;매일 UTC 02:00 자동 실행">?</span></div>
-        <button onclick="runBacktest()" style="padding:4px 12px;font-size:11px;background:var(--bg-surface);border:1px solid var(--border);border-radius:4px;color:var(--text-muted);cursor:pointer;">Run Now</button>
-      </div>
-      <div id="backtestSummary" style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">--</div>
-      <div class="grid" style="grid-template-columns: repeat(4, 1fr); gap: 12px;">
-        <div style="text-align:center;">
-          <div class="big-num" id="btTrades" style="font-size:22px;">--</div>
-          <span class="big-sub">Trades</span>
-        </div>
-        <div style="text-align:center;">
-          <div class="big-num" id="btWinRate" style="font-size:22px;">--</div>
-          <span class="big-sub">Win Rate</span>
-        </div>
-        <div style="text-align:center;">
-          <div class="big-num" id="btTotalPnl" style="font-size:22px;">--</div>
-          <span class="big-sub">Total P&L</span>
-        </div>
-        <div style="text-align:center;">
-          <div class="big-num" id="btSharpe" style="font-size:22px;">--</div>
-          <span class="big-sub">Sharpe</span>
-        </div>
-      </div>
-      <div style="margin-top:12px;font-size:11px;color:var(--text-secondary);">
-        <div>MDD: <b id="btMDD">--</b> | Best: <b id="btBest">--</b> | Worst: <b id="btWorst">--</b> | Avg: <b id="btAvg">--</b></div>
-      </div>
-    </div>
+    <!-- 30-Day Backtest 제거됨 (TradeEngine 백테스트 미구현) -->
 
     <!-- Setup Performance Tracker -->
     <div class="card" style="margin-bottom:24px;">
@@ -886,30 +852,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
     <!-- ML Trade History -->
     <div class="grid" style="grid-template-columns: 1fr 1fr;">
 
-      <div class="card">
-        <div class="card-header"><div style="display:flex;align-items:center;"><span class="card-title" data-i18n="swing_history.title">Swing Learning History</span><span class="help" data-tip="Swing 모델이 학습한 최근 거래 결과 50건.">?</span></div></div>
-        <div style="overflow-x:auto;max-height:300px;overflow-y:auto;">
-          <table class="trade-table">
-            <thead><tr><th>#</th><th>Time</th><th>Result</th><th>P&L %</th><th>Cumulative</th></tr></thead>
-            <tbody id="mlSwingHistory">
-              <tr><td colspan="4" style="text-align:center;color:var(--text-muted);padding:20px;">No data</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="card-header"><div style="display:flex;align-items:center;"><span class="card-title" data-i18n="scalp_history.title">Scalp Learning History</span><span class="help" data-tip="Scalp 모델이 학습한 최근 거래 결과 50건.">?</span></div></div>
-        <div style="overflow-x:auto;max-height:300px;overflow-y:auto;">
-          <table class="trade-table">
-            <thead><tr><th>#</th><th>Time</th><th>Result</th><th>P&L %</th><th>Cumulative</th></tr></thead>
-            <tbody id="mlScalpHistory">
-              <tr><td colspan="4" style="text-align:center;color:var(--text-muted);padding:20px;">No data</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
+      <!-- Swing/Scalp Learning History 제거됨 (TradeEngine은 ML 미사용) -->
     </div>
 
   </div><!-- /tab-ml -->

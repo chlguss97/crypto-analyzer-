@@ -268,25 +268,20 @@ async def _signal_loop():
 @app.on_event("startup")
 async def startup():
     global _bg_task, executor, db, redis
-    # 별도 스레드의 이벤트 루프에서 새로 생성 (메인 루프 충돌 방지)
-    db = Database()
-    redis = RedisClient()
-    await db.connect()
-    await redis.connect()
-    # 캔들/시그널 루프는 main.py에서 실행 — 대시보드는 조회만
-    # _bg_task = asyncio.create_task(_candle_loop())
-    # asyncio.create_task(_signal_loop())
-
-    # 매매 실행기 초기화 (API 키 있을 때만)
+    # 별도 프로세스에서 실행 — 최소 초기화만
     try:
-        executor = OrderExecutor()
-        await executor.initialize()
-        logger.info("OrderExecutor 초기화 완료 (수동매매 가능)")
+        db = Database()
+        redis = RedisClient()
+        await asyncio.wait_for(db.connect(), timeout=10)
+        await asyncio.wait_for(redis.connect(), timeout=5)
+    except asyncio.TimeoutError:
+        logger.warning("Dashboard DB/Redis connect timeout — 재시도 없이 시작")
     except Exception as e:
-        logger.warning(f"OrderExecutor 초기화 실패 (수동매매 불가): {e}")
-        executor = None
+        logger.warning(f"Dashboard 초기화 에러: {e}")
 
-    logger.info("Dashboard 시작")
+    # OrderExecutor는 별도 프로세스에서 불필요 (매매는 봇이 함)
+    executor = None
+    logger.info("Dashboard 시작 (read-only mode)")
 
 
 @app.on_event("shutdown")
