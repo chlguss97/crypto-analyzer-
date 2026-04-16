@@ -265,23 +265,28 @@ async def _signal_loop():
         await asyncio.sleep(60)  # 60초마다 갱신
 
 
-@app.on_event("startup")
-async def startup():
-    global _bg_task, executor, db, redis
-    # 별도 프로세스에서 실행 — 최소 초기화만
+_initialized = False
+
+async def _ensure_initialized():
+    """첫 API 호출 시 lazy 초기화 — startup hang 방지"""
+    global _initialized, db, redis
+    if _initialized:
+        return
+    _initialized = True
     try:
         db = Database()
         redis = RedisClient()
-        await asyncio.wait_for(db.connect(), timeout=10)
-        await asyncio.wait_for(redis.connect(), timeout=5)
-    except asyncio.TimeoutError:
-        logger.warning("Dashboard DB/Redis connect timeout — 재시도 없이 시작")
+        await db.connect()
+        await redis.connect()
+        logger.info("Dashboard DB/Redis 연결 완료")
     except Exception as e:
-        logger.warning(f"Dashboard 초기화 에러: {e}")
+        logger.warning(f"Dashboard 초기화 에러 (일부 API 미작동): {e}")
 
-    # OrderExecutor는 별도 프로세스에서 불필요 (매매는 봇이 함)
+@app.on_event("startup")
+async def startup():
+    global executor
     executor = None
-    logger.info("Dashboard 시작 (read-only mode)")
+    logger.info("Dashboard 시작 (read-only, lazy init)")
 
 
 @app.on_event("shutdown")
@@ -301,6 +306,7 @@ async def shutdown():
 @app.get("/api/status")
 async def get_status():
     """봇 상태 조회"""
+    await _ensure_initialized()
     status = await redis.get("sys:bot_status") or "unknown"
     heartbeat = await redis.get("sys:last_heartbeat") or "0"
 
@@ -322,6 +328,7 @@ async def get_status():
 
 @app.get("/api/position")
 async def get_position():
+    await _ensure_initialized()
     """현재 활성 포지션"""
     symbol = config["exchange"]["symbol"]
     pos_data = await redis.hgetall(f"pos:active:{symbol}")
@@ -341,6 +348,7 @@ async def get_position():
 
 @app.get("/api/signals")
 async def get_signals():
+    await _ensure_initialized()
     """최신 시그널 합산 결과"""
     symbol = config["exchange"]["symbol"]
 
@@ -365,6 +373,7 @@ async def get_signals():
 
 @app.get("/api/trades")
 async def get_trades(days: int = 7, mode: str = "all"):
+    await _ensure_initialized()
     """최근 매매 내역 (mode: all, paper, real)"""
     import time
     since = int((time.time() - days * 86400) * 1000)
@@ -404,6 +413,7 @@ async def get_trades(days: int = 7, mode: str = "all"):
 
 @app.get("/api/candles")
 async def get_candles(timeframe: str = "15m", limit: int = 200):
+    await _ensure_initialized()
     """캔들 데이터 조회 (차트용)"""
     symbol = config["exchange"]["symbol"]
     cursor = await db._db.execute(
@@ -425,6 +435,7 @@ async def get_candles(timeframe: str = "15m", limit: int = 200):
 
 @app.get("/api/daily-summary")
 async def get_daily_summary():
+    await _ensure_initialized()
     """일일 성과 요약"""
     cursor = await db._db.execute(
         """SELECT * FROM daily_summary
@@ -436,6 +447,7 @@ async def get_daily_summary():
 
 @app.get("/api/paper/stats")
 async def get_paper_stats():
+    await _ensure_initialized()
     """가상매매 통계"""
     cursor = await db._db.execute(
         """SELECT
@@ -480,6 +492,7 @@ async def get_paper_stats():
 
 @app.get("/api/equity-curve")
 async def get_equity_curve():
+    await _ensure_initialized()
     """자산 곡선 (trades 기반 계산)"""
     cursor = await db._db.execute(
         """SELECT entry_time, pnl_usdt, pnl_pct
@@ -506,6 +519,7 @@ async def get_equity_curve():
 
 @app.post("/api/pause")
 async def pause_bot():
+    await _ensure_initialized()
     """봇 일시정지"""
     await redis.set("sys:bot_status", "paused")
     logger.warning("봇 일시정지 (대시보드)")
@@ -514,6 +528,7 @@ async def pause_bot():
 
 @app.post("/api/resume")
 async def resume_bot():
+    await _ensure_initialized()
     """봇 재개"""
     await redis.set("sys:bot_status", "running")
     logger.info("봇 재개 (대시보드)")
@@ -522,6 +537,7 @@ async def resume_bot():
 
 @app.post("/api/close-all")
 async def close_all():
+    await _ensure_initialized()
     """전 포지션 청산 (킬 스위치)"""
     _require_auth()
     await redis.set("sys:bot_status", "stopped")
@@ -540,6 +556,7 @@ async def close_all():
 
 @app.get("/api/market")
 async def get_market():
+    await _ensure_initialized()
     """실시간 시장 데이터 (Redis → OKX 직접 폴백)"""
     # Redis에서 먼저 시도
     ticker = await redis.hgetall("rt:ticker:BTC-USDT-SWAP")
@@ -702,6 +719,7 @@ async def get_live_positions():
 
 @app.post("/api/autotrading")
 async def toggle_autotrading():
+    await _ensure_initialized()
     """자동매매 ON/OFF 토글 + 텔레그램 알림"""
     current = await redis.get("sys:autotrading") or "off"
     new_state = "off" if current == "on" else "on"
@@ -799,6 +817,7 @@ _signal_tracker_cache = {"instance": None, "loaded_at": 0}
 
 @app.get("/api/signal-tracker")
 async def get_signal_tracker():
+    await _ensure_initialized()
     """시그널 기여도 추적 결과 (10초 캐시)"""
     import time as _t
     from src.strategy.signal_tracker import SignalTracker
@@ -836,6 +855,7 @@ async def trigger_meta():
 
 @app.get("/api/setup-tracker")
 async def get_setup_tracker():
+    await _ensure_initialized()
     """SetupTracker 셋업별 성과 조회"""
     try:
         from src.strategy.setup_tracker import SetupTracker
@@ -877,6 +897,7 @@ async def get_news_status():
 
 @app.get("/api/risk/state")
 async def get_risk_state():
+    await _ensure_initialized()
     """실거래 리스크 상태"""
     daily = await redis.get("risk:daily_pnl") or "0"
     weekly = await redis.get("risk:weekly_pnl") or "0"
@@ -897,6 +918,7 @@ async def get_risk_state():
 
 @app.get("/api/scalp/state")
 async def get_scalp_state():
+    await _ensure_initialized()
     """TradeEngine 실시간 상태 (레거시 엔드포인트명 유지)"""
     state = await redis.get_json("sys:trade_state")
     if not state:
@@ -907,6 +929,7 @@ async def get_scalp_state():
 
 @app.get("/api/regime")
 async def get_regime():
+    await _ensure_initialized()
     """현재 마켓 레짐 조회"""
     regime_detail = await redis.get_json("sys:regime_detail")
     regime = await redis.get("sys:regime") or "ranging"
@@ -919,6 +942,7 @@ async def get_regime():
 
 @app.get("/api/ml/status")
 async def ml_status():
+    await _ensure_initialized()
     """TradeEngine 상태 조회"""
     regime = await redis.get("sys:regime") or "ranging"
     return {
