@@ -34,3 +34,4 @@
 {"type": "entry", "direction": "long", "grade": "SETUP-B", "score": 6.83, "entry_price": 74625.8, "sl_price": 74364.6, "leverage": 20, "margin": 102.93, "ts": 1776298384, "ts_iso": "2026-04-16T00:13:04+00:00"}
 {"type": "exit", "direction": "long", "exit_reason": "sl_failsafe", "entry_price": 74625.8, "exit_price": 0.0, "pnl_pct": 0.0, "pnl_usdt": 0.0, "hold_min": 0, "fee": 0.75, "ts": 1776298389, "ts_iso": "2026-04-16T00:13:09+00:00"}
 {"type": "entry", "direction": "long", "grade": "SETUP-A", "score": 8.5, "entry_price": 74775.7, "sl_price": 74513.8, "leverage": 20, "margin": 102.27, "ts": 1776299911, "ts_iso": "2026-04-16T00:38:31+00:00"}
+{"type": "exit", "direction": "long", "exit_reason": "sl_failsafe", "entry_price": 74775.7, "exit_price": 74513.6, "pnl_pct": -7.01, "pnl_usdt": -5.24, "hold_min": 10, "fee": 0.75, "ts": 1776301557, "ts_iso": "2026-04-16T01:05:57+00:00"}
