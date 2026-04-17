@@ -35,7 +35,8 @@ from src.signal_engine.aggregator import SignalAggregator
 from src.signal_engine.grader import SignalGrader
 from src.strategy.scalp_engine import ScalpEngine
 from src.strategy.adaptive_ml import AdaptiveML
-from src.strategy.unified_engine import TradeEngine
+from src.strategy.unified_engine import TradeEngine  # 레거시 (참조용 유지)
+from src.strategy.flow_engine import FlowEngine
 from src.trading.leverage import LeverageCalculator
 from src.trading.risk_manager import RiskManager
 from src.trading.executor import OrderExecutor
@@ -92,8 +93,8 @@ class CryptoAnalyzer:
         # Scalp 엔진 (레거시 — 비활성)
         self.scalp_engine = ScalpEngine()
 
-        # TradeEngine (04-15 전면 개편)
-        self.trade_engine = TradeEngine(redis=self.redis)
+        # FlowEngine (04-17: 단순 오더플로우 엔진. TradeEngine ABC 대체)
+        self.trade_engine = FlowEngine(redis=self.redis)
 
         # AdaptiveML (레거시 유지, 통합 모델에서는 미사용 — 콜드스타트)
         self.ml_swing = AdaptiveML(mode="swing")
@@ -1167,10 +1168,10 @@ class CryptoAnalyzer:
         # 실시간 가격 변속도
         rt_velocity = await self.redis.hgetall("rt:velocity:BTC-USDT-SWAP")
 
-        # 통합 엔진 분석 (HTF 포함)
+        # FlowEngine 분석 (Binance 캔들 + 오더플로우)
         result = await self.trade_engine.analyze(
-            df_1m, df_5m, df_15m, df_1h, rt_velocity,
-            df_4h=df_4h, df_1d=df_1d,
+            df_1m, df_5m, df_15m, df_1h,
+            df_4h=df_4h, df_1d=df_1d, rt_velocity=rt_velocity,
         )
 
         # 컨텍스트 추출
@@ -1827,7 +1828,7 @@ class CryptoAnalyzer:
         self._running = True
         self._current_day = datetime.now(timezone.utc).day
 
-        logger.info("봇 시작 — TradeEngine v1 (Setup ABC)")
+        logger.info("봇 시작 — FlowEngine v1 (오더플로우 + 레벨)")
         # 대시보드는 별도 컨테이너(docker-compose dashboard 서비스)에서 실행
         # self.start_dashboard_thread()
         await self.redis.set("sys:bot_status", "running")
