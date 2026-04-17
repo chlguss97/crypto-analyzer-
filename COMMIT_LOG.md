@@ -1,12 +1,15 @@
 # Commit Log
 
 > 자동 생성 — `scripts/update_commit_log.sh` (매 커밋 후 실행)
-> Updated: 2026-04-17 12:05:34    
-> Total commits: 195 (2026-04-03 → 2026-04-17)
+> Updated: 2026-04-17 12:16:14    
+> Total commits: 198 (2026-04-03 → 2026-04-17)
 
 Claude 가 질문/변경 작업 시 이 파일을 참고해서 과거 변경 이력 컨텍스트를 확보합니다. 수동 편집 금지 — 다음 커밋 시 덮어써집니다.
 
 ## 2026-04-17
+- `63cf350` fix: 서버 크래시 3건 수정 — OKX API + None 참조 + 1d 데이터 부족
+- `89ea763` fix: OKX 알고 조회 ordType 파라미터 누락 — 51000 에러 수정
+- `e27a41e` chore: COMMIT_LOG 갱신
 - `ab1f4ce` refactor: 텔레그램 + 대시보드 FlowEngine 전면 패치
 - `237babd` docs: CHANGELOG + 메모리 — FlowEngine v1 전체 기록
 - `4393b31` chore: COMMIT_LOG 갱신
