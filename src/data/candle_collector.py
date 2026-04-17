@@ -19,16 +19,20 @@ TF_MS = {
 
 
 class CandleCollector:
-    """OKX REST API로 캔들 데이터 수집"""
+    """캔들 데이터 수집 — 04-17: Binance 선물 기준 분석 + OKX 실행"""
+
+    # Binance 심볼 매핑
+    BINANCE_SYMBOL = "BTC/USDT:USDT"
 
     def __init__(self, db: Database):
         self.db = db
         self.config = load_config()
-        self.symbol = self.config["exchange"]["symbol"]
+        self.symbol = self.config["exchange"]["symbol"]  # OKX 심볼 (실행용)
         self.exchange: ccxt.okx | None = None
+        self.binance: ccxt.binance | None = None  # 분석용
 
     async def init_exchange(self):
-        """OKX 거래소 연결 초기화"""
+        """OKX + Binance 연결 초기화"""
         try:
             api_key = get_env("OKX_API_KEY", "")
             secret = get_env("OKX_SECRET_KEY", "")
@@ -44,15 +48,22 @@ class CandleCollector:
                     "options": {"defaultType": "swap"},
                 }
             )
-            # aiodns DNS 문제 방지
             self.exchange.aiohttp_resolver = "default"
 
-            # API 키 없으면 퍼블릭 모드 (데이터 수집만 가능)
             if not api_key:
                 logger.warning("API 키 없음 → 퍼블릭 데이터만 수집 가능")
 
             await self.exchange.load_markets()
             logger.info(f"OKX 연결 완료: {self.symbol}")
+
+            # Binance Futures — 인증 불필요 (퍼블릭 캔들)
+            self.binance = ccxt.binance({
+                "enableRateLimit": True,
+                "options": {"defaultType": "future"},
+            })
+            self.binance.aiohttp_resolver = "default"
+            await self.binance.load_markets()
+            logger.info(f"Binance 연결 완료: {self.BINANCE_SYMBOL} (분석용)")
 
         except Exception as e:
             logger.error(f"OKX 연결 실패: {e}")
@@ -61,16 +72,25 @@ class CandleCollector:
     async def close(self):
         if self.exchange:
             await self.exchange.close()
+        if self.binance:
+            await self.binance.close()
 
     async def fetch_candles(
-        self, timeframe: str, since: int = None, limit: int = 300
+        self, timeframe: str, since: int = None, limit: int = 300,
+        source: str = "binance",
     ) -> list[dict]:
-        """캔들 조회 (최대 300개씩) — 일시 오류 시 1회 재시도"""
+        """
+        캔들 조회 — 기본 Binance 선물 (분석용), OKX 폴백.
+        source: "binance" (기본) | "okx" (실행가 참조용)
+        """
+        exchange = self.binance if source == "binance" and self.binance else self.exchange
+        symbol = self.BINANCE_SYMBOL if source == "binance" and self.binance else self.symbol
+
         last_err = None
-        for attempt in range(2):  # 0, 1 (총 2회 시도)
+        for attempt in range(2):
             try:
-                ohlcv = await self.exchange.fetch_ohlcv(
-                    self.symbol, timeframe, since=since, limit=limit
+                ohlcv = await exchange.fetch_ohlcv(
+                    symbol, timeframe, since=since, limit=limit
                 )
                 return [
                     {
@@ -86,14 +106,16 @@ class CandleCollector:
             except Exception as e:
                 last_err = e
                 if attempt < 1:
-                    await asyncio.sleep(1)  # 1초 후 재시도
+                    await asyncio.sleep(1)
 
-        # 2회 실패 — 에러 타입 + 본문 자세히 로깅
+        # Binance 실패 시 OKX 폴백
+        if source == "binance" and self.exchange:
+            logger.warning(f"Binance 캔들 실패 → OKX 폴백 [{timeframe}]")
+            return await self.fetch_candles(timeframe, since, limit, source="okx")
+
         err_type = type(last_err).__name__
         err_msg = str(last_err) or repr(last_err)
-        logger.error(
-            f"캔들 조회 실패 [{timeframe}] {err_type}: {err_msg[:300]}"
-        )
+        logger.error(f"캔들 조회 실패 [{timeframe}] {err_type}: {err_msg[:300]}")
         return []
 
     async def backfill(self, timeframe: str, days: int = None):
@@ -149,9 +171,10 @@ class CandleCollector:
             await self.backfill(tf)
 
     async def fetch_latest(self, timeframe: str) -> list[dict]:
-        """최신 캔들 가져와서 DB 저장"""
-        candles = await self.fetch_candles(timeframe, limit=5)
+        """최신 캔들 가져와서 DB 저장 — Binance 기준"""
+        candles = await self.fetch_candles(timeframe, limit=5, source="binance")
         if candles:
+            # DB에는 OKX 심볼로 저장 (기존 호환 — 쿼리가 OKX 심볼 기준)
             await self.db.insert_candles(self.symbol, timeframe, candles)
         return candles
 
