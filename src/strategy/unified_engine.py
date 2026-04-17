@@ -273,7 +273,23 @@ class TradeEngine:
                 ctx["flow_signals"]["ls_ratio"] = round(ls_ratio, 2)
                 ctx["flow_signals"]["ls_dir"] = ls_dir
 
-                # 5) OKX-Binance 프리미엄 (거래소간 가격 차이)
+                # 5) 청산 폭발 감지 (Binance forceOrder)
+                liq_surge_str = await self.redis.get("flow:liq:surge")
+                if liq_surge_str:
+                    try:
+                        import json as _j
+                        liq = _j.loads(liq_surge_str)
+                        liq_bias = liq.get("bias", "")
+                        liq_total = liq.get("total", 0)
+                        liq_dir = 0.3 if liq_bias == "long" else -0.3 if liq_bias == "short" else 0
+                        flow_bias += liq_dir
+                        ctx["flow_signals"]["liq_surge"] = liq_total
+                        ctx["flow_signals"]["liq_bias"] = liq_bias
+                        ctx["flow_signals"]["liq_dir"] = liq_dir
+                    except Exception:
+                        pass
+
+                # 6) OKX-Binance 프리미엄 (거래소간 가격 차이)
                 premium_str = await self.redis.get("flow:okx_bn_premium")
                 if premium_str:
                     premium = float(premium_str)

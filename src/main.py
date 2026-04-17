@@ -1069,15 +1069,46 @@ class CryptoAnalyzer:
     # ══════════════════════════════════════════════════
 
     async def periodic_unified_eval(self):
-        """통합 시그널 평가 (3초마다) — 셋업 ABC 매칭. Binance 캔들 기반."""
+        """통합 시그널 평가 — 이벤트 드리븐 + 1초 폴백.
+        Binance WS 캔들 확정 시 Redis pub/sub → 즉시 평가 (0ms 지연).
+        이벤트 없으면 1초마다 폴링 (백업).
+        """
         await asyncio.sleep(5)  # 캔들 백필 대기
+
+        # Redis pub/sub 구독 시도
+        sub = None
+        try:
+            if self.redis._client:
+                sub = self.redis._client.pubsub()
+                await sub.subscribe("ch:kline:ready")
+                logger.info("[TRADE] 이벤트 드리븐 평가 활성화 (ch:kline:ready)")
+        except Exception as e:
+            logger.debug(f"pub/sub 구독 실패 → 폴링 모드: {e}")
+
         while self._running:
             try:
+                triggered = False
+                if sub:
+                    # 이벤트 대기 (최대 1초) — 캔들 확정 시 즉시 깨어남
+                    try:
+                        msg = await asyncio.wait_for(
+                            sub.get_message(ignore_subscribe_messages=True, timeout=1.0),
+                            timeout=1.5,
+                        )
+                        if msg and msg.get("type") == "message":
+                            triggered = True
+                    except (asyncio.TimeoutError, Exception):
+                        pass  # 타임아웃 → 폴링으로 평가
+
                 await self._evaluate_unified()
+
+                if not triggered:
+                    await asyncio.sleep(1)  # 이벤트 없으면 1초 대기
+            except asyncio.CancelledError:
+                raise
             except Exception as e:
                 logger.error(f"[TRADE] 평가 에러: {e}", exc_info=True)
-            poll_sec = self.config.get("polling", {}).get("signal_eval_sec", 5)
-            await asyncio.sleep(poll_sec)
+                await asyncio.sleep(1)
 
     async def _evaluate_unified(self):
         """통합 엔진 평가 + 매매"""

@@ -66,7 +66,7 @@ class BinanceStream:
         self._running = True
         self._reconnect_count = 0
 
-        # aggTrades + miniTicker + 캔들 4종 (1m/5m/15m/1h) — REST 폴링 완전 대체
+        # 7 스트림: aggTrades + miniTicker + 캔들 4종 + 강제 청산
         streams = [
             f"{SYMBOL}@aggTrade",
             f"{SYMBOL}@miniTicker",
@@ -74,6 +74,7 @@ class BinanceStream:
             f"{SYMBOL}@kline_5m",
             f"{SYMBOL}@kline_15m",
             f"{SYMBOL}@kline_1h",
+            f"{SYMBOL}@forceOrder",  # 실시간 강제 청산 — 변동성 폭발 감지
         ]
         url = f"{BINANCE_WS}/{'/'.join(streams)}"
 
@@ -111,6 +112,8 @@ class BinanceStream:
             await self._on_ticker(data)
         elif event == "kline":
             await self._on_kline(data)
+        elif event == "forceOrder":
+            await self._on_liquidation(data)
 
     async def _on_agg_trade(self, t: dict):
         """체결 → CVD 누적 + 대형 체결 감지"""
@@ -259,6 +262,64 @@ class BinanceStream:
 
         if is_closed:
             logger.debug(f"Binance {interval} 캔들 확정: ${candle['close']:,.1f} vol={candle['volume']:.2f}")
+            # 캔들 확정 → Redis 이벤트 발행 → 평가 루프 즉시 트리거
+            try:
+                await self.redis.publish("ch:kline:ready", json.dumps({
+                    "tf": interval, "close": candle["close"], "ts": candle["timestamp"],
+                }))
+            except Exception:
+                pass
+
+    async def _on_liquidation(self, data: dict):
+        """강제 청산 감지 — 대량 청산 = 변동성 폭발 선행 시그널.
+        1분 내 청산 $1M+ 누적 시 flow:liquidation_surge 이벤트.
+        """
+        o = data.get("o", {})
+        side = o.get("S", "")  # BUY(숏 청산) or SELL(롱 청산)
+        price = float(o.get("p", 0))
+        qty = float(o.get("q", 0))
+        if price <= 0 or qty <= 0:
+            return
+
+        size_usd = price * qty
+        now = time.time()
+
+        # 1분 윈도우 청산 누적
+        liq_key = "_liq_window"
+        if not hasattr(self, liq_key):
+            setattr(self, liq_key, deque(maxlen=500))
+        window = getattr(self, liq_key)
+        window.append((now, side, size_usd))
+
+        # 1분 초과 제거
+        while window and window[0][0] < now - 60:
+            window.popleft()
+
+        # 1분간 합산
+        long_liq = sum(s for _, sd, s in window if sd == "SELL")   # 롱 청산
+        short_liq = sum(s for _, sd, s in window if sd == "BUY")   # 숏 청산
+        total_liq = long_liq + short_liq
+
+        # Redis에 저장
+        await self.redis.set("flow:liq:1m_total", str(round(total_liq)), ttl=120)
+        await self.redis.set("flow:liq:1m_long", str(round(long_liq)), ttl=120)
+        await self.redis.set("flow:liq:1m_short", str(round(short_liq)), ttl=120)
+
+        # $500k+ 누적 = 변동성 폭발 임박
+        if total_liq >= 500_000:
+            # 어느 쪽이 더 많이 청산되는지 = 반대 방향이 강함
+            bias = "long" if short_liq > long_liq else "short"  # 숏 청산 많으면 롱 강세
+            await self.redis.set("flow:liq:surge", json.dumps({
+                "total": round(total_liq),
+                "long_liq": round(long_liq),
+                "short_liq": round(short_liq),
+                "bias": bias,
+                "ts": now,
+            }), ttl=120)
+            logger.warning(
+                f"💥 청산 폭발: 1분간 ${total_liq:,.0f} "
+                f"(롱청산 ${long_liq:,.0f} / 숏청산 ${short_liq:,.0f}) → {bias.upper()} 강세"
+            )
 
     async def _update_combined_cvd(self):
         """OKX + Binance CVD 합산 → Redis"""
