@@ -1,12 +1,14 @@
 # Commit Log
 
 > 자동 생성 — `scripts/update_commit_log.sh` (매 커밋 후 실행)
-> Updated: 2026-04-17 09:42:05    
-> Total commits: 166 (2026-04-03 → 2026-04-17)
+> Updated: 2026-04-17 10:02:56    
+> Total commits: 168 (2026-04-03 → 2026-04-17)
 
 Claude 가 질문/변경 작업 시 이 파일을 참고해서 과거 변경 이력 컨텍스트를 확보합니다. 수동 편집 금지 — 다음 커밋 시 덮어써집니다.
 
 ## 2026-04-17
+- `36559c4` feat: Binance WS 실시간 스트림 — 시장 전체 오더플로우
+- `b3f9b05` docs: CHANGELOG 4/16~17 업데이트 (대시보드 개편, 알고 잔존 수정, 오더플로우)
 - `71c659d` chore: COMMIT_LOG 갱신
 - `a082a66` feat: 오더플로우 방향 확인 + 봇 스냅샷 + SL 안전장치
 - `c21daa3` chore: COMMIT_LOG 갱신
