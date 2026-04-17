@@ -20,7 +20,7 @@ import time
 from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
-from threading import Lock
+from threading import RLock as Lock  # 04-17: RLock 으로 변경 — get_summary → is_setup_enabled 재진입 deadlock 수정
 from typing import Optional
 
 logger = logging.getLogger(__name__)

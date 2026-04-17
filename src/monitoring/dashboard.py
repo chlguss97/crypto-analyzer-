@@ -535,43 +535,7 @@ async def manual_update_tp(req: ManualTpRequest):
     return {"ok": True, "queued": True, "symbol": sym, "price": req.price}
 
 
-# ── 모델/ML 엔드포인트 ──
-
-# ML 인스턴스 캐시 (매 요청마다 load 방지)
-_ml_cache = {"swing": None, "scalp": None, "loaded_at": 0}
-
-
-def _get_ml_instances():
-    """ML 인스턴스 캐시 (60초마다 리로드)"""
-    import time as t
-    now = t.time()
-    if now - _ml_cache["loaded_at"] > 60 or _ml_cache["swing"] is None:
-        from src.strategy.adaptive_ml import AdaptiveML
-        sw = AdaptiveML(mode="swing")
-        sc = AdaptiveML(mode="scalp")
-        sw.load()
-        sc.load()
-        _ml_cache["swing"] = sw
-        _ml_cache["scalp"] = sc
-        _ml_cache["loaded_at"] = now
-    return _ml_cache["swing"], _ml_cache["scalp"]
-
-
-@app.get("/api/meta")
-async def get_meta():
-    """최근 메타 학습 결과 (자가 업그레이드)"""
-    meta = await redis.get_json("sys:last_meta")
-    if not meta:
-        return {"available": False}
-    meta["available"] = True
-    return meta
-
-
-@app.post("/api/meta/run")
-async def trigger_meta():
-    """레거시 — TradeEngine에서는 SetupTracker가 대체"""
-    return {"status": "disabled", "note": "Use /api/setup-tracker instead"}
-
+# ── TradeEngine / Setup Tracker 엔드포인트 ──
 
 @app.get("/api/setup-tracker")
 async def get_setup_tracker():
@@ -583,22 +547,6 @@ async def get_setup_tracker():
         return tracker.get_summary()
     except Exception as e:
         return {"error": str(e), "A": {"total": 0}, "B": {"total": 0}, "C": {"total": 0}}
-
-
-@app.get("/api/backtest")
-async def get_backtest():
-    """최근 자동 백테스트 결과"""
-    bt = await redis.get_json("sys:last_backtest")
-    if not bt:
-        return {"trades": 0, "available": False}
-    bt["available"] = True
-    return bt
-
-
-@app.post("/api/backtest/run")
-async def trigger_backtest():
-    """레거시 — TradeEngine 백테스트 미구현"""
-    return {"status": "disabled", "note": "TradeEngine backtest not yet implemented"}
 
 
 @app.get("/api/news")
@@ -636,10 +584,10 @@ async def get_risk_state():
     }
 
 
-@app.get("/api/scalp/state")
-async def get_scalp_state():
+@app.get("/api/engine/state")
+async def get_engine_state():
+    """TradeEngine v1 실시간 상태 (setup/direction/score/trend/structure/streak)"""
     await _ensure_initialized()
-    """TradeEngine 실시간 상태 (레거시 엔드포인트명 유지)"""
     state = await redis.get_json("sys:trade_state")
     if not state:
         state = {"setup": None, "direction": "neutral", "score": 0,
@@ -649,8 +597,8 @@ async def get_scalp_state():
 
 @app.get("/api/regime")
 async def get_regime():
-    await _ensure_initialized()
     """현재 마켓 레짐 조회"""
+    await _ensure_initialized()
     regime_detail = await redis.get_json("sys:regime_detail")
     regime = await redis.get("sys:regime") or "ranging"
 
@@ -660,84 +608,97 @@ async def get_regime():
     return regime_detail
 
 
-@app.get("/api/ml/status")
-async def ml_status():
+@app.get("/api/engine/overview")
+async def get_engine_overview():
+    """
+    Engine 탭 통합 데이터 — regime/state/setup-tracker/real-vs-paper 를 1콜로 반환.
+    히트맵 + 비교뷰용 집약.
+    """
     await _ensure_initialized()
-    """TradeEngine 상태 조회"""
+    symbol = config["exchange"]["symbol"]
+
+    # 1) regime
+    regime_detail = await redis.get_json("sys:regime_detail")
     regime = await redis.get("sys:regime") or "ranging"
-    return {
-        "engine": "TradeEngine v1",
-        "mode": "setup_abc",
-        "ml_status": "cold_start",
-        "active_model": "trade_engine",
-        "ml_enabled": False,
-        "current_regime": regime,
+    if not regime_detail:
+        regime_detail = {"regime": regime, "confidence": 0, "scores": {}}
+
+    # 2) engine state
+    engine_state = await redis.get_json("sys:trade_state") or {
+        "setup": None, "direction": "neutral", "score": 0,
+        "trend": "neutral", "structure": "unknown", "streak": 0,
     }
 
+    # 3) SetupTracker 요약
+    setup_summary = {}
+    try:
+        from src.strategy.setup_tracker import SetupTracker
+        setup_summary = SetupTracker().get_summary()
+    except Exception as e:
+        logger.debug(f"setup_tracker load 실패: {e}")
+        setup_summary = {"A": {}, "B": {}, "C": {}}
 
-@app.post("/api/ml/toggle")
-async def toggle_ml():
-    """ML ON/OFF"""
-    current = await redis.get("sys:ml_enabled") or "on"
-    new_state = "off" if current == "on" else "on"
-    await redis.set("sys:ml_enabled", new_state)
-    return {"ml_enabled": new_state == "on"}
+    # 4) Real vs Paper 비교 (동일 grade family 필터)
+    real_stats = {"total": 0, "wins": 0, "wr": 0.0, "total_pnl": 0.0, "avg_pnl": 0.0}
+    paper_stats = {"total": 0, "wins": 0, "wr": 0.0, "total_pnl": 0.0, "avg_pnl": 0.0}
+    try:
+        # Real (SETUP_A/B/C grade, PAPER_ 접두어 없음)
+        cur = await db._db.execute(
+            """SELECT COUNT(*) as total,
+                      SUM(CASE WHEN pnl_pct > 0 THEN 1 ELSE 0 END) as wins,
+                      COALESCE(SUM(pnl_usdt), 0) as total_pnl,
+                      COALESCE(AVG(pnl_pct), 0) as avg_pnl
+               FROM trades
+               WHERE exit_time IS NOT NULL
+                 AND grade NOT LIKE 'PAPER_%'
+                 AND (grade LIKE 'SETUP_%' OR grade = 'MANUAL')"""
+        )
+        row = dict(await cur.fetchone())
+        real_stats["total"] = row["total"] or 0
+        real_stats["wins"] = row["wins"] or 0
+        real_stats["wr"] = (real_stats["wins"] / max(real_stats["total"], 1)) * 100
+        real_stats["total_pnl"] = round(row["total_pnl"] or 0, 2)
+        real_stats["avg_pnl"] = round(row["avg_pnl"] or 0, 4)
 
+        # Paper (PAPER_SETUP_A/B/C)
+        cur2 = await db._db.execute(
+            """SELECT COUNT(*) as total,
+                      SUM(CASE WHEN pnl_pct > 0 THEN 1 ELSE 0 END) as wins,
+                      COALESCE(SUM(pnl_usdt), 0) as total_pnl,
+                      COALESCE(AVG(pnl_pct), 0) as avg_pnl
+               FROM trades
+               WHERE exit_time IS NOT NULL AND grade LIKE 'PAPER_SETUP_%'"""
+        )
+        row2 = dict(await cur2.fetchone())
+        paper_stats["total"] = row2["total"] or 0
+        paper_stats["wins"] = row2["wins"] or 0
+        paper_stats["wr"] = (paper_stats["wins"] / max(paper_stats["total"], 1)) * 100
+        paper_stats["total_pnl"] = round(row2["total_pnl"] or 0, 2)
+        paper_stats["avg_pnl"] = round(row2["avg_pnl"] or 0, 4)
+    except Exception as e:
+        logger.debug(f"real/paper 집계 실패: {e}")
 
-class ModelSelectRequest(BaseModel):
-    model: str
-
-@app.post("/api/ml/model")
-async def select_model(req: ModelSelectRequest):
-    """모델 선택 (레거시 — TradeEngine에서는 단일 모델)"""
-    return {"active_model": "trade_engine", "note": "unified model, no selection needed"}
-
-
-@app.post("/api/ml/retrain")
-async def retrain_ml():
-    """ML 재학습 (TradeEngine — 현재 비활성)"""
-    return {"status": "cold_start", "note": "ML disabled, using raw signals"}
-
-
-@app.post("/api/ml/history-learn")
-async def trigger_history_learn():
-    """역사 학습 (TradeEngine — 현재 비활성)"""
-    return {"status": "disabled", "note": "ML cold start, historical learning disabled"}
-
-
-@app.get("/api/ml/history")
-async def ml_history():
-    """ML 학습 결과 내역"""
-    swing, scalp = _get_ml_instances()
-
-    def parse_result(r):
-        if isinstance(r, dict):
-            return r.get("pnl_pct", 0), r.get("timestamp", 0)
-        return r, 0
-
-    swing_trades = []
-    for i, r in enumerate(list(swing.recent_results)):
-        pnl, ts = parse_result(r)
-        swing_trades.append({
-            "id": i + 1, "mode": "swing",
-            "pnl_pct": round(pnl, 3),
-            "result": "WIN" if pnl > 0 else "LOSS",
-            "timestamp": ts,
-        })
-
-    scalp_trades = []
-    for i, r in enumerate(list(scalp.recent_results)):
-        pnl, ts = parse_result(r)
-        scalp_trades.append({
-            "id": i + 1, "mode": "scalp",
-            "pnl_pct": round(pnl, 3),
-            "result": "WIN" if pnl > 0 else "LOSS",
-            "timestamp": ts,
-        })
+    # 5) Setup × Regime 히트맵 (SetupTracker by_regime 에서 유도)
+    heatmap = {}  # { "A": {"trending_up": {wr, n}, ...}, ... }
+    for setup_name in ("A", "B", "C"):
+        by_regime = (setup_summary.get(setup_name) or {}).get("by_regime", {}) or {}
+        heatmap[setup_name] = {}
+        for regime_key in ("trending_up", "trending_down", "ranging", "volatile"):
+            r = by_regime.get(regime_key, {}) or {}
+            n = r.get("total", 0)
+            w = r.get("wins", 0)
+            heatmap[setup_name][regime_key] = {
+                "n": n,
+                "wins": w,
+                "wr": (w / max(n, 1)) * 100 if n > 0 else None,
+                "avg_pnl": r.get("avg_pnl_pct", 0),
+            }
 
     return {
-        "swing_trades": swing_trades[-50:],  # 최근 50개
-        "scalp_trades": scalp_trades[-50:],
-        "swing_total": len(swing_trades),
-        "scalp_total": len(scalp_trades),
+        "regime": regime_detail,
+        "engine": engine_state,
+        "setups": setup_summary,
+        "heatmap": heatmap,
+        "comparison": {"real": real_stats, "paper": paper_stats},
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     }
