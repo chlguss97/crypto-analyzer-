@@ -37,6 +37,7 @@ from src.strategy.scalp_engine import ScalpEngine
 from src.strategy.adaptive_ml import AdaptiveML
 from src.strategy.unified_engine import TradeEngine  # 레거시 (참조용 유지)
 from src.strategy.flow_engine import FlowEngine
+from src.strategy.flow_ml import FlowML
 from src.trading.leverage import LeverageCalculator
 from src.trading.risk_manager import RiskManager
 from src.trading.executor import OrderExecutor
@@ -93,8 +94,10 @@ class CryptoAnalyzer:
         # Scalp 엔진 (레거시 — 비활성)
         self.scalp_engine = ScalpEngine()
 
-        # FlowEngine (04-17: 단순 오더플로우 엔진. TradeEngine ABC 대체)
-        self.trade_engine = FlowEngine(redis=self.redis)
+        # FlowML (04-17: FlowEngine 전용 경량 ML)
+        self.flow_ml = FlowML()
+        # FlowEngine (04-17: 단순 오더플로우 엔진 + ML 보정)
+        self.trade_engine = FlowEngine(redis=self.redis, flow_ml=self.flow_ml)
 
         # AdaptiveML (레거시 유지, 통합 모델에서는 미사용 — 콜드스타트)
         self.ml_swing = AdaptiveML(mode="swing")
@@ -909,7 +912,14 @@ class CryptoAnalyzer:
                              fee_pct: float = 0.0, direction: str = "",
                              exit_reason: str = "", pnl_usdt: float = 0.0,
                              hold_min: float = 0.0):
-        """실거래 결과 → 연패 관리 + 셋업 추적 (ML 비활성)"""
+        """실거래 결과 → FlowML 학습 + 연패 관리 + 셋업 추적"""
+        # FlowML 학습 (마지막 분석 결과 사용)
+        if hasattr(self, '_last_flow_result') and self._last_flow_result:
+            try:
+                self.flow_ml.record_trade(self._last_flow_result, pnl_pct, fee_pct)
+            except Exception as e:
+                logger.debug(f"FlowML record error: {e}")
+
         # 통합 모델 연패/쿨다운 관리
         self._unified_record_result(pnl_pct, exit_reason)
 
@@ -1168,11 +1178,12 @@ class CryptoAnalyzer:
         # 실시간 가격 변속도
         rt_velocity = await self.redis.hgetall("rt:velocity:BTC-USDT-SWAP")
 
-        # FlowEngine 분석 (Binance 캔들 + 오더플로우)
+        # FlowEngine 분석 (Binance 캔들 + 오더플로우 + ML 보정)
         result = await self.trade_engine.analyze(
             df_1m, df_5m, df_15m, df_1h,
             df_4h=df_4h, df_1d=df_1d, rt_velocity=rt_velocity,
         )
+        self._last_flow_result = result  # ML 학습용 저장
 
         # 컨텍스트 추출
         ctx = result.get("signals", {}).get("context", {})
@@ -1911,6 +1922,7 @@ class CryptoAnalyzer:
             self.ml_swing.save()
             self.ml_scalp.save()
             self.signal_tracker.save()
+            self.flow_ml.save()
             logger.info("ML 모델 + SignalTracker 저장 완료")
         except Exception as e:
             logger.error(f"종료 시 저장 실패: {e}")

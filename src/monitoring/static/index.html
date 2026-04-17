@@ -770,6 +770,17 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
       </div>
     </div>
 
+    <!-- FlowML 상태 -->
+    <div class="card" style="margin-bottom:14px;">
+      <div class="card-header"><div style="display:flex;align-items:center;"><span class="card-title">FlowML (Machine Learning)</span><span class="help" data-tip="FlowEngine 전용 ML. 과거 거래 패턴 학습 → 진입 점수 보정.&#10;학습 데이터 30건+ 시 자동 활성화.&#10;OOS = 미래 데이터 검증 정확도 (높을��록 좋음).">?</span></div></div>
+      <div id="flowMlContent" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;text-align:center;">
+        <div><div class="big-num" id="mlTrained" style="font-size:20px;color:var(--text-muted);">--</div><span class="big-sub">Status</span></div>
+        <div><div class="big-num" id="mlSamples" style="font-size:20px;">0</div><span class="big-sub">Samples</span></div>
+        <div><div class="big-num" id="mlOOS" style="font-size:20px;">--</div><span class="big-sub">OOS Accuracy</span></div>
+        <div><div class="big-num" id="mlRecentWR" style="font-size:20px;">--</div><span class="big-sub">Recent WR</span></div>
+      </div>
+    </div>
+
     <!-- Real vs Paper 비교 -->
     <div class="card" style="margin-bottom:14px;">
       <div class="card-header"><div style="display:flex;align-items:center;"><span class="card-title">Real vs Paper Comparison</span><span class="help" data-tip="실거래와 가상매매(시뮬레이션) 성과를 나란히 비교.&#10;가상매매가 우위면 진입 기준 완화 검토,&#10;실거래가 크게 열위면 슬리피지/타이밍 이슈.">?</span></div></div>
@@ -1375,6 +1386,26 @@ async function updateEngineTab() {
     <tr><td>Avg P&L</td><td>${(real.avg_pnl||0).toFixed(3)}%</td><td>${(paper.avg_pnl||0).toFixed(3)}%</td><td>${diffCell(real.avg_pnl||0, paper.avg_pnl||0, '%')}</td></tr>
     <tr><td>Total P&L</td><td>$${real.total_pnl}</td><td>$${paper.total_pnl}</td><td>${diffCell(real.total_pnl, paper.total_pnl, '')}</td></tr>
   `;
+
+  // FlowML 상태
+  const ml = data.ml || {};
+  const trainedEl = document.getElementById('mlTrained');
+  if (ml.trained) {
+    trainedEl.textContent = 'ACTIVE';
+    trainedEl.style.color = 'var(--green)';
+  } else {
+    trainedEl.textContent = ml.samples >= 30 ? 'TRAINING' : `${ml.samples||0}/30`;
+    trainedEl.style.color = ml.samples >= 30 ? 'var(--yellow)' : 'var(--text-muted)';
+  }
+  document.getElementById('mlSamples').textContent = ml.samples || 0;
+  const oos = (ml.oos_accuracy||0)*100;
+  const oosEl = document.getElementById('mlOOS');
+  oosEl.textContent = ml.trained ? oos.toFixed(1)+'%' : '--';
+  oosEl.style.color = oos>=55?'var(--green)':oos>=45?'var(--yellow)':'var(--red)';
+  const rwr = (ml.recent_wr||0)*100;
+  const rwrEl = document.getElementById('mlRecentWR');
+  rwrEl.textContent = ml.recent_trades>0 ? rwr.toFixed(0)+'%' : '--';
+  rwrEl.style.color = rwr>=50?'var(--green)':rwr>=35?'var(--yellow)':'var(--red)';
 }
 
 // ── System Status (Risk tab) ──

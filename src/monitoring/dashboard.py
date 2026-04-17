@@ -549,6 +549,17 @@ async def get_setup_tracker():
         return {"error": str(e), "A": {"total": 0}, "B": {"total": 0}, "C": {"total": 0}}
 
 
+@app.get("/api/ml/flow-stats")
+async def get_flow_ml_stats():
+    """FlowML 모델 통계"""
+    try:
+        from src.strategy.flow_ml import FlowML
+        ml = FlowML()
+        return ml.get_stats()
+    except Exception as e:
+        return {"trained": False, "samples": 0, "error": str(e)}
+
+
 @app.get("/api/news")
 async def get_news_status():
     """뉴스 필터 상태 + 다음 이벤트"""
@@ -694,11 +705,20 @@ async def get_engine_overview():
                 "avg_pnl": r.get("avg_pnl_pct", 0),
             }
 
+    # ML 상태
+    ml_stats = {}
+    try:
+        from src.strategy.flow_ml import FlowML
+        ml_stats = FlowML().get_stats()
+    except Exception:
+        pass
+
     return {
         "regime": regime_detail,
         "engine": engine_state,
         "setups": setup_summary,
         "heatmap": heatmap,
         "comparison": {"real": real_stats, "paper": paper_stats},
+        "ml": ml_stats,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }

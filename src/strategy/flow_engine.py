@@ -18,8 +18,9 @@ logger = logging.getLogger(__name__)
 
 class FlowEngine:
 
-    def __init__(self, redis=None):
+    def __init__(self, redis=None, flow_ml=None):
         self.redis = redis
+        self.flow_ml = flow_ml  # FlowML 인스턴스 (None이면 ML 없이 동작)
 
     async def analyze(self, df_1m, df_5m, df_15m=None, df_1h=None,
                       df_4h=None, df_1d=None, rt_velocity=None) -> dict:
@@ -179,6 +180,15 @@ class FlowEngine:
                 f"flow={flow['direction']} str={flow.get('strength', 0):.2f}"
             ),
         })
+
+        # ═══ ML 보정 (학습 데이터 충분하면) ═══
+        if self.flow_ml:
+            ml = self.flow_ml.predict(result)
+            result["signals"]["ml"] = ml
+            if ml["trained"]:
+                raw_score = result["score"]
+                result["score"] = round(max(0, min(10, raw_score + ml["ml_score"])), 1)
+                result["reason"] += f" | ML={ml['ml_score']:+.1f}(wp={ml['win_prob']:.0%})"
 
         return result
 
