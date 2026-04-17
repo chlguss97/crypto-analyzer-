@@ -34,10 +34,11 @@ WHALE_WINDOW_SEC = 300        # 최근 5분간 대형 체결 추적
 
 
 class BinanceStream:
-    """Binance Futures BTCUSDT WebSocket — CVD + 대형 체결 + 가격"""
+    """Binance Futures BTCUSDT WebSocket — CVD + 대형 체결 + 가격 + 실시간 캔들"""
 
-    def __init__(self, redis_client: RedisClient):
+    def __init__(self, redis_client: RedisClient, db=None):
         self.redis = redis_client
+        self.db = db  # DB 직접 저장 (REST 폴링 대체)
         self._running = False
         self._reconnect_count = 0
 
@@ -56,14 +57,25 @@ class BinanceStream:
         self._trade_count = 0
         self._last_log = 0
 
+        # DB 저장할 OKX 심볼 (기존 호환)
+        self._db_symbol = "BTC/USDT:USDT"
+
     async def start(self):
         """WebSocket 연결 시작 (무한 재시도)"""
         import websockets
         self._running = True
         self._reconnect_count = 0
 
-        # aggTrades + miniTicker 멀티스트림
-        url = f"{BINANCE_WS}/{SYMBOL}@aggTrade/{SYMBOL}@miniTicker"
+        # aggTrades + miniTicker + 캔들 4종 (1m/5m/15m/1h) — REST 폴링 완전 대체
+        streams = [
+            f"{SYMBOL}@aggTrade",
+            f"{SYMBOL}@miniTicker",
+            f"{SYMBOL}@kline_1m",
+            f"{SYMBOL}@kline_5m",
+            f"{SYMBOL}@kline_15m",
+            f"{SYMBOL}@kline_1h",
+        ]
+        url = f"{BINANCE_WS}/{'/'.join(streams)}"
 
         while self._running:
             try:
@@ -97,6 +109,8 @@ class BinanceStream:
             await self._on_agg_trade(data)
         elif event == "24hrMiniTicker":
             await self._on_ticker(data)
+        elif event == "kline":
+            await self._on_kline(data)
 
     async def _on_agg_trade(self, t: dict):
         """체결 → CVD 누적 + 대형 체결 감지"""
@@ -192,6 +206,59 @@ class BinanceStream:
                 if okx_price > 0:
                     premium_pct = (price - okx_price) / okx_price * 100
                     await self.redis.set("flow:okx_bn_premium", str(round(premium_pct, 4)), ttl=60)
+
+    async def _on_kline(self, data: dict):
+        """
+        Binance kline → DB 직접 저장 (REST 폴링 완전 대체).
+        매 틱마다 오는 진행 중 캔들 + 확정 캔들 모두 저장.
+        확정(is_closed=True) 시 즉시 DB upsert → 지연 0.
+        """
+        k = data.get("k", {})
+        if not k:
+            return
+
+        interval = k.get("i", "")  # "1m", "5m", "15m", "1h"
+        is_closed = k.get("x", False)  # 캔들 확정 여부
+
+        candle = {
+            "timestamp": int(k.get("t", 0)),  # 캔들 시작 시간
+            "open": float(k.get("o", 0)),
+            "high": float(k.get("h", 0)),
+            "low": float(k.get("l", 0)),
+            "close": float(k.get("c", 0)),
+            "volume": float(k.get("v", 0)),
+        }
+
+        if candle["timestamp"] <= 0 or candle["close"] <= 0:
+            return
+
+        # Redis에 현재 진행 중 캔들 캐시 (실시간 가격 참조용)
+        await self.redis.set(
+            f"bn:kline:{interval}:BTCUSDT",
+            json.dumps(candle),
+            ttl={"1m": 120, "5m": 600, "15m": 1800, "1h": 7200}.get(interval, 300),
+        )
+
+        # DB 저장 — 확정 캔들은 즉시, 진행 중은 5초마다 (DB 부하 줄이기)
+        if self.db:
+            should_save = is_closed
+            if not is_closed:
+                # 진행 중 캔들: 1m은 매번, 나머지는 5초마다
+                cache_key = f"_kline_last_save_{interval}"
+                last = getattr(self, cache_key, 0)
+                now = time.time()
+                if interval == "1m" or now - last >= 5:
+                    should_save = True
+                    setattr(self, cache_key, now)
+
+            if should_save:
+                try:
+                    await self.db.insert_candles(self._db_symbol, interval, [candle])
+                except Exception as e:
+                    logger.debug(f"Binance kline DB 저장 실패 ({interval}): {e}")
+
+        if is_closed:
+            logger.debug(f"Binance {interval} 캔들 확정: ${candle['close']:,.1f} vol={candle['volume']:.2f}")
 
     async def _update_combined_cvd(self):
         """OKX + Binance CVD 합산 → Redis"""

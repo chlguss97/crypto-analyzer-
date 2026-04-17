@@ -72,7 +72,7 @@ class CryptoAnalyzer:
         self.redis = RedisClient()
         self.candle_collector = CandleCollector(self.db)
         self.ws_stream = WebSocketStream(self.redis)
-        self.binance_stream = BinanceStream(self.redis)
+        self.binance_stream = BinanceStream(self.redis, db=self.db)
         self.oi_funding = OIFundingCollector(self.db, self.redis)
 
         # Swing 엔진 (15m)
@@ -1395,28 +1395,20 @@ class CryptoAnalyzer:
     # ── 주기적 루프들 (레거시) ──
 
     async def periodic_candle_update(self):
-        """캔들 갱신 — Binance 선물 기준 (04-17)
-        1m/5m: 2초마다 (Binance rate limit 2400req/min 여유)
-        15m/1h: 6초마다 (3사이클)
+        """캔들 갱신 — Binance WS가 메인 (0ms 지연), REST는 30초 백업.
+        WS kline 스트림이 DB에 직접 저장하므로 REST 폴링 최소화.
+        15m/1h는 WS 확정 주기가 길어 REST 백필로 보완.
         """
-        _cycle = 0
         while self._running:
             try:
-                # 매 사이클: 1m + 5m (Binance 기본, 실패 시 OKX 폴백)
-                for tf in ["1m", "5m"]:
+                # 30초마다 REST 백필 (WS 누락 방지 + 초기 데이터 확보)
+                for tf in ["1m", "5m", "15m", "1h"]:
                     candles = await self.candle_collector.fetch_candles(tf, limit=5)
                     if candles:
                         await self.db.insert_candles(self.symbol, tf, candles)
-                # 3사이클(6초)마다: 15m + 1h
-                if _cycle % 3 == 0:
-                    for tf in ["15m", "1h"]:
-                        candles = await self.candle_collector.fetch_candles(tf, limit=5)
-                        if candles:
-                            await self.db.insert_candles(self.symbol, tf, candles)
-                _cycle += 1
             except Exception as e:
-                logger.error(f"캔들 갱신 에러: {e}")
-            await asyncio.sleep(2)  # 3초→2초 (Binance는 rate limit 여유)
+                logger.error(f"캔들 REST 백업 에러: {e}")
+            await asyncio.sleep(30)  # WS가 메인이므로 REST는 30초 백업
 
     async def periodic_signal_eval(self):
         """Swing 시그널 평가 + 매매 (60초마다)"""
