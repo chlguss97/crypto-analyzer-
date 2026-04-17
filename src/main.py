@@ -1213,6 +1213,19 @@ class CryptoAnalyzer:
         direction = result["direction"]
         score = result["score"]
 
+        # 04-17: 최소 점수 체크 (htf_bias 적용 후 score가 낮으면 차단)
+        MIN_ENTRY_SCORE = 5.5
+        if score < MIN_ENTRY_SCORE:
+            if now - getattr(self, "_last_low_score_log", 0) >= 30:
+                self._last_low_score_log = now
+                raw = result.get("signals", {}).get("raw_score", score)
+                htf = result.get("signals", {}).get("htf_bias_applied", 0)
+                logger.info(
+                    f"[TRADE] Setup {setup} {direction.upper()} 점수 부족: "
+                    f"{score:.1f} < {MIN_ENTRY_SCORE} (raw={raw:.1f} htf={htf:+.1f})"
+                )
+            return
+
         # 셋업 자동 비활성 체크
         if not self.setup_tracker.is_setup_enabled(setup):
             logger.info(f"[TRADE] Setup {setup} 비활성 (성과 부진) → 스킵")
@@ -1297,9 +1310,19 @@ class CryptoAnalyzer:
         tp2_mult = hm_cfg.get("tp2_mult", 2.5)
         tp3_mult = hm_cfg.get("tp3_mult", 4.0)
 
-        # 레버리지 (동적)
+        # 04-17: 점수 기반 등급 → 레버리지 동적 매핑
+        # score 9+ = A+ (공격), 8+ = A, 7+ = B+, 6+ = B (보수)
+        if score >= 9.0:
+            grade = "A+"
+        elif score >= 8.0:
+            grade = "A"
+        elif score >= 7.0:
+            grade = "B+"
+        else:
+            grade = "B"
+
         atr_pct = result.get("atr_pct", 0.3)
-        lev_result = self.leverage_calc.calculate("B+", atr_pct, self._unified_streak)
+        lev_result = self.leverage_calc.calculate(grade, atr_pct, self._unified_streak)
         leverage = lev_result["leverage"]
 
         # SL/TP 거리 계산
@@ -1377,7 +1400,7 @@ class CryptoAnalyzer:
 
         trade_req = {
             "symbol": self.symbol, "direction": direction,
-            "grade": "B+", "score": score,
+            "grade": grade, "score": score,
             "size": size_btc,
             "leverage": leverage,
             "entry_price": entry_price_limit,
