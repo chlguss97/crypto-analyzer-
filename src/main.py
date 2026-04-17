@@ -13,6 +13,7 @@ from src.utils.helpers import load_config, load_env
 from src.data.storage import Database, RedisClient
 from src.data.candle_collector import CandleCollector
 from src.data.ws_stream import WebSocketStream
+from src.data.binance_stream import BinanceStream
 from src.data.oi_funding import OIFundingCollector
 from src.engine.fast.ema import EMAIndicator
 from src.engine.fast.rsi import RSIIndicator
@@ -71,6 +72,7 @@ class CryptoAnalyzer:
         self.redis = RedisClient()
         self.candle_collector = CandleCollector(self.db)
         self.ws_stream = WebSocketStream(self.redis)
+        self.binance_stream = BinanceStream(self.redis)
         self.oi_funding = OIFundingCollector(self.db, self.redis)
 
         # Swing 엔진 (15m)
@@ -1799,6 +1801,7 @@ class CryptoAnalyzer:
             asyncio.create_task(self.periodic_orphan_algo_sweeper()),  # 고아 알고 주기 정리 (120s)
             asyncio.create_task(self.periodic_dashboard_commands()),  # 대시보드 → bot 명령 큐
             asyncio.create_task(self.ws_stream.start()),
+            asyncio.create_task(self.binance_stream.start()),  # Binance CVD + 대형체결
             asyncio.create_task(self.telegram.poll_commands()),  # 텔레그램 명령어 polling
         ]
 
@@ -1813,6 +1816,7 @@ class CryptoAnalyzer:
         finally:
             self._running = False
             self.ws_stream.stop()
+            self.binance_stream.stop()
             self.setup_tracker.save()
             self.signal_tracker.save()
             await self.redis.set("sys:bot_status", "stopped")

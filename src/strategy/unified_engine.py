@@ -205,11 +205,19 @@ class TradeEngine:
 
         if self.redis:
             try:
-                # 1) CVD (누적 거래량 델타) — 가장 중요한 선행 신호
-                #    양수 = 매수 우위 (가격 상승 압력), 음수 = 매도 우위
-                cvd_15m = float(await self.redis.get("cvd:15m:current:BTC-USDT-SWAP") or 0)
-                cvd_1h = float(await self.redis.get("cvd:1h:current:BTC-USDT-SWAP") or 0)
-                # CVD 방향: 양쪽 다 양수면 강한 매수, 양쪽 다 음수면 강한 매도
+                # 1) CVD — OKX + Binance 합산 (시장 전체 플로우)
+                #    합산 키가 있으면 사용, 없으면 OKX 단독
+                combined_15m = await self.redis.get("flow:combined:cvd_15m")
+                combined_1h = await self.redis.get("flow:combined:cvd_1h")
+                if combined_15m is not None:
+                    cvd_15m = float(combined_15m)
+                    cvd_1h = float(combined_1h or 0)
+                    ctx["flow_signals"]["cvd_source"] = "okx+binance"
+                else:
+                    cvd_15m = float(await self.redis.get("cvd:15m:current:BTC-USDT-SWAP") or 0)
+                    cvd_1h = float(await self.redis.get("cvd:1h:current:BTC-USDT-SWAP") or 0)
+                    ctx["flow_signals"]["cvd_source"] = "okx_only"
+
                 cvd_dir = 0
                 if cvd_15m > 0 and cvd_1h > 0:
                     cvd_dir = 0.4
@@ -220,19 +228,29 @@ class TradeEngine:
                 elif cvd_1h < 0:
                     cvd_dir = -0.15
                 flow_bias += cvd_dir
-                ctx["flow_signals"]["cvd_15m"] = round(cvd_15m, 1)
-                ctx["flow_signals"]["cvd_1h"] = round(cvd_1h, 1)
+                ctx["flow_signals"]["cvd_15m"] = round(cvd_15m, 2)
+                ctx["flow_signals"]["cvd_1h"] = round(cvd_1h, 2)
                 ctx["flow_signals"]["cvd_dir"] = cvd_dir
 
-                # 2) 펀딩율 — 극단값이면 역방향 편향 (군중 반대)
-                #    +0.01% 이상 = 롱 과열 → 숏 편향, -0.01% 이하 = 숏 과열 → 롱 편향
+                # 2) 대형 체결 편향 (Binance 고래 추적)
+                whale_bias_str = await self.redis.get("flow:combined:whale_bias")
+                whale_dir = 0
+                if whale_bias_str:
+                    wb = float(whale_bias_str)
+                    # -1~+1 → ±0.2 가중치
+                    whale_dir = round(wb * 0.2, 3)
+                    flow_bias += whale_dir
+                    ctx["flow_signals"]["whale_bias"] = round(wb, 3)
+                    ctx["flow_signals"]["whale_dir"] = whale_dir
+
+                # 3) 펀딩율 — 극단값이면 역방향 (군중 반대)
                 funding = float(await self.redis.get("rt:funding:BTC-USDT-SWAP") or 0)
                 fund_dir = 0
-                if funding > 0.0003:      # 0.03%+ (극단 롱 과열)
+                if funding > 0.0003:
                     fund_dir = -0.2
-                elif funding > 0.0001:    # 0.01%+ (롱 편향)
+                elif funding > 0.0001:
                     fund_dir = -0.1
-                elif funding < -0.0003:   # -0.03% (극단 숏 과열)
+                elif funding < -0.0003:
                     fund_dir = 0.2
                 elif funding < -0.0001:
                     fund_dir = 0.1
@@ -240,20 +258,32 @@ class TradeEngine:
                 ctx["flow_signals"]["funding"] = funding
                 ctx["flow_signals"]["funding_dir"] = fund_dir
 
-                # 3) 롱/숏 비율 — 극단이면 역방향
+                # 4) 롱/숏 비율 — 극단이면 역방향
                 ls_ratio = float(await self.redis.get("rt:ls_ratio:BTC-USDT-SWAP") or 1.0)
                 ls_dir = 0
-                if ls_ratio > 2.0:        # 롱이 숏의 2배 → 숏 편향
+                if ls_ratio > 2.0:
                     ls_dir = -0.15
                 elif ls_ratio > 1.5:
                     ls_dir = -0.05
-                elif ls_ratio < 0.5:      # 숏이 롱의 2배 → 롱 편향
+                elif ls_ratio < 0.5:
                     ls_dir = 0.15
                 elif ls_ratio < 0.67:
                     ls_dir = 0.05
                 flow_bias += ls_dir
                 ctx["flow_signals"]["ls_ratio"] = round(ls_ratio, 2)
                 ctx["flow_signals"]["ls_dir"] = ls_dir
+
+                # 5) OKX-Binance 프리미엄 (거래소간 가격 차이)
+                premium_str = await self.redis.get("flow:okx_bn_premium")
+                if premium_str:
+                    premium = float(premium_str)
+                    ctx["flow_signals"]["okx_bn_premium"] = round(premium, 4)
+                    # 프리미엄 > 0.02% = OKX가 비쌈 → OKX 매수 과열
+                    # 프리미엄 < -0.02% = OKX가 쌈 → OKX 매도 과열
+                    if abs(premium) > 0.02:
+                        prem_dir = -0.1 if premium > 0 else 0.1
+                        flow_bias += prem_dir
+                        ctx["flow_signals"]["premium_dir"] = prem_dir
 
             except Exception as e:
                 import logging
