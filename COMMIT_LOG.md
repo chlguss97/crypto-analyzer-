@@ -1,12 +1,14 @@
 # Commit Log
 
 > 자동 생성 — `scripts/update_commit_log.sh` (매 커밋 후 실행)
-> Updated: 2026-04-17 10:35:02    
-> Total commits: 178 (2026-04-03 → 2026-04-17)
+> Updated: 2026-04-17 10:39:31    
+> Total commits: 180 (2026-04-03 → 2026-04-17)
 
 Claude 가 질문/변경 작업 시 이 파일을 참고해서 과거 변경 이력 컨텍스트를 확보합니다. 수동 편집 금지 — 다음 커밋 시 덮어써집니다.
 
 ## 2026-04-17
+- `5e44d87` feat: HTF 큰 추세 필터 — 4h/1d/1w 캔들 + 역방향 차단
+- `e068c5d` chore: COMMIT_LOG 갱신
 - `a70c1b5` fix: Binance 통합 전수 검증 보완 3건
 - `4297b36` chore: COMMIT_LOG 갱신
 - `ab0e074` perf: 지연 0ms — 이벤트 드리븐 평가 + 청산 폭발 감지
