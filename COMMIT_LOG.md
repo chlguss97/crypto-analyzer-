@@ -1,12 +1,14 @@
 # Commit Log
 
 > 자동 생성 — `scripts/update_commit_log.sh` (매 커밋 후 실행)
-> Updated: 2026-04-17 10:06:29    
-> Total commits: 170 (2026-04-03 → 2026-04-17)
+> Updated: 2026-04-17 10:12:27    
+> Total commits: 172 (2026-04-03 → 2026-04-17)
 
 Claude 가 질문/변경 작업 시 이 파일을 참고해서 과거 변경 이력 컨텍스트를 확보합니다. 수동 편집 금지 — 다음 커밋 시 덮어써집니다.
 
 ## 2026-04-17
+- `22198a0` perf: 캔들/평가 주기 가속 — Binance rate limit 활용
+- `e73cbce` chore: COMMIT_LOG 갱신
 - `013607a` feat: 차트 분석 Binance 선물 기준 전환 — OKX는 실행만
 - `262f7f0` chore: COMMIT_LOG 갱신
 - `36559c4` feat: Binance WS 실시간 스트림 — 시장 전체 오더플로우
