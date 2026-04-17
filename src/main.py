@@ -1659,7 +1659,7 @@ class CryptoAnalyzer:
                 try:
                     inst_id = self.executor.exchange.market(self.symbol)["id"]
                     resp = await self.executor.exchange.private_get_trade_orders_algo_pending(
-                        {"instType": "SWAP", "instId": inst_id}
+                        {"instType": "SWAP", "instId": inst_id, "ordType": "trigger"}
                     )
                     algos = resp.get("data", []) if isinstance(resp, dict) else []
                     snapshot["pending_algos"] = [

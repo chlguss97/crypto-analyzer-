@@ -712,7 +712,8 @@ class OrderExecutor:
             for attempt in range(3):
                 try:
                     resp = await self.exchange.private_get_trade_orders_algo_pending(
-                        {"instType": "SWAP", "instId": self.exchange.market(self.symbol)["id"]}
+                        {"instType": "SWAP", "instId": self.exchange.market(self.symbol)["id"],
+                         "ordType": "trigger"}  # OKX 필수 파라미터
                     )
                     items = resp.get("data", []) if isinstance(resp, dict) else []
                     break

@@ -354,7 +354,7 @@ class PositionManager:
                 try:
                     inst_id = self.executor.exchange.market(symbol)["id"]
                     resp = await self.executor.exchange.private_get_trade_orders_algo_pending(
-                        {"instType": "SWAP", "instId": inst_id}
+                        {"instType": "SWAP", "instId": inst_id, "ordType": "trigger"}
                     )
                     pending = resp.get("data", []) if isinstance(resp, dict) else []
                     sl_found = any(
@@ -1215,7 +1215,8 @@ class PositionManager:
             try:
                 pending = await self.executor.exchange.private_get_trade_orders_algo_pending(
                     {"instType": "SWAP",
-                     "instId": self.executor.exchange.market(pos.symbol)["id"]}
+                     "instId": self.executor.exchange.market(pos.symbol)["id"],
+                     "ordType": "trigger"}
                 )
                 items = pending.get("data", []) if isinstance(pending, dict) else []
                 if not items:
