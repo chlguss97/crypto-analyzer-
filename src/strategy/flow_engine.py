@@ -78,7 +78,7 @@ class FlowEngine:
         # ══════════════════════════════════════
         # 2단계: 주요 레벨 — 4h/1h 지지/저항
         # ══════════════════════════════════════
-        levels = self._find_key_levels(df_4h, df_1h, price)
+        levels = self._find_key_levels(df_4h, df_1h, price, df_1d=df_1d)
         result["signals"]["levels"] = levels
 
         # 가격이 레벨 근처인지 (ATR × 1.0 이내)
@@ -218,15 +218,15 @@ class FlowEngine:
         tr = pd.concat([h - l, (h - c.shift(1)).abs(), (l - c.shift(1)).abs()], axis=1).max(axis=1)
         return float(tr.rolling(period).mean().iloc[-1]) if len(tr) >= period else float(tr.mean())
 
-    def _find_key_levels(self, df_4h, df_1h, current_price) -> dict:
+    def _find_key_levels(self, df_4h, df_1h, current_price, df_1d=None) -> dict:
         """
-        4h/1h 스윙 고/저점에서 주요 지지/저항 탐지.
-        멀티TF 겹치면 강도 높음. 상위 3개씩만 반환.
+        1d/4h/1h 스윙 고/저점에서 주요 지지/저항 탐지.
+        1d 레벨이 가장 강함. 멀티TF 겹치면 강도 합산.
         """
         supports = []
         resistances = []
 
-        for df, tf_weight in [(df_4h, 2.0), (df_1h, 1.0)]:
+        for df, tf_weight in [(df_1d, 3.0), (df_4h, 2.0), (df_1h, 1.0)]:
             if df is None or len(df) < 20:
                 continue
             highs = df["high"].astype(float).values
@@ -309,15 +309,17 @@ class FlowEngine:
             cvd_1h = float(await self.redis.get("flow:combined:cvd_1h") or
                           await self.redis.get("cvd:1h:current:BTC-USDT-SWAP") or 0)
 
-            # CVD 방향
-            if cvd_15m > 0 and cvd_1h > 0:
+            # CVD 방향 — 최소 threshold 적용 (노이즈 필터)
+            # BTC CVD 절대값이 너무 작으면 방향성 없음으로 판단
+            CVD_MIN_THRESHOLD = 0.5  # 최소 0.5 BTC 이상 순매수/매도
+            if cvd_15m > CVD_MIN_THRESHOLD and cvd_1h > CVD_MIN_THRESHOLD:
                 flow["direction"] = "long"
                 flow["strength"] = min(1.0, (abs(cvd_15m) + abs(cvd_1h)) / 100)
-            elif cvd_15m < 0 and cvd_1h < 0:
+            elif cvd_15m < -CVD_MIN_THRESHOLD and cvd_1h < -CVD_MIN_THRESHOLD:
                 flow["direction"] = "short"
                 flow["strength"] = min(1.0, (abs(cvd_15m) + abs(cvd_1h)) / 100)
             else:
-                flow["reason"] = f"cvd_mixed(15m={cvd_15m:.1f},1h={cvd_1h:.1f})"
+                flow["reason"] = f"cvd_weak_or_mixed(15m={cvd_15m:.1f},1h={cvd_1h:.1f},thr={CVD_MIN_THRESHOLD})"
                 return flow
 
             flow["cvd_15m"] = round(cvd_15m, 2)
