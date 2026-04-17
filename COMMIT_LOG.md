@@ -1,12 +1,16 @@
 # Commit Log
 
 > 자동 생성 — `scripts/update_commit_log.sh` (매 커밋 후 실행)
-> Updated: 2026-04-16 17:02:31    
-> Total commits: 159 (2026-04-03 → 2026-04-16)
+> Updated: 2026-04-17 09:08:16    
+> Total commits: 161 (2026-04-03 → 2026-04-17)
 
 Claude 가 질문/변경 작업 시 이 파일을 참고해서 과거 변경 이력 컨텍스트를 확보합니다. 수동 편집 금지 — 다음 커밋 시 덮어써집니다.
 
+## 2026-04-17
+- `ed74812` feat: 대시보드 전면 개편 — Engine 탭 + 레거시 ML 10개 엔드포인트 삭제
+
 ## 2026-04-16
+- `8a43dd4` chore: COMMIT_LOG 갱신
 - `3a397e5` fix: 전 주문 post-only limit 우선 — maker 수수료 0.02% (taker 대비 60% 절감)
 - `9fdc77e` chore: COMMIT_LOG 갱신
 - `d6e092b` fix: 미체결 알고 주문 잔존 근본 원인 6건 제거
