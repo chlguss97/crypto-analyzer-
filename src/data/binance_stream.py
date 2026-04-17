@@ -22,6 +22,7 @@ import asyncio
 import json
 import logging
 import time
+import websockets
 from collections import deque
 from src.data.storage import RedisClient
 
@@ -62,7 +63,6 @@ class BinanceStream:
 
     async def start(self):
         """WebSocket 연결 시작 (무한 재시도)"""
-        import websockets
         self._running = True
         self._reconnect_count = 0
 

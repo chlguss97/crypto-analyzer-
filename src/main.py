@@ -1078,18 +1078,18 @@ class CryptoAnalyzer:
         # Redis pub/sub 구독 시도
         sub = None
         try:
-            if self.redis._client:
+            if self.redis.connected:
                 sub = self.redis._client.pubsub()
                 await sub.subscribe("ch:kline:ready")
                 logger.info("[TRADE] 이벤트 드리븐 평가 활성화 (ch:kline:ready)")
         except Exception as e:
-            logger.debug(f"pub/sub 구독 실패 → 폴링 모드: {e}")
+            logger.info(f"[TRADE] pub/sub 구독 실패 → 1초 폴링 모드: {e}")
+            sub = None
 
         while self._running:
             try:
                 triggered = False
                 if sub:
-                    # 이벤트 대기 (최대 1초) — 캔들 확정 시 즉시 깨어남
                     try:
                         msg = await asyncio.wait_for(
                             sub.get_message(ignore_subscribe_messages=True, timeout=1.0),
@@ -1097,18 +1097,29 @@ class CryptoAnalyzer:
                         )
                         if msg and msg.get("type") == "message":
                             triggered = True
-                    except (asyncio.TimeoutError, Exception):
-                        pass  # 타임아웃 → 폴링으로 평가
+                    except asyncio.TimeoutError:
+                        pass
+                    except Exception:
+                        # Redis 연결 끊김 → sub 무효화, 다음 루프에서 폴링
+                        sub = None
 
                 await self._evaluate_unified()
 
                 if not triggered:
-                    await asyncio.sleep(1)  # 이벤트 없으면 1초 대기
+                    await asyncio.sleep(1)
             except asyncio.CancelledError:
                 raise
             except Exception as e:
                 logger.error(f"[TRADE] 평가 에러: {e}", exc_info=True)
                 await asyncio.sleep(1)
+
+                # pub/sub 재구독 시도
+                if sub is None and self.redis.connected:
+                    try:
+                        sub = self.redis._client.pubsub()
+                        await sub.subscribe("ch:kline:ready")
+                    except Exception:
+                        sub = None
 
     async def _evaluate_unified(self):
         """통합 엔진 평가 + 매매"""

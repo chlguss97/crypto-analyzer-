@@ -161,14 +161,11 @@ class CandleCollector:
         return total_inserted
 
     async def backfill_all(self):
-        """모든 타임프레임 백필"""
-        timeframes = [
-            self.config["timeframes"]["execution"],    # 15m
-            self.config["timeframes"]["confirmation"],  # 1h
-            self.config["timeframes"]["filter"],        # 4h
-        ]
+        """모든 타임프레임 백필 — 1m/5m 포함 (TradeEngine 분석용)"""
+        timeframes = ["1m", "5m", "15m", "1h"]
         for tf in timeframes:
-            await self.backfill(tf)
+            days = 3 if tf in ("1m", "5m") else None  # 1m/5m은 3일이면 충분
+            await self.backfill(tf, days=days)
 
     async def fetch_latest(self, timeframe: str) -> list[dict]:
         """최신 캔들 가져와서 DB 저장 — Binance 기준"""
