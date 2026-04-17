@@ -5,6 +5,55 @@
 
 ---
 
+## 2026-04-16~17
+
+### 대시보드 전면 개편
+
+- 크래시 루프 근절: `/health` 엔드포인트(인증 불필요), `_ensure_initialized` 락+타임아웃, shutdown None 가드
+- 별도 Docker 컨테이너 안정화: Redis 명령 큐(`cmd:bot`)로 bot↔dashboard 통신
+- **Engine 탭 신설** (구 "AI/Models" 대체): TradeEngine 동적 상태바, Setup Performance, Setup×Regime 히트맵, Real vs Paper 비교
+- 레거시 ML 엔드포인트 10개 삭제 (`/api/ml/*`, `/api/meta*`, `/api/backtest*`), 라우트 41→30개
+- `/api/engine/state`, `/api/engine/overview` 신설
+- `SetupTracker.get_summary()` 데드락 수정 (`Lock` → `RLock`)
+
+### 미체결 알고 주문 잔존 근본 수정
+
+4번 수정에도 재발하던 **TP 잔존 버그** 6개 근본 경로 차단:
+- 러너 모드 활성 시 TP2/TP3 즉시 정리 (`_cancel_unused_tps`)
+- 부분 청산 후 SL/TP1 사이즈 재등록 (`_resize_protection`)
+- `cancel_all_algos` 쿼리 실패 시 3회 재시도 (silent skip 제거)
+- `_full_close` 예외 발생 시에도 알고 정리 보장
+- `_finalize_position` 후 잔존 알고 검증 + 재정리
+- `periodic_orphan_algo_sweeper` 백스톱 (120초 주기)
+
+### 수수료 60% 절감 — post-only limit 전환
+
+- 진입/청산: post-only limit 우선 (maker 0.02%), 실패 시 market 폴백
+- TP 알고: `orderPx=triggerPx` (limit-on-trigger)
+- SL 알고: market 유지 (안전 우선)
+- 긴급 청산 (sl_failsafe, kill_switch): market 유지
+
+### 4/16 거래 복기 → 실전 개선 3건
+
+7건 2W 3L, WR 29%, sl_failsafe 57%, 0분 즉사 2건 분석:
+- **SL 거리 검증**: 체결가-SL < 0.15% 이면 진입 즉시 취소 (0분 즉사 방지)
+- **SL 등록 OKX 검증**: set_protection 후 pending 조회 → 미발견 시 재등록 3회
+- **같은 방향 연속 4회 차단**: LONG 편향 86% 방지
+
+### 방향성 근본 개선 — 오더플로우 통합
+
+WR 33% (랜덤 이하) 근본 원인: EMA(후행)만으로 추세 판단.
+- `_market_context`에 CVD/펀딩율/L·S비율 실시간 오더플로우 통합
+- `flow_bias` 스코어 (-1~+1): CVD(±0.4) + 펀딩(±0.2) + L/S(±0.15)
+- **EMA↑ but flow_bias < -0.2 → trend=neutral 격하** → 역추세 진입 차단
+
+### 봇 스냅샷 (Claude 실시간 분석용)
+
+- 매 60초 `data/logs/bot_snapshot.json` 생성 (포지션/레짐/잔고/미체결알고)
+- `log_push.sh`가 logs 브랜치에 포함 → `git fetch`로 현재 상태 즉시 확인
+
+---
+
 ## 2026-04-15
 
 ### 전면 개편: Unified Engine v1 (Scalp/Swing 통합)

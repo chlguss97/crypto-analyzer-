@@ -1,12 +1,13 @@
 # Commit Log
 
 > 자동 생성 — `scripts/update_commit_log.sh` (매 커밋 후 실행)
-> Updated: 2026-04-17 09:41:49    
-> Total commits: 165 (2026-04-03 → 2026-04-17)
+> Updated: 2026-04-17 09:42:05    
+> Total commits: 166 (2026-04-03 → 2026-04-17)
 
 Claude 가 질문/변경 작업 시 이 파일을 참고해서 과거 변경 이력 컨텍스트를 확보합니다. 수동 편집 금지 — 다음 커밋 시 덮어써집니다.
 
 ## 2026-04-17
+- `71c659d` chore: COMMIT_LOG 갱신
 - `a082a66` feat: 오더플로우 방향 확인 + 봇 스냅샷 + SL 안전장치
 - `c21daa3` chore: COMMIT_LOG 갱신
 - `444b2c7` fix: 4/16 거래 복기 문제점 3건 수정
