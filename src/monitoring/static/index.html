@@ -552,7 +552,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
       </label>
       <span class="auto-status" id="autoStatus" style="color:var(--text-muted)">OFF</span>
       <div style="width:1px;height:24px;background:var(--border);margin:0 8px;"></div>
-      <span style="font-size:12px;color:var(--green);font-weight:600;">TradeEngine v1</span>
+      <span style="font-size:12px;color:var(--green);font-weight:600;">FlowEngine v1</span>
       <div style="flex:1"></div>
       <button class="btn-close-pos" onclick="closeAllPositions()">Close All Positions</button>
       <button class="btn-close-pos" onclick="closeLong()">Close Long</button>
@@ -587,15 +587,15 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
   </div>
 
 
-  <!-- TradeEngine Status -->
+  <!-- FlowEngine Status -->
   <div class="card" style="margin-bottom:24px;">
     <div class="card-header">
-      <div style="display:flex;align-items:center;"><span class="card-title">TradeEngine Status</span><span class="help" data-tip="Setup ABC 매칭 상태&#10;• Setup: 현재 활성 셋업 (A=추세모멘텀, B=OB리테스트, C=브레이크아웃)&#10;• Direction: 진입 방향&#10;• Score: 셋업 신뢰도 (0~10)&#10;• Trend: HTF 추세 방향&#10;• Structure: 5m 스윙 구조&#10;• Streak: 연패 카운터">?</span></div>
+      <div style="display:flex;align-items:center;"><span class="card-title">FlowEngine Status</span><span class="help" data-tip="오더플로우 엔진 상태&#10;• Signal: 현재 시그널 (FLOW / none)&#10;• Direction: 진입 방향&#10;• Score: 확신도 (0~10)&#10;• Trend: HTF 추세 (1d/4h)&#10;• Flow: CVD 방향&#10;• Streak: 연패">?</span></div>
     </div>
     <div class="grid" style="grid-template-columns: repeat(6, 1fr); gap: 12px; margin-bottom:12px;">
       <div style="text-align:center;">
         <div class="big-num" id="scalpScore" style="font-size:24px;">--</div>
-        <span class="big-sub">Setup</span>
+        <span class="big-sub">Signal</span>
       </div>
       <div style="text-align:center;">
         <div class="big-num" id="scalpDir" style="font-size:24px;">--</div>
@@ -643,7 +643,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
     <!-- Row 1: Signal + Market -->
     <div class="grid" style="grid-template-columns: 1fr 1fr;">
       <div class="card">
-        <div class="card-header"><div style="display:flex;align-items:center;"><span class="card-title" data-i18n="signal.title">Signal Analysis</span><span class="help" data-tip="TradeEngine 시그널 분석 결과입니다.">?</span></div></div>
+        <div class="card-header"><div style="display:flex;align-items:center;"><span class="card-title" data-i18n="signal.title">Signal Analysis</span><span class="help" data-tip="FlowEngine 시그널 분석 결과입니다.">?</span></div></div>
         <div class="big-num neutral" id="infoSignalScore">--</div>
         <div class="big-sub">Score / 10</div>
         <div style="margin-top: 18px;">
@@ -667,7 +667,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
       </div>
     </div>
 
-    <!-- 구 15 Signal Indicators 제거됨 (TradeEngine은 Setup ABC 사용) -->
+    <!-- 구 15 Signal Indicators 제거됨 (FlowEngine은 Setup ABC 사용) -->
 
     <!-- Row 3: Bot Control -->
     <div class="grid" style="grid-template-columns: 1fr 1fr;">
@@ -701,12 +701,12 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
   <div class="tab-content" id="tab-ml">
     <style>@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}</style>
 
-    <!-- TradeEngine Status Bar (동적) -->
+    <!-- FlowEngine Status Bar (동적) -->
     <div class="card" style="margin-bottom:14px;padding:16px 22px;">
       <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;">
         <div style="display:flex;align-items:center;gap:10px;">
           <div id="enginePulse" style="width:10px;height:10px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);animation:pulse 2s infinite;"></div>
-          <span style="font-size:14px;font-weight:600;">TradeEngine v1</span>
+          <span style="font-size:14px;font-weight:600;">FlowEngine v1</span>
         </div>
         <div style="width:1px;height:24px;background:var(--border);"></div>
         <div style="display:flex;align-items:center;gap:8px;">
@@ -751,13 +751,13 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
 
     <!-- Setup Performance (동적 — /api/engine/overview 소비) -->
     <div class="card" style="margin-bottom:14px;">
-      <div class="card-header"><div style="display:flex;align-items:center;"><span class="card-title">Setup Performance</span><span class="help" data-tip="셋업 A/B/C 별 실매매 + 가상매매 성과.&#10;10건 이상 + 승률 35% 미만 → 자동 비활성화.&#10;감지 vs 실행 비율, 레짐별 승률 히트맵 포함.">?</span></div></div>
+      <div class="card-header"><div style="display:flex;align-items:center;"><span class="card-title">Flow Performance</span><span class="help" data-tip="FlowEngine 실매매 성과.&#10;10건 이상 + 승률 35% 미만 → 자동 비활성화.&#10;감지 vs 실행 비율 추적.">?</span></div></div>
       <div id="setupTrackerContent" style="font-size:12px;color:var(--text-muted);">데이터 수집 중...</div>
     </div>
 
     <!-- Setup x Regime 히트맵 -->
     <div class="card" style="margin-bottom:14px;">
-      <div class="card-header"><div style="display:flex;align-items:center;"><span class="card-title">Setup x Regime Heatmap</span><span class="help" data-tip="각 셋업이 어떤 레짐에서 승률이 높은지 한눈에 보기.&#10;초록=50%+, 노랑=35~50%, 빨강=35% 미만, 회색=데이터 없음.">?</span></div></div>
+      <div class="card-header"><div style="display:flex;align-items:center;"><span class="card-title">Flow x Regime Heatmap</span><span class="help" data-tip="FlowEngine이 어떤 레짐에서 승률이 높은지.&#10;초록=50%+, 노랑=35~50%, 빨강=35% 미만.">?</span></div></div>
       <div id="heatmapContent" style="overflow-x:auto;">
         <table class="trade-table" style="font-size:11px;">
           <thead>
@@ -863,7 +863,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
       <div class="metric"><span class="metric-label">Bot Status</span><span class="metric-value" id="botStatusDetail">--</span></div>
       <div class="metric"><span class="metric-label">Last Heartbeat</span><span class="metric-value" id="lastHeartbeat">--</span></div>
       <div class="metric"><span class="metric-label">Auto Trading</span><span class="metric-value" id="autoTradingStatus">--</span></div>
-      <div class="metric"><span class="metric-label">Engine</span><span class="metric-value" style="color:var(--green);">TradeEngine v1</span></div>
+      <div class="metric"><span class="metric-label">Engine</span><span class="metric-value" style="color:var(--green);">FlowEngine v1</span></div>
     </div>
 
   </div><!-- /tab-risk -->
@@ -1295,7 +1295,7 @@ const REGIME_LABELS = {
   'trending_up': 'TRENDING UP', 'trending_down': 'TRENDING DOWN',
   'ranging': 'RANGING', 'volatile': 'VOLATILE'
 };
-const SETUP_COLORS = {'A':'var(--green)','B':'var(--accent)','C':'var(--yellow)'};
+const SETUP_COLORS = {'FLOW':'var(--accent)','A':'var(--green)','B':'var(--accent)','C':'var(--yellow)'};
 
 async function updateEngineTab() {
   const data = await api('/api/engine/overview');
@@ -1309,8 +1309,8 @@ async function updateEngineTab() {
   document.getElementById('engineRegimeLabel').style.color = regimeColor;
 
   const es = data.engine || {};
-  document.getElementById('engineActiveSetup').textContent = es.setup ? `Setup ${es.setup}` : 'None';
-  document.getElementById('engineActiveSetup').style.color = es.setup ? (SETUP_COLORS[es.setup]||'var(--text-primary)') : 'var(--text-muted)';
+  document.getElementById('engineActiveSetup').textContent = es.setup ? es.setup : 'None';
+  document.getElementById('engineActiveSetup').style.color = es.setup ? 'var(--accent)' : 'var(--text-muted)';
   const dir = (es.direction||'--').toUpperCase();
   const dirEl = document.getElementById('engineDirection');
   dirEl.textContent = dir;

@@ -125,7 +125,7 @@ class TelegramNotifier:
 
         elif cmd == "/help":
             await self._send(
-                "<b>TradeEngine v1 Commands</b>\n\n"
+                "<b>FlowEngine v1 Commands</b>\n\n"
                 "\U0001f7e2 /on — Autotrading ON\n"
                 "\U0001f534 /off — Autotrading OFF\n"
                 "\U0001f4ca /status — Bot Status\n"
@@ -260,7 +260,7 @@ class TelegramNotifier:
             price_str = await self.redis.get("rt:price:BTC-USDT-SWAP") if self.redis else None
             price = float(price_str) if price_str else 0
 
-            # TradeEngine 상태
+            # FlowEngine 상태
             state = await self.redis.get_json("sys:trade_state") if self.redis else None
 
             # 거래량
@@ -269,8 +269,8 @@ class TelegramNotifier:
             move_60s = float(vel.get("move_60s", 0)) if vel else 0
 
             trend = state.get("trend", "?") if state else "?"
-            structure = state.get("structure", "?") if state else "?"
-            setup = state.get("setup", "none") if state else "none"
+            direction = state.get("direction", "?") if state else "?"
+            score = state.get("score", 0) if state else 0
 
             trend_icon = "\U0001f7e2" if trend == "up" else "\U0001f534" if trend == "down" else "\u26aa"
 
@@ -278,8 +278,7 @@ class TelegramNotifier:
                 f"\U0001f310 <b>Market Overview</b>\n\n"
                 f"BTC: <b>${price:,.1f}</b>\n"
                 f"Trend: {trend_icon} {trend.upper()}\n"
-                f"Structure: {structure}\n"
-                f"Active Setup: {setup or 'none'}\n"
+                f"Flow: {direction.upper()} (score {score:.1f})\n"
                 f"\n"
                 f"60s Range: ${range_60s:,.0f}\n"
                 f"60s Move: ${move_60s:+,.0f}"
@@ -417,14 +416,11 @@ class TelegramNotifier:
                                      price: float, reason: str):
         """셋업 감지 알림 (진입 전)"""
         icon = "\U0001f4c8" if direction == "long" else "\U0001f4c9"
-        setup_names = {"A": "Trend Momentum", "B": "OB Retest", "C": "Breakout"}
-        name = setup_names.get(setup, setup)
         text = (
-            f"\U0001f50d <b>Setup {setup} Detected</b>\n\n"
+            f"\U0001f50d <b>Flow Signal</b>\n\n"
             f"{icon} {direction.upper()} @ ${price:,.1f}\n"
-            f"Type: {name}\n"
             f"Score: {score:.1f}/10\n"
-            f"Reason: {reason}"
+            f"{reason}"
         )
         await self._send(text)
 
@@ -553,24 +549,13 @@ class TelegramNotifier:
         await self._send(text)
 
     async def notify_study_done(self, label: str, result,
-                                elapsed_sec: float = 0,
-                                swing_oos: float = 0, scalp_oos: float = 0,
-                                swing_buf: int = 0, scalp_buf: int = 0):
+                                elapsed_sec: float = 0, **kwargs):
         learned = result if isinstance(result, (int, float)) else 0
         m, s = divmod(int(elapsed_sec), 60)
         text = (
-            f"\u2705 <b>학습 완료 | {label}</b>\n"
-            f"\n"
+            f"\u2705 <b>학습 완료 | {label}</b>\n\n"
             f"학습 건수: {learned:,}건\n"
-            f"소요 시간: {m}분 {s}초\n"
-        )
-        if swing_oos or scalp_oos:
-            text += (
-                f"Swing OOS: {swing_oos:.3f} (버퍼 {swing_buf:,})\n"
-                f"Scalp OOS: {scalp_oos:.3f} (버퍼 {scalp_buf:,})\n"
-            )
-        text += (
-            f"\n"
+            f"소요 시간: {m}분 {s}초\n\n"
             f"매매 재개\n"
             f"{datetime.now(timezone.utc).strftime('%H:%M:%S UTC')}"
         )

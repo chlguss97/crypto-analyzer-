@@ -535,7 +535,7 @@ async def manual_update_tp(req: ManualTpRequest):
     return {"ok": True, "queued": True, "symbol": sym, "price": req.price}
 
 
-# ── TradeEngine / Setup Tracker 엔드포인트 ──
+# ── FlowEngine / Setup Tracker 엔드포인트 ──
 
 @app.get("/api/setup-tracker")
 async def get_setup_tracker():
@@ -597,7 +597,7 @@ async def get_risk_state():
 
 @app.get("/api/engine/state")
 async def get_engine_state():
-    """TradeEngine v1 실시간 상태 (setup/direction/score/trend/structure/streak)"""
+    """FlowEngine v1 실시간 상태"""
     await _ensure_initialized()
     state = await redis.get_json("sys:trade_state")
     if not state:
