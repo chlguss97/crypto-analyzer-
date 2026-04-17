@@ -197,18 +197,25 @@ class FlowEngine:
     # ══════════════════════════════════════
 
     def _ema_trend(self, df) -> str:
-        """EMA20/50 기반 추세. 단순하게."""
-        if df is None or len(df) < 50:
+        """EMA20/50 기반 추세. 데이터 적으면 EMA20만으로 판단."""
+        if df is None or len(df) < 10:
             return "neutral"
         c = df["close"].astype(float)
-        ema20 = float(c.ewm(span=20, adjust=False).mean().iloc[-1])
-        ema50 = float(c.ewm(span=50, adjust=False).mean().iloc[-1])
         p = float(c.iloc[-1])
+        ema20 = float(c.ewm(span=min(20, len(c)-1), adjust=False).mean().iloc[-1])
 
-        if p > ema20 > ema50:
-            return "up"
-        elif p < ema20 < ema50:
-            return "down"
+        if len(df) >= 50:
+            ema50 = float(c.ewm(span=50, adjust=False).mean().iloc[-1])
+            if p > ema20 > ema50:
+                return "up"
+            elif p < ema20 < ema50:
+                return "down"
+        else:
+            # 데이터 부족 — EMA20 기준만으로 판단 (백필 완료 전)
+            if p > ema20 * 1.002:
+                return "up"
+            elif p < ema20 * 0.998:
+                return "down"
         return "neutral"
 
     def _atr(self, df, period=14) -> float:

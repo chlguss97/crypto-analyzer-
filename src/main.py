@@ -174,9 +174,8 @@ class CryptoAnalyzer:
         await self.telegram.initialize()
         await self.executor.initialize()
 
-        # ML 콜드스타트 (04-15: 기존 모델 폐기, 빈 모델로 시작)
-        # 기존 pkl은 서버에 백업으로 남아있음
-        logger.info("ML: 콜드스타트 (통합 모델 — 기존 데이터 폐기, raw 시그널로 매매)")
+        # FlowML 상태 로그
+        logger.info(f"FlowML: trained={self.flow_ml.trained} samples={len(self.flow_ml.buffer_X)}")
 
         # 잔고 + 리스크
         balance = await self.executor.get_balance()
@@ -1593,9 +1592,11 @@ class CryptoAnalyzer:
                     risk.get("balance", 0),
                 )
 
-                # ML 모델 주기적 저장
-                self.ml_swing.save()
-                self.ml_scalp.save()
+                # FlowML 주기적 저장
+                try:
+                    self.flow_ml.save()
+                except Exception:
+                    pass
 
                 # 오래된 가상매매 기록 정리 (30일 이상)
                 try:
