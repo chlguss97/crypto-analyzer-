@@ -105,6 +105,7 @@ class CryptoAnalyzer:
         self._unified_last_trade_time = 0
         self._unified_last_exit_reason = None
         self._unified_last_entry_price = 0.0
+        self._unified_same_dir_count = 0  # 04-17: 같은 방향 연속 진입 카운터
 
         # 매매 엔진 (executor 먼저 생성 → risk_manager 가 참조)
         self.leverage_calc = LeverageCalculator()
@@ -1200,6 +1201,16 @@ class CryptoAnalyzer:
                 logger.info(f"[TRADE] 방향 전환 쿨다운 ({flip_cd}s) → 대기")
                 return
 
+        # 04-17: 같은 방향 연속 4회 이상 차단 (LONG 편향 86% 사태 방지)
+        MAX_SAME_DIR = 4
+        if self._unified_last_dir == direction:
+            if self._unified_same_dir_count >= MAX_SAME_DIR:
+                logger.info(
+                    f"[TRADE] 같은 방향 연속 {self._unified_same_dir_count}회 → "
+                    f"{direction.upper()} 차단 (반대 방향만 허용)"
+                )
+                return
+
         # 가격 확인
         price_str = await self.redis.get("rt:price:BTC-USDT-SWAP")
         price = float(price_str) if price_str else 0
@@ -1329,6 +1340,11 @@ class CryptoAnalyzer:
         pos = await self.position_manager.open_position(trade_req)
         if pos:
             self._unified_last_trade_time = _t.time()
+            # 04-17: 같은 방향 연속 카운터
+            if self._unified_last_dir == direction:
+                self._unified_same_dir_count += 1
+            else:
+                self._unified_same_dir_count = 1
             self._unified_last_dir = direction
             self._unified_last_entry_price = pos.entry_price
 
@@ -1488,6 +1504,7 @@ class CryptoAnalyzer:
                 self._unified_streak = 0
                 self._unified_cooldown_until = 0
                 self._unified_last_dir = None
+                self._unified_same_dir_count = 0
                 self._loss_warning_sent = False  # 일일 손실 경고 플래그 리셋
 
                 # 일일 리포트 — DB에서 어제 거래 집계 (정확)

@@ -290,6 +290,37 @@ class PositionManager:
         tp2_price = float(trade_request["tp2_price"])
         tp3_price = float(trade_request.get("tp3_price", tp2_price))
 
+        # 🔒 진입 직후 체결가 vs SL 거리 검증 — 0분 즉사 방지 (04-17)
+        # 체결가가 SL보다 이미 나쁜 방향이거나, SL까지 거리 < 0.15% 이면
+        # 진입해봤자 바로 sl_failsafe 발동 → 즉시 청산해서 손실만 확정
+        MIN_SL_DIST_PCT = 0.15  # 체결가 대비 SL 최소 거리 (0.15% = lev 20x 에서 마진 3%)
+        if fill_price > 0 and sl_price > 0:
+            if direction == "long":
+                sl_dist_pct = (fill_price - sl_price) / fill_price * 100
+            else:
+                sl_dist_pct = (sl_price - fill_price) / fill_price * 100
+
+            if sl_dist_pct < MIN_SL_DIST_PCT:
+                logger.error(
+                    f"🚫 SL 거리 부족 → 즉시 청산 | {direction.upper()} "
+                    f"fill=${fill_price:.1f} SL=${sl_price:.1f} "
+                    f"dist={sl_dist_pct:.3f}% < {MIN_SL_DIST_PCT}% (0분 즉사 방지)"
+                )
+                try:
+                    await self.executor.close_position(direction, filled_size, "sl_too_close")
+                except Exception as e:
+                    logger.error(f"SL 거리 부족 청산 실패: {e}")
+                if self.telegram:
+                    try:
+                        await self.telegram._send(
+                            f"🚫 진입 취소 — SL 거리 부족\n"
+                            f"{direction.upper()} ${fill_price:,.0f} → SL ${sl_price:,.0f}\n"
+                            f"거리 {sl_dist_pct:.3f}% < 최소 {MIN_SL_DIST_PCT}%"
+                        )
+                    except Exception:
+                        pass
+                return None
+
         # 🔒 진입 직후 SL + TP1 만 서버사이드 등록 (러너 트레일링 모드)
         # 단, 사이즈가 OKX 최소단위 × 2 미만이면 50% 분할 시 0.5 contract 가 되어 거부됨
         # → 1 contract 만 가질 때는 TP1 = 100% 청산 (러너 모드 비활성)
@@ -313,6 +344,40 @@ class PositionManager:
             sl_price=sl_price,
             tp_levels=tp_levels,
         )
+
+        # 🔒 SL 등록 검증 — OKX에 실제 등록됐는지 확인 (04-17: 0분 즉사 근본 수정)
+        # set_protection 이 ID를 반환해도 OKX가 실제로 갖고 있는지 확신 못함
+        # → 0.5초 대기 후 pending algos 조회로 검증, 미발견 시 재등록 2회
+        if algo_ids.get("sl"):
+            await asyncio.sleep(0.5)
+            for verify_attempt in range(3):
+                try:
+                    inst_id = self.executor.exchange.market(symbol)["id"]
+                    resp = await self.executor.exchange.private_get_trade_orders_algo_pending(
+                        {"instType": "SWAP", "instId": inst_id}
+                    )
+                    pending = resp.get("data", []) if isinstance(resp, dict) else []
+                    sl_found = any(
+                        (item.get("algoClOrdId") == algo_ids["sl"] or item.get("algoId") == algo_ids["sl"])
+                        for item in pending
+                    )
+                    if sl_found:
+                        logger.info(f"✅ SL 등록 검증 OK: id={algo_ids['sl']} (시도 {verify_attempt+1})")
+                        break
+                    else:
+                        logger.warning(
+                            f"⚠️  SL 등록 검증 실패 ({verify_attempt+1}/3) — OKX pending에 미발견. 재등록 시도"
+                        )
+                        new_sl = await self.executor.set_stop_loss(direction, filled_size, sl_price)
+                        if new_sl:
+                            algo_ids["sl"] = new_sl
+                            await asyncio.sleep(0.3)
+                        else:
+                            algo_ids["sl"] = None
+                            break
+                except Exception as e:
+                    logger.debug(f"SL 검증 조회 예외 ({verify_attempt+1}): {e}")
+                    break
 
         # 🚨 SL 등록 실패 시 진입을 즉시 되돌림 (보호장치 없는 포지션 금지)
         if not algo_ids.get("sl"):
