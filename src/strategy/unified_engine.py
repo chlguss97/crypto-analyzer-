@@ -17,10 +17,11 @@ logger = logging.getLogger(__name__)
 
 
 class TradeEngine:
-    """멀티TF 셋업 매칭 엔진"""
+    """멀티TF 셋업 매칭 엔진 + 오더플로우 방향 확인"""
 
-    def __init__(self):
+    def __init__(self, redis=None):
         self.name = "unified"
+        self.redis = redis  # 04-17: Redis 에서 CVD/펀딩/OI 실시간 데이터 읽기
 
     async def analyze(self, df_1m: pd.DataFrame, df_5m: pd.DataFrame,
                       df_15m: pd.DataFrame = None, df_1h: pd.DataFrame = None,
@@ -53,7 +54,7 @@ class TradeEngine:
             return result
 
         # ═══ 1단계: 시장 컨텍스트 (HTF 분석) ═══
-        ctx = self._market_context(df_5m, df_15m, df_1h)
+        ctx = await self._market_context(df_5m, df_15m, df_1h)
         result["signals"]["context"] = ctx
 
         # ATR 계산 (SL/TP용)
@@ -115,7 +116,7 @@ class TradeEngine:
     # 시장 컨텍스트 (HTF 분석)
     # ══════════════════════════════════════════
 
-    def _market_context(self, df_5m, df_15m, df_1h) -> dict:
+    async def _market_context(self, df_5m, df_15m, df_1h) -> dict:
         """
         상위 타임프레임 분석 → 추세 방향 + 강도 판정.
         모든 셋업의 방향 필터로 사용됨.
@@ -195,6 +196,81 @@ class TradeEngine:
         ctx["ema50_5m"] = ema50_5m
         ctx["ema200_5m"] = ema200_5m
         ctx["price"] = price
+
+        # ═══ 04-17: 오더플로우 방향 확인 (선행 지표) ═══
+        # EMA 는 후행 → 이미 움직인 후 확인. CVD/펀딩/OI 는 움직이기 전 힘의 방향.
+        # flow_bias: -1.0(강한 매도) ~ +1.0(강한 매수)
+        flow_bias = 0.0
+        ctx["flow_signals"] = {}
+
+        if self.redis:
+            try:
+                # 1) CVD (누적 거래량 델타) — 가장 중요한 선행 신호
+                #    양수 = 매수 우위 (가격 상승 압력), 음수 = 매도 우위
+                cvd_15m = float(await self.redis.get("cvd:15m:current:BTC-USDT-SWAP") or 0)
+                cvd_1h = float(await self.redis.get("cvd:1h:current:BTC-USDT-SWAP") or 0)
+                # CVD 방향: 양쪽 다 양수면 강한 매수, 양쪽 다 음수면 강한 매도
+                cvd_dir = 0
+                if cvd_15m > 0 and cvd_1h > 0:
+                    cvd_dir = 0.4
+                elif cvd_15m < 0 and cvd_1h < 0:
+                    cvd_dir = -0.4
+                elif cvd_1h > 0:
+                    cvd_dir = 0.15
+                elif cvd_1h < 0:
+                    cvd_dir = -0.15
+                flow_bias += cvd_dir
+                ctx["flow_signals"]["cvd_15m"] = round(cvd_15m, 1)
+                ctx["flow_signals"]["cvd_1h"] = round(cvd_1h, 1)
+                ctx["flow_signals"]["cvd_dir"] = cvd_dir
+
+                # 2) 펀딩율 — 극단값이면 역방향 편향 (군중 반대)
+                #    +0.01% 이상 = 롱 과열 → 숏 편향, -0.01% 이하 = 숏 과열 → 롱 편향
+                funding = float(await self.redis.get("rt:funding:BTC-USDT-SWAP") or 0)
+                fund_dir = 0
+                if funding > 0.0003:      # 0.03%+ (극단 롱 과열)
+                    fund_dir = -0.2
+                elif funding > 0.0001:    # 0.01%+ (롱 편향)
+                    fund_dir = -0.1
+                elif funding < -0.0003:   # -0.03% (극단 숏 과열)
+                    fund_dir = 0.2
+                elif funding < -0.0001:
+                    fund_dir = 0.1
+                flow_bias += fund_dir
+                ctx["flow_signals"]["funding"] = funding
+                ctx["flow_signals"]["funding_dir"] = fund_dir
+
+                # 3) 롱/숏 비율 — 극단이면 역방향
+                ls_ratio = float(await self.redis.get("rt:ls_ratio:BTC-USDT-SWAP") or 1.0)
+                ls_dir = 0
+                if ls_ratio > 2.0:        # 롱이 숏의 2배 → 숏 편향
+                    ls_dir = -0.15
+                elif ls_ratio > 1.5:
+                    ls_dir = -0.05
+                elif ls_ratio < 0.5:      # 숏이 롱의 2배 → 롱 편향
+                    ls_dir = 0.15
+                elif ls_ratio < 0.67:
+                    ls_dir = 0.05
+                flow_bias += ls_dir
+                ctx["flow_signals"]["ls_ratio"] = round(ls_ratio, 2)
+                ctx["flow_signals"]["ls_dir"] = ls_dir
+
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).debug(f"오더플로우 조회 실패: {e}")
+
+        ctx["flow_bias"] = round(flow_bias, 3)
+
+        # ═══ 오더플로우와 EMA 추세가 충돌하면 → neutral 로 격하 ═══
+        # EMA 는 up 인데 CVD+펀딩이 매도 → 추세 전환 직전일 가능성
+        if ctx["trend"] == "up" and flow_bias < -0.2:
+            ctx["trend"] = "neutral"
+            ctx["trend_strength"] = 0.0
+            ctx["flow_signals"]["override"] = "trend_up_but_flow_bearish"
+        elif ctx["trend"] == "down" and flow_bias > 0.2:
+            ctx["trend"] = "neutral"
+            ctx["trend_strength"] = 0.0
+            ctx["flow_signals"]["override"] = "trend_down_but_flow_bullish"
 
         return ctx
 

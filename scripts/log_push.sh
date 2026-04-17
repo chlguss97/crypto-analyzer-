@@ -88,8 +88,14 @@ if [ -n "$DC_LP" ]; then
     $DC_LP logs --tail 500 bot 2>&1 | grep -E "진입|청산|finalize|sl_hit|TP1|러너|ERROR|🚨|💀" > "bot_logs/recent_events.log" 2>/dev/null || true
 fi
 
+# 7-3. 봇 상태 스냅샷 (Claude 실시간 분석용)
+SNAP_SRC="$REPO_DIR/data/logs/bot_snapshot.json"
+if [ -f "$SNAP_SRC" ]; then
+    cp "$SNAP_SRC" "bot_snapshot.json"
+fi
+
 # 8. 커밋 + 푸시
-git add digests/ trade_history/ bot_logs/
+git add digests/ trade_history/ bot_logs/ bot_snapshot.json 2>/dev/null
 if git diff --cached --quiet; then
     echo "$(date '+%H:%M:%S') 변경 없음"
 else

@@ -91,7 +91,7 @@ class CryptoAnalyzer:
         self.scalp_engine = ScalpEngine()
 
         # TradeEngine (04-15 전면 개편)
-        self.trade_engine = TradeEngine()
+        self.trade_engine = TradeEngine(redis=self.redis)
 
         # AdaptiveML (레거시 유지, 통합 모델에서는 미사용 — 콜드스타트)
         self.ml_swing = AdaptiveML(mode="swing")
@@ -1561,11 +1561,11 @@ class CryptoAnalyzer:
             await asyncio.sleep(30)
 
     async def periodic_heartbeat(self):
-        """헬스체크 (60초마다) — heartbeat + 잔고 캐시 (timeout 방어)"""
+        """헬스체크 (60초마다) — heartbeat + 잔고 캐시 + 봇 스냅샷 저장"""
         while self._running:
             await self.redis.set("sys:last_heartbeat", str(int(_time.time())))
+            bal = 0
             try:
-                # OKX get_balance() 가 멈춰도 heartbeat 영향 없도록 5초 타임아웃
                 bal = await asyncio.wait_for(self.executor.get_balance(), timeout=5.0)
                 if bal and bal > 0:
                     await self.redis.set("sys:balance", f"{bal:.2f}")
@@ -1573,6 +1573,57 @@ class CryptoAnalyzer:
                 logger.debug("잔고 캐시 timeout (이전 값 유지)")
             except Exception as e:
                 logger.debug(f"잔고 캐시 실패 (이전 값 유지): {e}")
+
+            # 04-17: 봇 상태 스냅샷 — Claude 가 git fetch 로 현재 상태 즉시 확인
+            try:
+                import json as _j
+                positions_snap = {}
+                for sym, pos in self.position_manager.positions.items():
+                    positions_snap[sym] = pos.to_dict()
+                regime = await self.redis.get("sys:regime") or "unknown"
+                regime_detail = await self.redis.get_json("sys:regime_detail") or {}
+                trade_state = await self.redis.get_json("sys:trade_state") or {}
+                autotrading = await self.redis.get("sys:autotrading") or "off"
+
+                snapshot = {
+                    "ts": int(_time.time()),
+                    "ts_iso": datetime.now(timezone.utc).isoformat(),
+                    "balance": round(bal, 2) if bal else 0,
+                    "autotrading": autotrading,
+                    "regime": regime,
+                    "regime_detail": regime_detail,
+                    "trade_state": trade_state,
+                    "positions": positions_snap,
+                    "streak": self._unified_streak,
+                    "daily_pnl": round(self._unified_daily_pnl, 2),
+                    "same_dir_count": self._unified_same_dir_count,
+                    "last_dir": self._unified_last_dir,
+                    "pending_algos": [],
+                }
+                # OKX pending algos 조회 (stale 알고 감지)
+                try:
+                    inst_id = self.executor.exchange.market(self.symbol)["id"]
+                    resp = await self.executor.exchange.private_get_trade_orders_algo_pending(
+                        {"instType": "SWAP", "instId": inst_id}
+                    )
+                    algos = resp.get("data", []) if isinstance(resp, dict) else []
+                    snapshot["pending_algos"] = [
+                        {"id": a.get("algoClOrdId") or a.get("algoId"),
+                         "type": a.get("ordType"), "trigger": a.get("triggerPx"),
+                         "side": a.get("side"), "sz": a.get("sz")}
+                        for a in algos
+                    ]
+                except Exception:
+                    pass
+
+                snap_path = Path("/app/data/logs/bot_snapshot.json") if Path("/app/data/logs").is_dir() \
+                    else Path("data/logs/bot_snapshot.json")
+                snap_path.parent.mkdir(parents=True, exist_ok=True)
+                with open(snap_path, "w") as f:
+                    _j.dump(snapshot, f, indent=2, default=str)
+            except Exception as e:
+                logger.debug(f"스냅샷 저장 실패: {e}")
+
             await asyncio.sleep(60)
 
     async def periodic_orphan_algo_sweeper(self):
