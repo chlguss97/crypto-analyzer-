@@ -66,7 +66,7 @@ class BinanceStream:
         self._running = True
         self._reconnect_count = 0
 
-        # 7 스트림: aggTrades + miniTicker + 캔들 4종 + 강제 청산
+        # 10 스트림: aggTrades + miniTicker + 캔들 7종 + 강제 청산
         streams = [
             f"{SYMBOL}@aggTrade",
             f"{SYMBOL}@miniTicker",
@@ -74,7 +74,10 @@ class BinanceStream:
             f"{SYMBOL}@kline_5m",
             f"{SYMBOL}@kline_15m",
             f"{SYMBOL}@kline_1h",
-            f"{SYMBOL}@forceOrder",  # 실시간 강제 청산 — 변동성 폭발 감지
+            f"{SYMBOL}@kline_4h",
+            f"{SYMBOL}@kline_1d",
+            f"{SYMBOL}@kline_1w",
+            f"{SYMBOL}@forceOrder",
         ]
         url = f"{BINANCE_WS}/{'/'.join(streams)}"
 

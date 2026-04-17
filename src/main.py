@@ -1146,11 +1146,13 @@ class CryptoAnalyzer:
         # 자동매매 상태
         autotrading = (await self.redis.get("sys:autotrading") or "off") == "on"
 
-        # 캔들 로드
+        # 캔들 로드 — 단기(진입) + HTF(큰 추세 필터)
         candles_1m = await self.db.get_candles(self.symbol, "1m", limit=100)
         candles_5m = await self.db.get_candles(self.symbol, "5m", limit=100)
         candles_15m = await self.db.get_candles(self.symbol, "15m", limit=100)
         candles_1h = await self.db.get_candles(self.symbol, "1h", limit=100)
+        candles_4h = await self.db.get_candles(self.symbol, "4h", limit=50)
+        candles_1d = await self.db.get_candles(self.symbol, "1d", limit=30)
 
         if not candles_1m or len(candles_1m) < 30 or not candles_5m or len(candles_5m) < 30:
             return
@@ -1159,12 +1161,17 @@ class CryptoAnalyzer:
         df_5m = BaseIndicator.to_dataframe(candles_5m)
         df_15m = BaseIndicator.to_dataframe(candles_15m) if candles_15m and len(candles_15m) >= 20 else None
         df_1h = BaseIndicator.to_dataframe(candles_1h) if candles_1h and len(candles_1h) >= 20 else None
+        df_4h = BaseIndicator.to_dataframe(candles_4h) if candles_4h and len(candles_4h) >= 10 else None
+        df_1d = BaseIndicator.to_dataframe(candles_1d) if candles_1d and len(candles_1d) >= 10 else None
 
         # 실시간 가격 변속도
         rt_velocity = await self.redis.hgetall("rt:velocity:BTC-USDT-SWAP")
 
-        # 통합 엔진 분석
-        result = await self.trade_engine.analyze(df_1m, df_5m, df_15m, df_1h, rt_velocity)
+        # 통합 엔진 분석 (HTF 포함)
+        result = await self.trade_engine.analyze(
+            df_1m, df_5m, df_15m, df_1h, rt_velocity,
+            df_4h=df_4h, df_1d=df_1d,
+        )
 
         # 컨텍스트 추출
         ctx = result.get("signals", {}).get("context", {})
@@ -1443,8 +1450,8 @@ class CryptoAnalyzer:
         """
         while self._running:
             try:
-                # 30초마다 REST 백필 (WS 누락 방지 + 초기 데이터 확보)
-                for tf in ["1m", "5m", "15m", "1h"]:
+                # 30초마다 REST 백필 (WS 누락 방지 + HTF 포함)
+                for tf in ["1m", "5m", "15m", "1h", "4h", "1d", "1w"]:
                     candles = await self.candle_collector.fetch_candles(tf, limit=5)
                     if candles:
                         await self.db.insert_candles(self.symbol, tf, candles)

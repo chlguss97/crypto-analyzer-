@@ -25,7 +25,8 @@ class TradeEngine:
 
     async def analyze(self, df_1m: pd.DataFrame, df_5m: pd.DataFrame,
                       df_15m: pd.DataFrame = None, df_1h: pd.DataFrame = None,
-                      rt_velocity: dict = None) -> dict:
+                      rt_velocity: dict = None,
+                      df_4h: pd.DataFrame = None, df_1d: pd.DataFrame = None) -> dict:
         """
         멀티TF 분석 → 셋업 매칭 → 진입 판정.
 
@@ -53,8 +54,8 @@ class TradeEngine:
         if df_5m is None or len(df_5m) < 30:
             return result
 
-        # ═══ 1단계: 시장 컨텍스트 (HTF 분석) ═══
-        ctx = await self._market_context(df_5m, df_15m, df_1h)
+        # ═══ 1단계: 시장 컨텍스트 (HTF 분석 — 4h/1d 큰 추세 포함) ═══
+        ctx = await self._market_context(df_5m, df_15m, df_1h, df_4h, df_1d)
         result["signals"]["context"] = ctx
 
         # ATR 계산 (SL/TP용)
@@ -116,7 +117,7 @@ class TradeEngine:
     # 시장 컨텍스트 (HTF 분석)
     # ══════════════════════════════════════════
 
-    async def _market_context(self, df_5m, df_15m, df_1h) -> dict:
+    async def _market_context(self, df_5m, df_15m, df_1h, df_4h=None, df_1d=None) -> dict:
         """
         상위 타임프레임 분석 → 추세 방향 + 강도 판정.
         모든 셋업의 방향 필터로 사용됨.
@@ -167,20 +168,79 @@ class TradeEngine:
         else:
             trend_5m = "neutral"
 
-        # 종합: 2개 이상 TF가 일치하면 추세 확정
-        votes = [trend_5m, trend_15m, trend_1h]
-        up_votes = votes.count("up")
-        down_votes = votes.count("down")
+        # 4h EMA 추세
+        trend_4h = "neutral"
+        if df_4h is not None and len(df_4h) >= 20:
+            c4h = df_4h["close"].astype(float)
+            ema20_4h = float(c4h.ewm(span=20, adjust=False).mean().iloc[-1])
+            ema50_4h = float(c4h.ewm(span=50, adjust=False).mean().iloc[-1])
+            p4h = float(c4h.iloc[-1])
+            if p4h > ema20_4h and ema20_4h > ema50_4h:
+                trend_4h = "up"
+            elif p4h < ema20_4h and ema20_4h < ema50_4h:
+                trend_4h = "down"
 
-        if up_votes >= 2:
-            ctx["trend"] = "up"
-            ctx["trend_strength"] = up_votes / 3
-        elif down_votes >= 2:
-            ctx["trend"] = "down"
-            ctx["trend_strength"] = down_votes / 3
-        else:
+        # 1d EMA 추세 (가장 강한 필터)
+        trend_1d = "neutral"
+        if df_1d is not None and len(df_1d) >= 20:
+            c1d = df_1d["close"].astype(float)
+            ema20_1d = float(c1d.ewm(span=20, adjust=False).mean().iloc[-1])
+            ema50_1d = float(c1d.ewm(span=50, adjust=False).mean().iloc[-1])
+            p1d = float(c1d.iloc[-1])
+            if p1d > ema20_1d and ema20_1d > ema50_1d:
+                trend_1d = "up"
+            elif p1d < ema20_1d and ema20_1d < ema50_1d:
+                trend_1d = "down"
+
+        # 종합: 가중 투표 (HTF 가중치 높게)
+        # 5m=1, 15m=1, 1h=2, 4h=3, 1d=4 → 큰 추세일수록 중요
+        weighted_up = 0
+        weighted_down = 0
+        total_weight = 0
+        for trend, weight in [(trend_5m, 1), (trend_15m, 1), (trend_1h, 2),
+                               (trend_4h, 3), (trend_1d, 4)]:
+            total_weight += weight
+            if trend == "up":
+                weighted_up += weight
+            elif trend == "down":
+                weighted_down += weight
+
+        if total_weight > 0:
+            up_ratio = weighted_up / total_weight
+            down_ratio = weighted_down / total_weight
+            if up_ratio >= 0.4:  # 40%+ 가중치가 up → 상승 추세
+                ctx["trend"] = "up"
+                ctx["trend_strength"] = round(up_ratio, 2)
+            elif down_ratio >= 0.4:
+                ctx["trend"] = "down"
+                ctx["trend_strength"] = round(down_ratio, 2)
+            else:
+                ctx["trend"] = "neutral"
+                ctx["trend_strength"] = 0.0
+
+        ctx["trend_4h"] = trend_4h
+        ctx["trend_1d"] = trend_1d
+
+        # ★ HTF 역방향 차단: 1d가 down인데 단기가 up → neutral 격하
+        # 큰 추세를 거스르는 진입은 WR을 크게 낮춤
+        if trend_1d == "down" and ctx["trend"] == "up":
             ctx["trend"] = "neutral"
             ctx["trend_strength"] = 0.0
+            ctx["htf_override"] = "1d_down_blocks_long"
+        elif trend_1d == "up" and ctx["trend"] == "down":
+            ctx["trend"] = "neutral"
+            ctx["trend_strength"] = 0.0
+            ctx["htf_override"] = "1d_up_blocks_short"
+        # 4h도 동일 (1d가 neutral이면 4h가 최종 필터)
+        elif trend_1d == "neutral":
+            if trend_4h == "down" and ctx["trend"] == "up":
+                ctx["trend"] = "neutral"
+                ctx["trend_strength"] = 0.0
+                ctx["htf_override"] = "4h_down_blocks_long"
+            elif trend_4h == "up" and ctx["trend"] == "down":
+                ctx["trend"] = "neutral"
+                ctx["trend_strength"] = 0.0
+                ctx["htf_override"] = "4h_up_blocks_short"
 
         # 5m 스윙 구조 판정
         ctx["structure"] = self._swing_structure(df_5m)
