@@ -5,6 +5,47 @@
 
 ---
 
+## 2026-04-17 (후반)
+
+### FlowEngine v1 — 오더플로우 기반 매매 엔진 전환
+
+4번째이자 가장 단순한 전략. 14지표 → ScalpEngine → Setup ABC → **FlowEngine**.
+
+**설계 원칙**: 3가지 조건 전부 YES면 진입, 하나라도 NO면 패스.
+1. 큰 추세 (1d/4h EMA20/50) — 방향 결정
+2. 주요 레벨 (1d/4h/1h 스윙 고저점, 멀티TF 병합) — 진입 자리
+3. CVD 합산 (OKX+Binance, threshold 0.5 BTC) — 오더플로우 확인
+
+**FlowML**: 경량 GBM (16피처), 50건마다 자동 재학습, 콜드 스타트 시 보정 0
+**HTF 편향**: 차단 아님 가감만 (하락장 롱 가능 — 감점으로 확신 있을 때만)
+**추세 돌파**: 1d/4h 20봉 고저점 돌파 감지 → 최고 우선 시그널
+
+### Binance 선물 데이터 전면 전환
+
+- WS 10스트림: aggTrade, miniTicker, kline(1m~1w), forceOrder
+- 캔들: Binance WS → DB 직접 저장 (0ms), REST는 30초 백업
+- CVD 합산: OKX + Binance = 시장 75% 커버
+- 대형 체결 $50k+: 5분 윈도우 방향 편향
+- 청산 폭발: $500k+/분 → 변동성 시그널
+- 이벤트 드리븐: kline 확정 → pub/sub → 즉시 평가 (~0ms)
+
+### 레거시 코드 정리
+
+- main.py: 14개 지표 import/인스턴스 전부 주석처리
+- 활성 import 23개 → 19개
+- PaperTrader, HistoricalLearner, AutoBacktest, MetaLearner = None
+- AdaptiveML swing/scalp = 주석
+- SetupTracker: "A/B/C" → "FLOW"
+- 봇 메시지: "FlowEngine v1"
+
+### 점수/등급 정합성 수정
+
+- 최소 점수 5.5 체크 추가 (htf_bias 적용 후)
+- 등급 동적 매핑 (9+ A+, 8+ A, 7+ B+, 5.5+ B)
+- "B+" 하드코딩 제거
+
+---
+
 ## 2026-04-16~17
 
 ### 대시보드 전면 개편
