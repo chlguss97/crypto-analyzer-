@@ -1,12 +1,14 @@
 # Commit Log
 
 > 자동 생성 — `scripts/update_commit_log.sh` (매 커밋 후 실행)
-> Updated: 2026-04-17 10:53:51    
-> Total commits: 184 (2026-04-03 → 2026-04-17)
+> Updated: 2026-04-17 11:11:22    
+> Total commits: 186 (2026-04-03 → 2026-04-17)
 
 Claude 가 질문/변경 작업 시 이 파일을 참고해서 과거 변경 이력 컨텍스트를 확보합니다. 수동 편집 금지 — 다음 커밋 시 덮어써집니다.
 
 ## 2026-04-17
+- `a312589` feat: FlowEngine v1 — 단순 오더플로우 엔진 (ABC 모델 대체)
+- `1decdbc` chore: COMMIT_LOG 갱신
 - `7ec5e08` fix: 점수 정합성 — 최소점수 체크 + 등급 동적 매핑
 - `900148b` chore: COMMIT_LOG 갱신
 - `25c3d11` fix: HTF 하드차단 → 편향 가감 전환 + 추세 돌파 감지
