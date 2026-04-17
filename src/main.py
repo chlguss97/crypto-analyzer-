@@ -15,27 +15,30 @@ from src.data.candle_collector import CandleCollector
 from src.data.ws_stream import WebSocketStream
 from src.data.binance_stream import BinanceStream
 from src.data.oi_funding import OIFundingCollector
-from src.engine.fast.ema import EMAIndicator
-from src.engine.fast.rsi import RSIIndicator
-from src.engine.fast.bollinger import BollingerIndicator
-from src.engine.fast.vwap import VWAPIndicator
-from src.engine.fast.market_structure import MarketStructureIndicator
-from src.engine.fast.atr import ATRIndicator
-from src.engine.fast.fractal import FractalIndicator
-from src.engine.slow.order_block import OrderBlockIndicator
-from src.engine.slow.fvg import FVGIndicator
-from src.engine.slow.volume_pattern import VolumePatternIndicator
-from src.engine.slow.funding_rate import FundingRateIndicator
-from src.engine.slow.open_interest import OpenInterestIndicator
-from src.engine.slow.liquidation import LiquidationIndicator
-from src.engine.slow.long_short_ratio import LongShortRatioIndicator
-from src.engine.slow.cvd import CVDIndicator
-from src.engine.base import BaseIndicator
-from src.signal_engine.aggregator import SignalAggregator
-from src.signal_engine.grader import SignalGrader
-from src.strategy.scalp_engine import ScalpEngine
-from src.strategy.adaptive_ml import AdaptiveML
-from src.strategy.unified_engine import TradeEngine  # 레거시 (참조용 유지)
+# ── 레거시 (04-17 FlowEngine 전환으로 비활성) ──
+# from src.engine.fast.ema import EMAIndicator
+# from src.engine.fast.rsi import RSIIndicator
+# from src.engine.fast.bollinger import BollingerIndicator
+# from src.engine.fast.vwap import VWAPIndicator
+# from src.engine.fast.market_structure import MarketStructureIndicator
+# from src.engine.fast.atr import ATRIndicator
+# from src.engine.fast.fractal import FractalIndicator
+# from src.engine.slow.order_block import OrderBlockIndicator
+# from src.engine.slow.fvg import FVGIndicator
+# from src.engine.slow.volume_pattern import VolumePatternIndicator
+# from src.engine.slow.funding_rate import FundingRateIndicator
+# from src.engine.slow.open_interest import OpenInterestIndicator
+# from src.engine.slow.liquidation import LiquidationIndicator
+# from src.engine.slow.long_short_ratio import LongShortRatioIndicator
+# from src.engine.slow.cvd import CVDIndicator
+from src.engine.base import BaseIndicator  # to_dataframe 유틸만 사용
+# from src.signal_engine.aggregator import SignalAggregator
+# from src.signal_engine.grader import SignalGrader
+# from src.strategy.scalp_engine import ScalpEngine
+# from src.strategy.adaptive_ml import AdaptiveML
+# from src.strategy.unified_engine import TradeEngine
+
+# ── FlowEngine (현재 활성) ──
 from src.strategy.flow_engine import FlowEngine
 from src.strategy.flow_ml import FlowML
 from src.trading.leverage import LeverageCalculator
@@ -44,10 +47,11 @@ from src.trading.executor import OrderExecutor
 from src.trading.position_manager import PositionManager
 from src.monitoring.telegram_bot import TelegramNotifier
 from src.monitoring.trade_logger import TradeLogger
-from src.strategy.paper_trader import PaperTrader
-from src.strategy.historical_learner import HistoricalLearner
-from src.strategy.auto_backtest import AutoBacktest
-from src.strategy.meta_learner import MetaLearner
+# 레거시 (FlowEngine 전환으로 비활성 — import만 유지)
+# from src.strategy.paper_trader import PaperTrader
+# from src.strategy.historical_learner import HistoricalLearner
+# from src.strategy.auto_backtest import AutoBacktest
+# from src.strategy.meta_learner import MetaLearner
 from src.strategy.signal_tracker import SignalTracker
 from src.strategy.setup_tracker import SetupTracker
 from src.engine.regime_detector import MarketRegimeDetector
@@ -77,31 +81,18 @@ class CryptoAnalyzer:
         self.binance_stream = BinanceStream(self.redis, db=self.db)
         self.oi_funding = OIFundingCollector(self.db, self.redis)
 
-        # Swing 엔진 (15m)
-        self.fast_engines = [
-            EMAIndicator(), RSIIndicator(), BollingerIndicator(),
-            VWAPIndicator(), MarketStructureIndicator(), ATRIndicator(),
-            FractalIndicator(),
-        ]
-        self.slow_engines = [
-            OrderBlockIndicator(), FVGIndicator(), VolumePatternIndicator(),
-            FundingRateIndicator(), OpenInterestIndicator(),
-            LiquidationIndicator(), LongShortRatioIndicator(), CVDIndicator(),
-        ]
-        self.aggregator = SignalAggregator()
-        self.grader = SignalGrader()
-
-        # Scalp 엔진 (레거시 — 비활성)
-        self.scalp_engine = ScalpEngine()
-
-        # FlowML (04-17: FlowEngine 전용 경량 ML)
+        # ══════ FlowEngine (현재 활성) ══════
         self.flow_ml = FlowML()
-        # FlowEngine (04-17: 단순 오더플로우 엔진 + ML 보정)
         self.trade_engine = FlowEngine(redis=self.redis, flow_ml=self.flow_ml)
 
-        # AdaptiveML (레거시 유지, 통합 모델에서는 미사용 — 콜드스타트)
-        self.ml_swing = AdaptiveML(mode="swing")
-        self.ml_scalp = AdaptiveML(mode="scalp")
+        # ══════ 레거시 (04-17 비활성 — FlowEngine으로 대체) ══════
+        # self.fast_engines = [EMAIndicator(), RSIIndicator(), ...]
+        # self.slow_engines = [OrderBlockIndicator(), FVGIndicator(), ...]
+        # self.aggregator = SignalAggregator()
+        # self.grader = SignalGrader()
+        # self.scalp_engine = ScalpEngine()
+        # self.ml_swing = AdaptiveML(mode="swing")
+        # self.ml_scalp = AdaptiveML(mode="scalp")
 
         # 통합 모델 상태
         self._unified_streak = 0
@@ -132,32 +123,21 @@ class CryptoAnalyzer:
         # 뉴스 필터
         self.news_filter = NewsFilter()
 
-        # 가상매매 엔진 (ML 학습용 + 시그널 추적)
-        self.paper_trader = PaperTrader(
-            self.db, self.redis, self.ml_swing, self.ml_scalp,
-            self.regime_detector, signal_tracker=None  # 아래에서 할당
-        )
+        # ══════ 레거시 학습 시스템 (비활성) ══════
+        # paper_trader, hist_learner, auto_backtest, meta_learner 는
+        # 레거시 AdaptiveML 의존 → FlowML로 대체됨
+        # PaperTrader는 None으로 — FlowML이 실거래 결과로 직접 학습
+        self.paper_trader = None
+        self.hist_learner = None
+        self.auto_backtest = None
+        self.meta_learner = None
 
-        # 역사 백필 학습 엔진 (candle_collector 연결 → 90일 수집 가능)
-        self.hist_learner = HistoricalLearner(
-            self.db, self.ml_swing, self.ml_scalp, self.candle_collector
-        )
-
-        # 자동 백테스트
-        self.auto_backtest = AutoBacktest(self.db, self.ml_swing, self.ml_scalp)
-        self._last_backtest = None
-
-        # 메타 러너 (자가 업그레이드)
-        self.meta_learner = MetaLearner(self.ml_swing, self.ml_scalp)
-        self._last_meta = None
-
-        # 시그널 기여도 추적
+        # 시그널 기여도 추적 (유지 — FlowEngine에서도 사용)
         self.signal_tracker = SignalTracker()
-        self.paper_trader.signal_tracker = self.signal_tracker
 
         # 셋업 성과 추적 (자기개선)
         self.setup_tracker = SetupTracker()
-        self.paper_trader.setup_tracker = self.setup_tracker
+        # self.paper_trader.setup_tracker = self.setup_tracker  # 레거시
 
         # 스캘핑 리스크 관리
         self._scalp_daily_pnl = 0.0         # 일일 스캘핑 P&L (%)
@@ -928,19 +908,13 @@ class CryptoAnalyzer:
         if self.signal_tracker:
             self.signal_tracker.record_trade(signals, pnl_pct, mode="unified", regime=regime)
 
-        # 셋업 성과 추적
-        setup = None
-        for key in ("setup_a", "setup_b", "setup_c"):
-            if key in signals:
-                setup = key[-1].upper()
-                break
-        if setup:
-            trend = signals.get("context", {}).get("trend", "neutral")
-            self.setup_tracker.record_trade(
-                setup=setup, direction=direction, pnl_pct=pnl_pct,
-                pnl_usdt=pnl_usdt, hold_min=hold_min,
-                exit_reason=exit_reason, trend=trend,
-            )
+        # 셋업 성과 추적 (FlowEngine = "FLOW" 셋업)
+        trend = signals.get("big_trend", "neutral")
+        self.setup_tracker.record_trade(
+            setup="FLOW", direction=direction, pnl_pct=pnl_pct,
+            pnl_usdt=pnl_usdt, hold_min=hold_min,
+            exit_reason=exit_reason, trend=trend,
+        )
 
         logger.info(f"[실거래] PnL {pnl_pct:+.2f}% 연패:{self._unified_streak} 레짐:{regime}")
 
@@ -1238,13 +1212,13 @@ class CryptoAnalyzer:
                 )
             return
 
-        # 셋업 자동 비활성 체크
-        if not self.setup_tracker.is_setup_enabled(setup):
-            logger.info(f"[TRADE] Setup {setup} 비활성 (성과 부진) → 스킵")
+        # FlowEngine은 단일 셋업 ("FLOW") — 비활성 체크는 연패로 대체
+        # (setup_tracker의 FLOW 셋업이 35% 미만이면 자동 정지)
+        if not self.setup_tracker.is_setup_enabled("FLOW"):
+            logger.info(f"[TRADE] FLOW 셋업 비활성 (성과 부진) → 스킵")
             return
 
-        # 셋업 감지 기록
-        self.setup_tracker.record_detection(setup, direction, score, float(df_5m["close"].iloc[-1]))
+        self.setup_tracker.record_detection("FLOW", direction, score, float(df_5m["close"].iloc[-1]))
 
         # 셋업 감지 텔레그램 알림
         price_now = float(df_5m["close"].iloc[-1])
@@ -1298,9 +1272,9 @@ class CryptoAnalyzer:
         if balance <= 0:
             return
 
-        # 가상매매 기록
-        if not learning:
-            await self.paper_trader.try_entry(result, "unified", price)
+        # 가상매매 기록 (레거시 — FlowML이 실거래로 직접 학습)
+        # if not learning and self.paper_trader:
+        #     await self.paper_trader.try_entry(result, "unified", price)
 
         # 실거래
         if autotrading:
@@ -1538,8 +1512,8 @@ class CryptoAnalyzer:
                         await self.position_manager.check_positions(price)
 
                     # 가상매매 포지션 체크 — 학습 중엔 스킵 (CPU 절약, 실거래 우선)
-                    if self.paper_trader.positions and not learning:
-                        await self.paper_trader.check_positions(price)
+                    # if self.paper_trader and self.paper_trader.positions and not learning:
+                    #     await self.paper_trader.check_positions(price)  # 레거시
 
                 # 킬스위치 체크
                 bot_status = await self.redis.get("sys:bot_status")
@@ -1858,13 +1832,13 @@ class CryptoAnalyzer:
         try:
             bal = await self.executor.get_balance()
             await self.telegram._send(
-                "\U0001f7e2 <b>TradeEngine v1</b>\n"
-                "Mode: Setup ABC (Trend+OB+Breakout)\n"
-                "ML: Cold Start (Paper Only)\n"
+                "\U0001f7e2 <b>FlowEngine v1</b>\n"
+                "Mode: OrderFlow (Trend+Level+CVD)\n"
+                f"ML: {'Active' if self.flow_ml.trained else 'Cold Start'}\n"
                 f"Balance: ${bal:,.2f}"
             )
         except Exception:
-            await self.telegram._send("\U0001f7e2 <b>TradeEngine v1 Started</b>")
+            await self.telegram._send("\U0001f7e2 <b>FlowEngine v1 Started</b>")
 
         tasks = [
             asyncio.create_task(self.periodic_candle_update()),
@@ -1919,8 +1893,8 @@ class CryptoAnalyzer:
 
         # 1) ML 모델 + 시그널 트래커 저장 (가장 먼저, 데이터 손실 방지)
         try:
-            self.ml_swing.save()
-            self.ml_scalp.save()
+            # self.ml_swing.save()  # 레거시
+            # self.ml_scalp.save()  # 레거시
             self.signal_tracker.save()
             self.flow_ml.save()
             logger.info("ML 모델 + SignalTracker 저장 완료")
