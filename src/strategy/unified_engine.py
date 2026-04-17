@@ -66,34 +66,52 @@ class TradeEngine:
 
         # ═══ 2단계: 셋업 매칭 (우선순위: B > A > C) ═══
 
+        # HTF 편향 점수 (방향 일치 가점, 역방향 감점 — 차단 아님)
+        htf_bias = ctx.get("htf_bias", 0)
+
+        def _apply_htf_bias(setup_result, setup_name, hold_mode):
+            """셋업 score에 HTF 편향 반영 + result 채우기"""
+            direction = setup_result["direction"]
+            raw_score = setup_result["score"]
+
+            # HTF 순방향 = 가점, 역방향 = 감점
+            # htf_bias > 0 = 롱 유리. direction이 long이면 가점, short이면 감점
+            if direction == "long":
+                adjusted = raw_score + htf_bias
+            else:  # short
+                adjusted = raw_score - htf_bias  # htf_bias<0 이면 숏 유리 → 가점
+            adjusted = round(max(0, min(10, adjusted)), 2)
+
+            result["setup"] = setup_name
+            result["direction"] = direction
+            result["score"] = adjusted
+            result["hold_mode"] = hold_mode
+            result["sl_distance"] = setup_result["sl_dist"]
+            result["tp_distance"] = setup_result["tp_dist"]
+            result["signals"][f"setup_{setup_name.lower()}"] = setup_result
+            result["signals"]["htf_bias_applied"] = round(htf_bias, 1)
+            result["signals"]["raw_score"] = raw_score
+            result["reason"] = setup_result["reason"]
+            # HTF 추세 돌파 정보
+            if ctx.get("breakout_1d"):
+                result["reason"] += f" | 1d_breakout={ctx['breakout_1d']}"
+            if ctx.get("breakout_4h"):
+                result["reason"] += f" | 4h_breakout={ctx['breakout_4h']}"
+
         # 셋업 B: OB 리테스트 (최고 RR, 우선 체크)
         setup_b = self._check_setup_b(df_1m, df_5m, df_15m, ctx)
         if not setup_b["match"]:
             result["signals"]["reject_b"] = setup_b.get("reject_reason", "conditions_not_met")
         if setup_b["match"]:
-            result["setup"] = "B"
-            result["direction"] = setup_b["direction"]
-            result["score"] = setup_b["score"]
-            result["hold_mode"] = "standard"
-            result["sl_distance"] = setup_b["sl_dist"]
-            result["tp_distance"] = setup_b["tp_dist"]
-            result["signals"]["setup_b"] = setup_b
-            result["reason"] = setup_b["reason"]
+            _apply_htf_bias(setup_b, "B", "standard")
             return result
 
-        # 셋업 A: 추세 모멘텀 (가장 빈번)
+        # 셋업 A: 추세 풀백 (가장 빈번)
         setup_a = self._check_setup_a(df_1m, df_5m, ctx)
         if not setup_a["match"]:
             result["signals"]["reject_a"] = setup_a.get("reject_reason", "conditions_not_met")
         if setup_a["match"]:
-            result["setup"] = "A"
-            result["direction"] = setup_a["direction"]
-            result["score"] = setup_a["score"]
-            result["hold_mode"] = "quick"
-            result["sl_distance"] = setup_a["sl_dist"]
-            result["tp_distance"] = setup_a["tp_dist"]
-            result["signals"]["setup_a"] = setup_a
-            result["reason"] = setup_a["reason"]
+            _apply_htf_bias(setup_a, "A", "quick")
             return result
 
         # 셋업 C: 브레이크아웃
@@ -101,14 +119,7 @@ class TradeEngine:
         if not setup_c["match"]:
             result["signals"]["reject_c"] = setup_c.get("reject_reason", "conditions_not_met")
         if setup_c["match"]:
-            result["setup"] = "C"
-            result["direction"] = setup_c["direction"]
-            result["score"] = setup_c["score"]
-            result["hold_mode"] = "standard"
-            result["sl_distance"] = setup_c["sl_dist"]
-            result["tp_distance"] = setup_c["tp_dist"]
-            result["signals"]["setup_c"] = setup_c
-            result["reason"] = setup_c["reason"]
+            _apply_htf_bias(setup_c, "C", "standard")
             return result
 
         return result
@@ -168,79 +179,93 @@ class TradeEngine:
         else:
             trend_5m = "neutral"
 
-        # 4h EMA 추세
-        trend_4h = "neutral"
-        if df_4h is not None and len(df_4h) >= 20:
-            c4h = df_4h["close"].astype(float)
-            ema20_4h = float(c4h.ewm(span=20, adjust=False).mean().iloc[-1])
-            ema50_4h = float(c4h.ewm(span=50, adjust=False).mean().iloc[-1])
-            p4h = float(c4h.iloc[-1])
-            if p4h > ema20_4h and ema20_4h > ema50_4h:
-                trend_4h = "up"
-            elif p4h < ema20_4h and ema20_4h < ema50_4h:
-                trend_4h = "down"
+        # ═══ HTF 큰 추세 분석 (4h / 1d) ═══
+        # 큰 추세 = 방향 편향 (가점/감점). 차단이 아님.
+        # 하락 추세 속에서도 롱 가능 (지지 바운스, 과매도 반등, 숏스퀴즈)
 
-        # 1d EMA 추세 (가장 강한 필터)
-        trend_1d = "neutral"
-        if df_1d is not None and len(df_1d) >= 20:
-            c1d = df_1d["close"].astype(float)
-            ema20_1d = float(c1d.ewm(span=20, adjust=False).mean().iloc[-1])
-            ema50_1d = float(c1d.ewm(span=50, adjust=False).mean().iloc[-1])
-            p1d = float(c1d.iloc[-1])
-            if p1d > ema20_1d and ema20_1d > ema50_1d:
-                trend_1d = "up"
-            elif p1d < ema20_1d and ema20_1d < ema50_1d:
-                trend_1d = "down"
+        def _htf_trend(df, label):
+            """HTF 추세 판단 + 추세 돌파 감지"""
+            info = {"trend": "neutral", "breakout": None, "ema20": 0, "ema50": 0}
+            if df is None or len(df) < 20:
+                return info
+            c = df["close"].astype(float)
+            h = df["high"].astype(float)
+            l = df["low"].astype(float)
+            ema20 = float(c.ewm(span=20, adjust=False).mean().iloc[-1])
+            ema50 = float(c.ewm(span=50, adjust=False).mean().iloc[-1])
+            p = float(c.iloc[-1])
+            info["ema20"] = round(ema20, 1)
+            info["ema50"] = round(ema50, 1)
 
-        # 종합: 가중 투표 (HTF 가중치 높게)
-        # 5m=1, 15m=1, 1h=2, 4h=3, 1d=4 → 큰 추세일수록 중요
-        weighted_up = 0
-        weighted_down = 0
-        total_weight = 0
-        for trend, weight in [(trend_5m, 1), (trend_15m, 1), (trend_1h, 2),
-                               (trend_4h, 3), (trend_1d, 4)]:
-            total_weight += weight
-            if trend == "up":
-                weighted_up += weight
-            elif trend == "down":
-                weighted_down += weight
+            if p > ema20 and ema20 > ema50:
+                info["trend"] = "up"
+            elif p < ema20 and ema20 < ema50:
+                info["trend"] = "down"
 
-        if total_weight > 0:
-            up_ratio = weighted_up / total_weight
-            down_ratio = weighted_down / total_weight
-            if up_ratio >= 0.4:  # 40%+ 가중치가 up → 상승 추세
-                ctx["trend"] = "up"
-                ctx["trend_strength"] = round(up_ratio, 2)
-            elif down_ratio >= 0.4:
-                ctx["trend"] = "down"
-                ctx["trend_strength"] = round(down_ratio, 2)
-            else:
-                ctx["trend"] = "neutral"
-                ctx["trend_strength"] = 0.0
+            # 추세 돌파 감지 — 최근 캔들이 20봉 고/저점 돌파
+            if len(df) >= 21:
+                recent_high = float(h.iloc[-21:-1].max())
+                recent_low = float(l.iloc[-21:-1].min())
+                if p > recent_high:
+                    info["breakout"] = "up"  # 상방 돌파
+                elif p < recent_low:
+                    info["breakout"] = "down"  # 하방 돌파
 
-        ctx["trend_4h"] = trend_4h
-        ctx["trend_1d"] = trend_1d
+            return info
 
-        # ★ HTF 역방향 차단: 1d가 down인데 단기가 up → neutral 격하
-        # 큰 추세를 거스르는 진입은 WR을 크게 낮춤
-        if trend_1d == "down" and ctx["trend"] == "up":
+        htf_4h = _htf_trend(df_4h, "4h")
+        htf_1d = _htf_trend(df_1d, "1d")
+
+        ctx["trend_4h"] = htf_4h["trend"]
+        ctx["trend_1d"] = htf_1d["trend"]
+        ctx["breakout_4h"] = htf_4h["breakout"]
+        ctx["breakout_1d"] = htf_1d["breakout"]
+
+        # ═══ 종합 추세: 단기(5m/15m/1h)로 추세 판정 ═══
+        # HTF는 "편향"으로만 사용 (차단 아님)
+        votes = [trend_5m, trend_15m, trend_1h]
+        up_votes = votes.count("up")
+        down_votes = votes.count("down")
+
+        if up_votes >= 2:
+            ctx["trend"] = "up"
+            ctx["trend_strength"] = up_votes / 3
+        elif down_votes >= 2:
+            ctx["trend"] = "down"
+            ctx["trend_strength"] = down_votes / 3
+        else:
             ctx["trend"] = "neutral"
             ctx["trend_strength"] = 0.0
-            ctx["htf_override"] = "1d_down_blocks_long"
-        elif trend_1d == "up" and ctx["trend"] == "down":
-            ctx["trend"] = "neutral"
-            ctx["trend_strength"] = 0.0
-            ctx["htf_override"] = "1d_up_blocks_short"
-        # 4h도 동일 (1d가 neutral이면 4h가 최종 필터)
-        elif trend_1d == "neutral":
-            if trend_4h == "down" and ctx["trend"] == "up":
-                ctx["trend"] = "neutral"
-                ctx["trend_strength"] = 0.0
-                ctx["htf_override"] = "4h_down_blocks_long"
-            elif trend_4h == "up" and ctx["trend"] == "down":
-                ctx["trend"] = "neutral"
-                ctx["trend_strength"] = 0.0
-                ctx["htf_override"] = "4h_up_blocks_short"
+
+        # ═══ HTF 편향 점수 (셋업 score에 가감) ═══
+        # 큰 추세 순방향이면 가점, 역방향이면 감점 (차단 아님)
+        htf_bias = 0.0  # -3.0 ~ +3.0
+
+        # 1d 편향 (가장 강함)
+        if htf_1d["trend"] == "up":
+            htf_bias += 1.5   # 일봉 상승 → 롱 가점
+        elif htf_1d["trend"] == "down":
+            htf_bias -= 1.5   # 일봉 하락 → 숏 가점(롱 감점)
+
+        # 4h 편향
+        if htf_4h["trend"] == "up":
+            htf_bias += 1.0
+        elif htf_4h["trend"] == "down":
+            htf_bias -= 1.0
+
+        # 추세 돌파 보너스 (매우 강한 시그널)
+        if htf_1d["breakout"] == "up":
+            htf_bias += 2.0   # 일봉 상방 돌파 → 강한 롱
+        elif htf_1d["breakout"] == "down":
+            htf_bias -= 2.0
+        if htf_4h["breakout"] == "up":
+            htf_bias += 1.0
+        elif htf_4h["breakout"] == "down":
+            htf_bias -= 1.0
+
+        ctx["htf_bias"] = round(htf_bias, 1)
+        # htf_bias > 0 → 롱 유리, < 0 → 숏 유리
+        # 셋업 score 계산 시: 방향 일치하면 +htf_bias, 역방향이면 -htf_bias
 
         # 5m 스윙 구조 판정
         ctx["structure"] = self._swing_structure(df_5m)
