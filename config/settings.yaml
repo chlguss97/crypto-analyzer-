@@ -82,11 +82,11 @@ cooldown:
   direction_flip_sec: 300       # 방향 전환 시 5분
   min_interval_sec: 60          # 최소 진입 간격 1분
 
-# ── 폴링 주기 ──
+# ── 폴링 주기 (04-17: Binance 기준 가속) ──
 polling:
-  candle_fast_sec: 3            # 1m/5m 캔들 갱신
-  candle_slow_sec: 30           # 15m/1h 캔들 갱신
-  signal_eval_sec: 5            # 시그널 평가
+  candle_fast_sec: 2            # 1m/5m 캔들 갱신 (3→2초, Binance rate limit 여유)
+  candle_slow_sec: 6            # 15m/1h 캔들 갱신 (30→6초)
+  signal_eval_sec: 3            # 시그널 평가 (5→3초)
   position_check_sec: 1         # 포지션 SL/TP 체크
 
 fees:

@@ -1069,7 +1069,7 @@ class CryptoAnalyzer:
     # ══════════════════════════════════════════════════
 
     async def periodic_unified_eval(self):
-        """통합 시그널 평가 (5초마다) — 셋업 ABC 매칭"""
+        """통합 시그널 평가 (3초마다) — 셋업 ABC 매칭. Binance 캔들 기반."""
         await asyncio.sleep(5)  # 캔들 백필 대기
         while self._running:
             try:
@@ -1395,17 +1395,20 @@ class CryptoAnalyzer:
     # ── 주기적 루프들 (레거시) ──
 
     async def periodic_candle_update(self):
-        """캔들 갱신 — 1m/5m 3초, 15m/1h 30초 (OKX rate limit 20req/2s 이내)"""
+        """캔들 갱신 — Binance 선물 기준 (04-17)
+        1m/5m: 2초마다 (Binance rate limit 2400req/min 여유)
+        15m/1h: 6초마다 (3사이클)
+        """
         _cycle = 0
         while self._running:
             try:
-                # 매 사이클: 1m + 5m (2 req)
+                # 매 사이클: 1m + 5m (Binance 기본, 실패 시 OKX 폴백)
                 for tf in ["1m", "5m"]:
                     candles = await self.candle_collector.fetch_candles(tf, limit=5)
                     if candles:
                         await self.db.insert_candles(self.symbol, tf, candles)
-                # 10 사이클(30초)마다: 15m + 1h 추가 (4 req total)
-                if _cycle % 10 == 0:
+                # 3사이클(6초)마다: 15m + 1h
+                if _cycle % 3 == 0:
                     for tf in ["15m", "1h"]:
                         candles = await self.candle_collector.fetch_candles(tf, limit=5)
                         if candles:
@@ -1413,7 +1416,7 @@ class CryptoAnalyzer:
                 _cycle += 1
             except Exception as e:
                 logger.error(f"캔들 갱신 에러: {e}")
-            await asyncio.sleep(3)  # 10초→3초
+            await asyncio.sleep(2)  # 3초→2초 (Binance는 rate limit 여유)
 
     async def periodic_signal_eval(self):
         """Swing 시그널 평가 + 매매 (60초마다)"""
