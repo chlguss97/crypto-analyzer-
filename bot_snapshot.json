@@ -1,6 +1,6 @@
 {
-  "ts": 1776389401,
-  "ts_iso": "2026-04-17T01:30:01.332062+00:00",
+  "ts": 1776390247,
+  "ts_iso": "2026-04-17T01:44:07.661013+00:00",
   "balance": 191.34,
   "autotrading": "on",
   "regime": "unknown",
@@ -10,7 +10,7 @@
     "direction": "neutral",
     "score": 0.0,
     "trend": "neutral",
-    "structure": "range",
+    "structure": "lh_ll",
     "streak": 0,
     "hold_mode": "standard"
   },
