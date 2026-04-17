@@ -1,12 +1,14 @@
 # Commit Log
 
 > 자동 생성 — `scripts/update_commit_log.sh` (매 커밋 후 실행)
-> Updated: 2026-04-17 11:29:19    
-> Total commits: 190 (2026-04-03 → 2026-04-17)
+> Updated: 2026-04-17 11:32:47    
+> Total commits: 192 (2026-04-03 → 2026-04-17)
 
 Claude 가 질문/변경 작업 시 이 파일을 참고해서 과거 변경 이력 컨텍스트를 확보합니다. 수동 편집 금지 — 다음 커밋 시 덮어써집니다.
 
 ## 2026-04-17
+- `466abe1` fix: FlowEngine 검증 — CVD 노이즈 필터 + 1d 레벨 추가
+- `c7cbe84` chore: COMMIT_LOG 갱신
 - `a120ee7` refactor: 레거시 코드 정리 — FlowEngine 전용 체계 확립
 - `d7ea699` chore: COMMIT_LOG 갱신
 - `b5d24c8` feat: FlowML — FlowEngine 전용 경량 ML 접목
