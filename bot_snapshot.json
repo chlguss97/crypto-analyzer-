@@ -1,6 +1,6 @@
 {
-  "ts": 1776803413,
-  "ts_iso": "2026-04-21T20:30:13.666049+00:00",
+  "ts": 1776804259,
+  "ts_iso": "2026-04-21T20:44:19.923293+00:00",
   "balance": 342.8,
   "autotrading": "on",
   "regime": "unknown",
@@ -8,7 +8,7 @@
   "trade_state": {
     "setup": "FLOW",
     "direction": "long",
-    "score": 8.0,
+    "score": 7.0,
     "trend": "neutral",
     "structure": "unknown",
     "streak": 0,
