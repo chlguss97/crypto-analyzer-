@@ -1,14 +1,10 @@
 """
-SetupTracker — TradeEngine v1 셋업별 자가 개선 시스템
+SetupTracker — 셋업 성과 추적 + 자동 비활성화
 
-셋업 A(Trend Momentum), B(OB Retest), C(Breakout)의 성과를 추적하고
-자동으로 나쁜 셋업을 비활성화한다.
-
-추적 항목:
-  - 셋업별 승률, RR, 평균 PnL, 거래 수
-  - 시간대별(hour) / 추세별(trend) 성과 분해
-  - 감지 vs 실행 비율 (놓친 기회 분석)
-  - 자동 비활성화: 10+ 거래 & 승률 < 35%
+FlowEngine v1: "FLOW" 단일 셋업 추적
+- 승률, RR, 평균 PnL, 거래 수
+- 시간대별(hour) / 추세별(trend) / 방향별 성과
+- 자동 비활성화: 10+ 거래 & 승률 < 35%
 
 상태 저장: data/setup_tracker.json
 """
@@ -32,7 +28,7 @@ DEFAULT_PATH = DATA_DIR / "setup_tracker.json"
 MIN_TRADES_FOR_DISABLE = 10
 MIN_WIN_RATE = 0.35  # 35%
 
-SETUP_NAMES = {"A": "Trend Momentum", "B": "OB Retest", "C": "Breakout"}
+SETUP_NAMES = {"FLOW": "OrderFlow Engine"}
 
 
 class SetupTracker:
@@ -233,10 +229,14 @@ class SetupTracker:
                 return True
 
             win_rate = stat["wins"] / total
-            if win_rate < MIN_WIN_RATE:
+            avg_pnl = stat["total_pnl_pct"] / total if total > 0 else 0
+
+            # 승률 낮아도 평균 PnL 양수면 활성 유지 (RR 좋은 전략)
+            if win_rate < MIN_WIN_RATE and avg_pnl <= 0:
                 logger.warning(
                     f"[SetupTracker] 셋업 {setup}({SETUP_NAMES[setup]}) 비활성 "
-                    f"(승률 {win_rate:.0%} < {MIN_WIN_RATE:.0%}, {total}건)"
+                    f"(승률 {win_rate:.0%} < {MIN_WIN_RATE:.0%}, "
+                    f"avg_pnl={avg_pnl:+.2f}%, {total}건)"
                 )
                 return False
 
@@ -362,12 +362,8 @@ class SetupTracker:
                 self._manual_overrides = data.get("manual_overrides", {})
 
             total_trades = sum(s["total"] for s in self._stats.values())
-            logger.info(
-                f"[SetupTracker] 로드 완료: {total_trades}건 "
-                f"(A={self._stats['A']['total']} "
-                f"B={self._stats['B']['total']} "
-                f"C={self._stats['C']['total']})"
-            )
+            parts = " ".join(f"{k}={v['total']}" for k, v in self._stats.items())
+            logger.info(f"[SetupTracker] 로드 완료: {total_trades}건 ({parts})")
         except Exception as e:
             logger.error(f"[SetupTracker] 로드 실패 (새로 시작): {e}")
             self._init_stats()

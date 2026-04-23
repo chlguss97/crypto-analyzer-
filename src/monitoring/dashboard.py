@@ -693,7 +693,7 @@ async def get_engine_overview():
                       COALESCE(SUM(pnl_usdt), 0) as total_pnl,
                       COALESCE(AVG(pnl_pct), 0) as avg_pnl
                FROM trades
-               WHERE exit_time IS NOT NULL AND grade LIKE 'PAPER_SETUP_%'"""
+               WHERE exit_time IS NOT NULL AND grade LIKE 'PAPER_%'"""
         )
         row2 = dict(await cur2.fetchone())
         paper_stats["total"] = row2["total"] or 0
@@ -704,20 +704,20 @@ async def get_engine_overview():
     except Exception as e:
         logger.debug(f"real/paper 집계 실패: {e}")
 
-    # 5) Setup × Regime 히트맵 (SetupTracker by_regime 에서 유도)
-    heatmap = {}  # { "A": {"trending_up": {wr, n}, ...}, ... }
-    for setup_name in ("A", "B", "C"):
-        by_regime = (setup_summary.get(setup_name) or {}).get("by_regime", {}) or {}
+    # 5) Setup × Trend 히트맵 (FLOW 셋업)
+    heatmap = {}
+    for setup_name in setup_summary:
+        by_trend = (setup_summary.get(setup_name) or {}).get("by_trend", {}) or {}
         heatmap[setup_name] = {}
-        for regime_key in ("trending_up", "trending_down", "ranging", "volatile"):
-            r = by_regime.get(regime_key, {}) or {}
+        for trend_key in ("up", "down", "neutral"):
+            r = by_trend.get(trend_key, {}) or {}
             n = r.get("total", 0)
             w = r.get("wins", 0)
-            heatmap[setup_name][regime_key] = {
+            heatmap[setup_name][trend_key] = {
                 "n": n,
                 "wins": w,
                 "wr": (w / max(n, 1)) * 100 if n > 0 else None,
-                "avg_pnl": r.get("avg_pnl_pct", 0),
+                "avg_pnl": round(r.get("pnl", 0) / max(n, 1), 2),
             }
 
     # ML 상태
