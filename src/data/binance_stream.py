@@ -58,8 +58,9 @@ class BinanceStream:
         self._trade_count = 0
         self._last_log = 0
 
-        # DB 저장할 OKX 심볼 (기존 호환)
-        self._db_symbol = "BTC/USDT:USDT"
+        # DB 저장 심볼 — config와 일치
+        from src.utils.helpers import load_config
+        self._db_symbol = load_config().get("exchange", {}).get("symbol", "BTC/USDT:USDT")
 
     async def start(self):
         """WebSocket 연결 시작 (무한 재시도)"""

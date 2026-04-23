@@ -13,6 +13,7 @@ FlowEngine v2 — 다중 셋업 오더플로우 엔진 (데이터 축적용)
 모든 셋업 결과가 signals에 기록되어 ML 학습 데이터로 활용.
 """
 
+import json
 import logging
 import numpy as np
 import pandas as pd
@@ -526,7 +527,7 @@ class FlowEngine:
             return "neutral"
         c = df["close"].astype(float)
         p = float(c.iloc[-1])
-        ema20 = float(c.ewm(span=min(20, len(c)-1), adjust=False).mean().iloc[-1])
+        ema20 = float(c.ewm(span=max(1, min(20, len(c)-1)), adjust=False).mean().iloc[-1])
 
         if len(df) >= 50:
             ema50 = float(c.ewm(span=50, adjust=False).mean().iloc[-1])
@@ -661,7 +662,6 @@ class FlowEngine:
                     flow["whale_confirm"] = True
 
             # 청산
-            import json
             liq_str = await self.redis.get("flow:liq:surge")
             if liq_str:
                 liq = json.loads(liq_str)

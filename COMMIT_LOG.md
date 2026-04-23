@@ -1,12 +1,24 @@
 # Commit Log
 
 > 자동 생성 — `scripts/update_commit_log.sh` (매 커밋 후 실행)
-> Updated: 2026-04-17 12:16:14    
-> Total commits: 198 (2026-04-03 → 2026-04-17)
+> Updated: 2026-04-24 08:47:56    
+> Total commits: 206 (2026-04-03 → 2026-04-24)
 
 Claude 가 질문/변경 작업 시 이 파일을 참고해서 과거 변경 이력 컨텍스트를 확보합니다. 수동 편집 금지 — 다음 커밋 시 덮어써집니다.
 
+## 2026-04-24
+- `df9e83c` fix: 대시보드 페이퍼 탭 데이터 매핑 수정
+- `9599bd0` fix: PaperTrader 잔고 DB 복원 — 재시작 시 리셋 방지
+- `232e295` feat: FlowEngine v2 — 6셋업 다중 진입 (15건/일 목표)
+
+## 2026-04-23
+- `dad13bc` fix: Flow x Regime 히트맵 A/B/C → FLOW 동적 + by_regime 추적 추가
+- `11621c9` refactor: SetupTracker A/B/C → FLOW 단일 셋업으로 전환
+- `8fda090` refactor: 레거시 코드 전면 제거 + 대시보드 버그 수정 + 페이퍼 탭 추가
+- `ed7e555` refactor: PaperTrader v2 — 독립 가상 계좌 아키텍처 (실거래 OFF)
+
 ## 2026-04-17
+- `f2c860b` chore: COMMIT_LOG 갱신
 - `63cf350` fix: 서버 크래시 3건 수정 — OKX API + None 참조 + 1d 데이터 부족
 - `89ea763` fix: OKX 알고 조회 ordType 파라미터 누락 — 51000 에러 수정
 - `e27a41e` chore: COMMIT_LOG 갱신

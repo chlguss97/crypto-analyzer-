@@ -286,13 +286,23 @@ class CryptoAnalyzer:
                 f"reason={reason}"
             )
 
+        # 레짐 감지 + 저장
+        if df_15m is not None and len(df_15m) >= 20:
+            regime_result = self.regime_detector.detect(df_15m)
+            self._current_regime = regime_result
+            await self.redis.set("sys:regime", regime_result.get("regime", "ranging"), ttl=300)
+            await self.redis.set("sys:regime_detail", regime_result, ttl=300)
+
         # TradeEngine 상태 Redis 저장
+        regime_now = self._current_regime["regime"] if self._current_regime else "ranging"
         await self.redis.set("sys:trade_state", {
             "setup": result.get("setup"),
             "direction": result.get("direction", "neutral"),
             "score": result.get("score", 0),
-            "trend": ctx.get("trend", "neutral"),
-            "structure": ctx.get("structure", "unknown"),
+            "trend": ctx.get("big_trend", "neutral"),
+            "vol_band": ctx.get("vol_band", "mid"),
+            "session": ctx.get("session", "unknown"),
+            "regime": regime_now,
             "streak": self._unified_streak,
             "hold_mode": result.get("hold_mode", "standard"),
         }, ttl=30)
@@ -475,7 +485,8 @@ class CryptoAnalyzer:
             logger.info(f"[TRADE] 사이즈 부족 ({size_btc} BTC) → 차단")
             return
 
-        entry_price_limit = round(price, 1) if setup == "B" else None
+        # LVL/PB = limit order (maker 수수료), 나머지 = market
+        entry_price_limit = round(price, 1) if setup in ("LVL", "PB") else None
 
         trade_req = {
             "symbol": self.symbol, "direction": direction,

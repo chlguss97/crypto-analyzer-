@@ -370,14 +370,17 @@ async def get_paper_stats():
 
 
 @app.get("/api/equity-curve")
-async def get_equity_curve():
+async def get_equity_curve(mode: str = "paper"):
     await _ensure_initialized()
-    """자산 곡선 (trades 기반 계산)"""
+    """자산 곡선 (mode: paper, real, all)"""
+    if mode == "paper":
+        where = "WHERE exit_time IS NOT NULL AND grade LIKE 'PAPER_%'"
+    elif mode == "real":
+        where = "WHERE exit_time IS NOT NULL AND grade NOT LIKE 'PAPER_%'"
+    else:
+        where = "WHERE exit_time IS NOT NULL"
     cursor = await db._db.execute(
-        """SELECT entry_time, pnl_usdt, pnl_pct
-           FROM trades
-           WHERE exit_time IS NOT NULL
-           ORDER BY exit_time ASC"""
+        f"SELECT entry_time, pnl_usdt, pnl_pct FROM trades {where} ORDER BY exit_time ASC"
     )
     rows = await cursor.fetchall()
 
@@ -561,7 +564,7 @@ async def get_setup_tracker():
         tracker = SetupTracker()
         return tracker.get_summary()
     except Exception as e:
-        return {"error": str(e), "A": {"total": 0}, "B": {"total": 0}, "C": {"total": 0}}
+        return {"error": str(e)}
 
 
 @app.get("/api/ml/flow-stats")
@@ -662,7 +665,7 @@ async def get_engine_overview():
         setup_summary = SetupTracker().get_summary()
     except Exception as e:
         logger.debug(f"setup_tracker load 실패: {e}")
-        setup_summary = {"A": {}, "B": {}, "C": {}}
+        setup_summary = {}
 
     # 4) Real vs Paper 비교 (동일 grade family 필터)
     real_stats = {"total": 0, "wins": 0, "wr": 0.0, "total_pnl": 0.0, "avg_pnl": 0.0}

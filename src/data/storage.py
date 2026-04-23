@@ -368,6 +368,32 @@ class RedisClient:
         except Exception as e:
             logger.debug(f"Redis delete error ({key}): {e}")
 
+    async def rpush(self, key: str, value):
+        """리스트 끝에 추가 (대시보드 명령 큐)"""
+        if not self._client:
+            await self._ensure_connected()
+        if not self._client:
+            return
+        try:
+            if isinstance(value, (dict, list)):
+                value = json.dumps(value, default=_json_default)
+            await self._client.rpush(key, value)
+        except Exception as e:
+            logger.warning(f"Redis rpush error ({key}): {e}")
+            self._client = None
+
+    async def lpop(self, key: str) -> str | None:
+        """리스트 앞에서 꺼내기 (봇 명령 소비)"""
+        if not self._client:
+            await self._ensure_connected()
+        if not self._client:
+            return None
+        try:
+            return await self._client.lpop(key)
+        except Exception as e:
+            logger.debug(f"Redis lpop error ({key}): {e}")
+            return None
+
     async def publish(self, channel: str, message: str):
         if not self._client:
             return

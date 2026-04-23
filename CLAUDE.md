@@ -2,14 +2,14 @@
 
 ## 프로젝트 개요
 - BTC 무기한 선물(OKX) 자동매매 시스템
-- **듀얼 모델**: Swing 14개 기법 + Scalp 18종 (ScalpEngine v3/v4) — **현재 스캘핑 중점**
+- **듀얼 모델**: Swing 14개 기법 + Scalp 18종 (ScalpEngine v3/v4) — **Swing/Scalp 독립 운영 (둘 다 성장 후 판단)**
 - 설계서: `명세서.md` (헤더 "현재 상태" 섹션 + Part 17~22 참조)
 - 변경 인덱스: `COMMIT_LOG.md` (자동 갱신, 매 커밋 후)
 - 사람용 변경 큐레이션: `CHANGELOG.md`
 - 운영 매뉴얼: `MANUAL.md`
 
 ## 핵심 설계 결정 (논의 완료)
-- 매매 스타일: 스캘핑 중심 + Swing 보조 (보유 수분~수시간)
+- 매매 스타일: Swing + Scalp 독립 병행 (어느 쪽이 좋은지 데이터로 판단 예정)
 - 타임프레임: Scalp(1m/5m) / Swing(15m·1H·4H)
 - 레버리지: 10~30배 동적 (등급 + ATR 변동성 + 연패 상태 연동)
 - **사이즈/SL 모드: `margin_loss_cap`** (기본) — SL 거리 = max_margin_loss_pct/leverage, TP/트레일도 마진 % 기준

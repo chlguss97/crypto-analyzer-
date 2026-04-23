@@ -143,17 +143,17 @@ class FlowML:
             proba = self.model.predict_proba(X)[0]
             win_prob = float(proba[1]) if len(proba) > 1 else 0.5
 
-            # 확률 → 점수 보정
-            if win_prob > 0.6:
-                ml_score = min(3.0, (win_prob - 0.5) * 6)
-            elif win_prob > 0.52:
-                ml_score = min(1.5, (win_prob - 0.5) * 8)
-            elif win_prob < 0.35:
-                ml_score = max(-2.0, (win_prob - 0.5) * 4)
-            elif win_prob < 0.45:
-                ml_score = max(-1.0, (win_prob - 0.5) * 3)
+            # 확률 → 점수 보정 (순서: 높은쪽부터 → 낮은쪽)
+            if win_prob >= 0.6:
+                ml_score = min(3.0, (win_prob - 0.5) * 6)    # 0.6→+0.6, 0.7→+1.2
+            elif win_prob >= 0.52:
+                ml_score = min(1.5, (win_prob - 0.5) * 8)    # 0.52→+0.16, 0.55→+0.4
+            elif win_prob <= 0.35:
+                ml_score = max(-2.0, (win_prob - 0.5) * 4)   # 0.35→-0.6, 0.25→-1.0
+            elif win_prob <= 0.45:
+                ml_score = max(-1.0, (win_prob - 0.5) * 3)   # 0.45→-0.15, 0.40→-0.3
             else:
-                ml_score = 0
+                ml_score = 0  # 0.45 < win_prob < 0.52 → neutral
 
             return {
                 "ml_score": round(ml_score, 2),

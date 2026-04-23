@@ -22,6 +22,7 @@ class RiskManager:
         self.cooldown_cfg = self.config["cooldown"]
         self._last_balance_sync = 0  # 잔고 동기화 throttle
 
+        iso = datetime.now(timezone.utc).isocalendar()
         self._state = {
             "daily_pnl_pct": 0.0,
             "weekly_pnl_pct": 0.0,
@@ -30,7 +31,7 @@ class RiskManager:
             "streak": 0,
             "cooldown_until": 0,
             "trade_count_today": 0,
-            "current_week": datetime.now(timezone.utc).isocalendar()[1],
+            "current_week": (iso[0], iso[1]),  # (year, week) 연도+주차
         }
 
     async def initialize(self, balance: float):
@@ -102,8 +103,9 @@ class RiskManager:
 
     async def record_trade_result(self, pnl_pct: float, pnl_usdt: float):
         """매매 결과 기록 → 연패/쿨다운/일일·주간 P&L 갱신"""
-        # 주차 변경 체크
-        current_week = datetime.now(timezone.utc).isocalendar()[1]
+        # 주차 변경 체크 (연도+주차)
+        iso = datetime.now(timezone.utc).isocalendar()
+        current_week = (iso[0], iso[1])
         if current_week != self._state["current_week"]:
             self._state["weekly_pnl_pct"] = 0.0
             self._state["current_week"] = current_week

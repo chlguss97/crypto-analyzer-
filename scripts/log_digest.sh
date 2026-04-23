@@ -78,11 +78,17 @@ $DC logs --since "${MINUTES}m" "$SERVICE" 2>&1 | \
     | tail -30 || echo "(없음)"
 echo
 
-# 5. 시그널 진입 거부 빈도 (요약)
-echo "── 📉 진입 거부 사유 통계 ──"
+# 5. 시그널 평가 + 거부 사유 통계 (FlowEngine 패턴)
+echo "── 📉 시그널 평가 통계 ──"
 $DC logs --since "${MINUTES}m" "$SERVICE" 2>&1 | \
-    grep "진입 거부" | \
-    sed -E 's/.*진입 거부: ([^(]+).*/\1/' | \
+    grep -E "\[TRADE\] setup=" | \
+    sed -E 's/.*reason=([^ ]+).*/\1/' | \
+    sort | uniq -c | sort -rn | head -10 || echo "(없음)"
+echo
+echo "── 🚧 게이트 차단 통계 ──"
+$DC logs --since "${MINUTES}m" "$SERVICE" 2>&1 | \
+    grep -E "\[TRADE\] 게이트:" | \
+    sed -E 's/.*게이트: ([^→]+).*/\1/' | \
     sort | uniq -c | sort -rn | head -10 || echo "(없음)"
 echo
 

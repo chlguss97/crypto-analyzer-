@@ -1280,7 +1280,7 @@ const REGIME_LABELS = {
   'trending_up': 'TRENDING UP', 'trending_down': 'TRENDING DOWN',
   'ranging': 'RANGING', 'volatile': 'VOLATILE'
 };
-const SETUP_COLORS = {'FLOW':'var(--accent)','A':'var(--green)','B':'var(--accent)','C':'var(--yellow)'};
+const SETUP_COLORS = {'LVL':'var(--green)','MOM':'var(--accent)','PB':'var(--blue)','BRK':'var(--yellow)','DIV':'#c084fc','SES':'#f97316'};
 
 async function updateEngineTab() {
   const data = await api('/api/engine/overview');
@@ -1667,17 +1667,18 @@ async function updatePaperPositions() {
   container.innerHTML = '<div class="live-pos">' + positions.map(p => {
     const dir = p.direction || '?';
     const color = dir === 'long' ? 'var(--green)' : 'var(--red)';
-    const pnl = p.unrealized_pnl_pct || 0;
+    const pnl = p.pnl_pct || 0;
     const pnlColor = pnl >= 0 ? 'var(--green)' : 'var(--red)';
-    const holdMin = p.hold_minutes || 0;
+    const holdMin = p.hold_min || 0;
+    const pnlUsd = p.pnl_usdt || 0;
     return `<div class="live-pos-item">
       <div class="live-pos-header">
         <span style="font-weight:700;color:${color}">${dir.toUpperCase()} (PAPER)</span>
-        <span style="font-weight:600;color:${pnlColor};font-family:'JetBrains Mono',monospace">${pnl>=0?'+':''}${pnl.toFixed(2)}%</span>
+        <span style="font-weight:600;color:${pnlColor};font-family:'JetBrains Mono',monospace">${pnl>=0?'+':''}${pnl.toFixed(2)}% ($${pnlUsd>=0?'+':''}${pnlUsd.toFixed(0)})</span>
       </div>
-      <div class="metric" style="padding:4px 0"><span class="metric-label">Setup</span><span class="metric-value">${p.setup||'--'}</span></div>
       <div class="metric" style="padding:4px 0"><span class="metric-label">Entry</span><span class="metric-value">$${fmt(p.entry_price,1)}</span></div>
-      <div class="metric" style="padding:4px 0"><span class="metric-label">Current</span><span class="metric-value">$${fmt(p.current_price,1)}</span></div>
+      <div class="metric" style="padding:4px 0"><span class="metric-label">SL</span><span class="metric-value">$${fmt(p.sl_price,1)}</span></div>
+      <div class="metric" style="padding:4px 0"><span class="metric-label">Lev</span><span class="metric-value">${p.leverage||'?'}x</span></div>
       <div class="metric" style="padding:4px 0"><span class="metric-label">Hold</span><span class="metric-value">${holdMin}m</span></div>
     </div>`;
   }).join('') + '</div>';

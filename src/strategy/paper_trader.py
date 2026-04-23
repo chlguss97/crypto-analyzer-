@@ -567,9 +567,12 @@ class PaperTrader:
 
         # ── DB 업데이트 ──
         exit_time = int(time.time() * 1000)
-        # fee_total: 노셔널 기준 수수료 (margin × leverage × 왕복 수수료율)
+        # fee_total: 실제 적용된 수수료와 일치시킴
         notional = pos.margin * pos.leverage
-        fee_total = notional * (self.FEE_MAKER + self.FEE_TAKER) * 2
+        if "sl" in reason:
+            fee_total = notional * (self.FEE_MAKER + self.FEE_TAKER)  # 진입maker + 청산taker
+        else:
+            fee_total = notional * self.FEE_MAKER * 2  # 양쪽 maker
         try:
             await self.db.update_trade_exit(pos.trade_id, {
                 "exit_price": exit_price,
