@@ -15,28 +15,7 @@ from src.data.candle_collector import CandleCollector
 from src.data.ws_stream import WebSocketStream
 from src.data.binance_stream import BinanceStream
 from src.data.oi_funding import OIFundingCollector
-# ── 레거시 (04-17 FlowEngine 전환으로 비활성) ──
-# from src.engine.fast.ema import EMAIndicator
-# from src.engine.fast.rsi import RSIIndicator
-# from src.engine.fast.bollinger import BollingerIndicator
-# from src.engine.fast.vwap import VWAPIndicator
-# from src.engine.fast.market_structure import MarketStructureIndicator
-# from src.engine.fast.atr import ATRIndicator
-# from src.engine.fast.fractal import FractalIndicator
-# from src.engine.slow.order_block import OrderBlockIndicator
-# from src.engine.slow.fvg import FVGIndicator
-# from src.engine.slow.volume_pattern import VolumePatternIndicator
-# from src.engine.slow.funding_rate import FundingRateIndicator
-# from src.engine.slow.open_interest import OpenInterestIndicator
-# from src.engine.slow.liquidation import LiquidationIndicator
-# from src.engine.slow.long_short_ratio import LongShortRatioIndicator
-# from src.engine.slow.cvd import CVDIndicator
 from src.engine.base import BaseIndicator  # to_dataframe 유틸만 사용
-# from src.signal_engine.aggregator import SignalAggregator
-# from src.signal_engine.grader import SignalGrader
-# from src.strategy.scalp_engine import ScalpEngine
-# from src.strategy.adaptive_ml import AdaptiveML
-# from src.strategy.unified_engine import TradeEngine
 
 # ── FlowEngine (현재 활성) ──
 from src.strategy.flow_engine import FlowEngine
@@ -47,15 +26,11 @@ from src.trading.executor import OrderExecutor
 from src.trading.position_manager import PositionManager
 from src.monitoring.telegram_bot import TelegramNotifier
 from src.monitoring.trade_logger import TradeLogger
-# 레거시 (FlowEngine 전환으로 비활성 — import만 유지)
-# from src.strategy.paper_trader import PaperTrader
-# from src.strategy.historical_learner import HistoricalLearner
-# from src.strategy.auto_backtest import AutoBacktest
-# from src.strategy.meta_learner import MetaLearner
 from src.strategy.signal_tracker import SignalTracker
 from src.strategy.setup_tracker import SetupTracker
 from src.engine.regime_detector import MarketRegimeDetector
 from src.trading.news_filter import NewsFilter
+from src.strategy.paper_trader import PaperTrader
 
 logging.basicConfig(
     level=logging.INFO,
@@ -84,15 +59,6 @@ class CryptoAnalyzer:
         # ══════ FlowEngine (현재 활성) ══════
         self.flow_ml = FlowML()
         self.trade_engine = FlowEngine(redis=self.redis, flow_ml=self.flow_ml)
-
-        # ══════ 레거시 (04-17 비활성 — FlowEngine으로 대체) ══════
-        # self.fast_engines = [EMAIndicator(), RSIIndicator(), ...]
-        # self.slow_engines = [OrderBlockIndicator(), FVGIndicator(), ...]
-        # self.aggregator = SignalAggregator()
-        # self.grader = SignalGrader()
-        # self.scalp_engine = ScalpEngine()
-        # self.ml_swing = AdaptiveML(mode="swing")
-        # self.ml_scalp = AdaptiveML(mode="scalp")
 
         # 통합 모델 상태
         self._unified_streak = 0
@@ -123,21 +89,14 @@ class CryptoAnalyzer:
         # 뉴스 필터
         self.news_filter = NewsFilter()
 
-        # ══════ 레거시 학습 시스템 (비활성) ══════
-        # paper_trader, hist_learner, auto_backtest, meta_learner 는
-        # 레거시 AdaptiveML 의존 → FlowML로 대체됨
-        # PaperTrader는 None으로 — FlowML이 실거래 결과로 직접 학습
-        self.paper_trader = None
-        self.hist_learner = None
-        self.auto_backtest = None
-        self.meta_learner = None
-
         # 시그널 기여도 추적 (유지 — FlowEngine에서도 사용)
         self.signal_tracker = SignalTracker()
 
         # 셋업 성과 추적 (자기개선)
         self.setup_tracker = SetupTracker()
-        # self.paper_trader.setup_tracker = self.setup_tracker  # 레거시
+
+        # 페이퍼 트레이더 (실거래 대신 가상매매로 데이터 축적)
+        self.paper_trader = None  # initialize()에서 생성
 
         # 스캘핑 리스크 관리
         self._scalp_daily_pnl = 0.0         # 일일 스캘핑 P&L (%)
@@ -161,6 +120,7 @@ class CryptoAnalyzer:
         # 학습-매매 격리 메모리 fallback (Redis 일시 끊김 대비)
         # — sys:learning 키 set/get 실패 시에도 동일 프로세스 내에서는 차단 보장
         self._learning_local = False
+        self._last_flow_result = None
 
     async def initialize(self):
         logger.info("=" * 50)
@@ -196,8 +156,18 @@ class CryptoAnalyzer:
             await self.candle_collector.backfill(tf, days=7)
         logger.info("캔들 백필 완료")
 
-        # 04-15: ML 콜드스타트 — 역사 학습 비활성
-        logger.info("통합 엔진 v1 — ML 비활성 (페이퍼 데이터 축적 후 학습 예정)")
+        # PaperTrader v2 초기화 (독립 가상 계좌, 실거래와 완전 분리)
+        self.paper_trader = PaperTrader(
+            db=self.db, redis=self.redis,
+            flow_ml=self.flow_ml,
+            regime_detector=self.regime_detector,
+            signal_tracker=self.signal_tracker,
+            setup_tracker=self.setup_tracker,
+        )
+        logger.info(
+            f"📝 페이퍼 트레이딩 모드 — 가상 잔고 ${self.paper_trader.balance:,.0f} | "
+            f"실거래 OFF"
+        )
 
     # ── Swing 시그널 ──
 
@@ -361,14 +331,7 @@ class CryptoAnalyzer:
             await self.redis.set(f"sig:aggregated:{self.symbol}",
                                  {"aggregated": swing_agg, "grade": swing_grade}, ttl=1800)
 
-            # 가상매매 전수 학습 (학습 중엔 스킵 — CPU 절약 + 실거래 보호 우선)
-            price_str = await self.redis.get("rt:price:BTC-USDT-SWAP")
-            learning = self._learning_local or (await self.redis.get("sys:learning")) == "1"
-            if price_str and not learning:
-                agg = swing_agg.copy()
-                agg["atr_pct"] = self._last_fast.get("atr", {}).get("atr_pct", 0.3)
-                agg["signals_detail"] = {**self._last_fast, **self._last_slow}
-                await self.paper_trader.try_entry(agg, "swing", float(price_str))
+            # 페이퍼 매매는 FlowEngine 통합 경로에서만 실행 (레거시 swing 경로 제거)
 
             # 실거래 (뉴스 필터 + 리스크 체크)
             if autotrading and active_model in ("swing", "both") and swing_grade["tradeable"]:
@@ -430,10 +393,7 @@ class CryptoAnalyzer:
             "session": scalp_sig.get("session", "unknown"),
         }, ttl=30)
 
-        # 가상매매 전수 학습 (학습 중엔 스킵)
-        learning = self._learning_local or (await self.redis.get("sys:learning")) == "1"
-        if not learning:
-            await self.paper_trader.try_entry(scalp_sig, "scalp", current_price)
+        # 페이퍼 매매는 FlowEngine 통합 경로에서만 실행 (레거시 scalp 경로 제거)
 
         # ── 진입 확인 대기 로직 ──
         # 1차: 시그널 발생 → 대기 상태로 저장
@@ -1109,18 +1069,26 @@ class CryptoAnalyzer:
         """통합 엔진 평가 + 매매"""
         import time as _t
 
+        now = _t.time()
+        _gate_log_interval = 60  # 게이트 차단 로그 최소 간격(초)
+
         # 일일 손실 한도
         if self._unified_daily_pnl <= -10.0:
+            if now - getattr(self, "_last_gate_log", 0) >= _gate_log_interval:
+                self._last_gate_log = now
+                logger.info(f"[TRADE] 게이트: 일일 손실 한도 ({self._unified_daily_pnl:.1f}%) → 스킵")
             return
 
         # 쿨다운
-        now = _t.time()
         if now < self._unified_cooldown_until:
             return
 
         # 학습 중 진입 차단
         learning = self._learning_local or (await self.redis.get("sys:learning")) == "1"
         if learning:
+            if now - getattr(self, "_last_gate_log", 0) >= _gate_log_interval:
+                self._last_gate_log = now
+                logger.info("[TRADE] 게이트: 학습 중 → 스킵")
             return
 
         # 이미 포지션 있으면 진입 차단 (max_positions: 1)
@@ -1139,6 +1107,12 @@ class CryptoAnalyzer:
         candles_1d = await self.db.get_candles(self.symbol, "1d", limit=30)
 
         if not candles_1m or len(candles_1m) < 30 or not candles_5m or len(candles_5m) < 30:
+            if now - getattr(self, "_last_gate_log", 0) >= _gate_log_interval:
+                self._last_gate_log = now
+                logger.warning(
+                    f"[TRADE] 게이트: 캔들 부족 1m={len(candles_1m) if candles_1m else 0} "
+                    f"5m={len(candles_5m) if candles_5m else 0} → 스킵"
+                )
             return
 
         df_1m = BaseIndicator.to_dataframe(candles_1m)
@@ -1165,18 +1139,17 @@ class CryptoAnalyzer:
         if now - getattr(self, "_last_unified_log", 0) >= 30:
             self._last_unified_log = now
             sigs = result.get("signals", {})
-            rej_a = sigs.get("reject_a", "")
-            rej_b = sigs.get("reject_b", "")
-            rej_c = sigs.get("reject_c", "")
-            reject_info = f" | A:{rej_a} B:{rej_b} C:{rej_c}" if not result.get("setup") else ""
+            reason = result.get("reason", "?")
+            big_trend = sigs.get("big_trend", "?")
             logger.info(
                 f"[TRADE] setup={result.get('setup') or 'none'} "
                 f"dir={result.get('direction', 'neutral')} "
                 f"score={result.get('score', 0):.1f} "
-                f"trend={ctx.get('trend', '?')} "
-                f"structure={ctx.get('structure', '?')} "
-                f"streak={self._unified_streak}"
-                f"{reject_info}"
+                f"trend_1d={sigs.get('trend_1d', '?')} "
+                f"trend_4h={sigs.get('trend_4h', '?')} "
+                f"big={big_trend} "
+                f"streak={self._unified_streak} "
+                f"reason={reason}"
             )
 
         # TradeEngine 상태 Redis 저장 (대시보드 + 텔레그램)
@@ -1266,18 +1239,15 @@ class CryptoAnalyzer:
         if price <= 0:
             return
 
-        # 리스크 체크
-        balance = await self.executor.get_balance()
-        if balance <= 0:
-            return
+        # 페이퍼 트레이딩: 독립 가상 계좌 (실전과 무관)
+        if self.paper_trader:
+            await self.paper_trader.try_entry(result, "unified", price)
 
-        # 가상매매 기록 (레거시 — FlowML이 실거래로 직접 학습)
-        # if not learning and self.paper_trader:
-        #     await self.paper_trader.try_entry(result, "unified", price)
-
-        # 실거래
+        # 실거래 (autotrading=off 시 실행 안 됨)
         if autotrading:
-            await self._execute_unified(result, price, balance)
+            balance = await self.executor.get_balance()
+            if balance > 0:
+                await self._execute_unified(result, price, balance)
 
     async def _execute_unified(self, result: dict, price: float, balance: float):
         """통합 엔진 매매 실행"""
@@ -1510,9 +1480,9 @@ class CryptoAnalyzer:
                     if self.position_manager.positions:
                         await self.position_manager.check_positions(price)
 
-                    # 가상매매 포지션 체크 — 학습 중엔 스킵 (CPU 절약, 실거래 우선)
-                    # if self.paper_trader and self.paper_trader.positions and not learning:
-                    #     await self.paper_trader.check_positions(price)  # 레거시
+                    # 가상매매 포지션 체크 (페이퍼 모드)
+                    if self.paper_trader and (self.paper_trader.positions or self.paper_trader.shadows):
+                        await self.paper_trader.check_positions(price)
 
                 # 킬스위치 체크
                 bot_status = await self.redis.get("sys:bot_status")
@@ -1595,8 +1565,8 @@ class CryptoAnalyzer:
                 # FlowML 주기적 저장
                 try:
                     self.flow_ml.save()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"FlowML 저장 실패: {e}")
 
                 # 오래된 가상매매 기록 정리 (30일 이상)
                 try:
@@ -1818,7 +1788,7 @@ class CryptoAnalyzer:
         # 대시보드는 별도 컨테이너(docker-compose dashboard 서비스)에서 실행
         # self.start_dashboard_thread()
         await self.redis.set("sys:bot_status", "running")
-        await self.redis.set("sys:autotrading", "on")  # 초기 ON (텔레그램 /off 로 끄기)
+        await self.redis.set("sys:autotrading", "off")  # 페이퍼 모드: 실거래 OFF
         await self.redis.set("sys:ml_enabled", "on")
         # 사용자 의도: 스캘핑 중점
         await self.redis.set("sys:active_model", "both")
@@ -1833,8 +1803,9 @@ class CryptoAnalyzer:
         try:
             bal = await self.executor.get_balance()
             await self.telegram._send(
-                "\U0001f7e2 <b>FlowEngine v1</b>\n"
+                "\U0001f4dd <b>FlowEngine v1 — PAPER MODE</b>\n"
                 "Mode: OrderFlow (Trend+Level+CVD)\n"
+                "Trading: <b>PAPER ONLY</b> (실거래 OFF)\n"
                 f"ML: {'Active' if self.flow_ml.trained else 'Cold Start'}\n"
                 f"Balance: ${bal:,.2f}"
             )
@@ -1894,8 +1865,6 @@ class CryptoAnalyzer:
 
         # 1) ML 모델 + 시그널 트래커 저장 (가장 먼저, 데이터 손실 방지)
         try:
-            # self.ml_swing.save()  # 레거시
-            # self.ml_scalp.save()  # 레거시
             self.signal_tracker.save()
             self.flow_ml.save()
             logger.info("ML 모델 + SignalTracker 저장 완료")

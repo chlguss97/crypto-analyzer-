@@ -90,8 +90,8 @@ class TelegramNotifier:
         if cmd == "/on":
             if self.redis:
                 await self.redis.set("sys:autotrading", "on")
-            await self._send("\U0001f7e2 <b>자동매매 ON</b>")
-            logger.info("[TG-CMD] /on → 자동매매 ON")
+            await self._send("\U0001f7e2 <b>자동매매 ON</b>\n⚠️ 실거래 활성화됨 — 페이퍼 모드 해제")
+            logger.info("[TG-CMD] /on → 자동매매 ON (⚠️ 실거래 활성화)")
 
         elif cmd == "/off":
             if self.redis:
@@ -143,7 +143,7 @@ class TelegramNotifier:
             await self._send("\U0001f436 \uc608\ubed0\uc694!! \uba4d\uba4d! \U0001f43e")
 
     async def _cmd_status(self):
-        """봇 상태 조회"""
+        """봇 상태 조회 (실전 + 페이퍼)"""
         try:
             autotrading = "ON" if self.redis and (await self.redis.get("sys:autotrading")) == "on" else "OFF"
             regime = (await self.redis.get("sys:regime")) if self.redis else "?"
@@ -159,6 +159,28 @@ class TelegramNotifier:
                 f"레짐: {regime}\n"
                 f"학습 중: {learning}"
             )
+
+            # 페이퍼 계좌 상태
+            if self.redis:
+                paper = await self.redis.get("paper:state")
+                if paper and isinstance(paper, dict):
+                    p_bal = paper.get("balance", 0)
+                    p_ret = paper.get("total_return_pct", 0)
+                    p_dd = paper.get("drawdown_pct", 0)
+                    p_trades = paper.get("total_trades", 0)
+                    p_wr = paper.get("win_rate", 0)
+                    p_daily = paper.get("daily_pnl_pct", 0)
+                    p_pos = paper.get("active_positions", 0)
+                    p_streak = paper.get("loss_streak", 0)
+
+                    text += (
+                        f"\n\n\U0001f4dd <b>페이퍼 계좌</b>\n"
+                        f"잔고: ${p_bal:,.0f} ({p_ret:+.1f}%)\n"
+                        f"DD: {p_dd:.1f}% | 일일: {p_daily:+.1f}%\n"
+                        f"매매: {p_trades}건 | 승률: {p_wr:.0f}%\n"
+                        f"포지션: {p_pos}개 | 연패: {p_streak}"
+                    )
+
             await self._send(text)
         except Exception as e:
             await self._send(f"\u26a0\ufe0f 상태 조회 실패: {e}")
