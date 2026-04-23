@@ -1,0 +1,2 @@
+{"type": "paper_entry", "paper": true, "trade_id": 24, "direction": "long", "entry_price": 77781.5, "margin": 3733.51, "size_btc": 0.96, "leverage": 20, "sl_price": 77509.3, "tp1_price": 78131.2, "score": 9.5, "setup": "FLOW", "hold_mode": "standard", "balance": 7500.0, "ts": 1776934096, "ts_iso": "2026-04-23T08:48:16+00:00"}
+{"type": "paper_equity", "paper": true, "ts": 1776934101, "balance": 7500.0, "equity": 7500.0, "unrealized": 0.0, "positions": 1, "total_trades": 0, "ts_iso": "2026-04-23T08:48:21+00:00"}
