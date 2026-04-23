@@ -1,8 +1,8 @@
 {
-  "ts": 1776930283,
-  "ts_iso": "2026-04-23T07:44:43.808942+00:00",
+  "ts": 1776931172,
+  "ts_iso": "2026-04-23T07:59:32.055199+00:00",
   "balance": 243.36,
-  "autotrading": "on",
+  "autotrading": "off",
   "regime": "unknown",
   "regime_detail": {},
   "trade_state": {
