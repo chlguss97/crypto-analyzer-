@@ -562,7 +562,7 @@ class CryptoAnalyzer:
         self.setup_tracker.record_trade(
             setup="FLOW", direction=direction, pnl_pct=pnl_pct,
             pnl_usdt=pnl_usdt, hold_min=hold_min,
-            exit_reason=exit_reason, trend=trend,
+            exit_reason=exit_reason, trend=trend, regime=regime,
         )
 
         logger.info(f"[실거래] PnL {pnl_pct:+.2f}% 연패:{self._unified_streak} 레짐:{regime}")

@@ -70,6 +70,7 @@ class SetupTracker:
             "detections": 0,
             "by_hour": {},       # "0"~"23" -> {total, wins, pnl}
             "by_trend": {},      # "up"/"down"/"neutral" -> {total, wins, pnl}
+            "by_regime": {},     # "trending_up"/"trending_down"/"ranging"/"volatile" -> {total, wins, pnl}
             "by_direction": {},  # "long"/"short" -> {total, wins, pnl}
             "recent_results": [],  # 최근 20건 PnL 리스트
             "avg_hold_min": 0.0,
@@ -111,7 +112,8 @@ class SetupTracker:
 
     def record_trade(self, setup: str, direction: str, pnl_pct: float,
                      pnl_usdt: float = 0.0, hold_min: float = 0.0,
-                     exit_reason: str = "", trend: str = "neutral"):
+                     exit_reason: str = "", trend: str = "neutral",
+                     regime: str = "unknown"):
         """매매 종료 시 호출"""
         if setup not in SETUP_NAMES:
             logger.warning(f"[SetupTracker] 알 수 없는 셋업: {setup}")
@@ -166,6 +168,16 @@ class SetupTracker:
                 stat["by_trend"][trend]["pnl"] + pnl_pct, 3
             )
 
+            # 레짐별
+            if regime not in stat["by_regime"]:
+                stat["by_regime"][regime] = {"total": 0, "wins": 0, "pnl": 0.0}
+            stat["by_regime"][regime]["total"] += 1
+            if is_win:
+                stat["by_regime"][regime]["wins"] += 1
+            stat["by_regime"][regime]["pnl"] = round(
+                stat["by_regime"][regime]["pnl"] + pnl_pct, 3
+            )
+
             # 방향별
             if direction not in stat["by_direction"]:
                 stat["by_direction"][direction] = {"total": 0, "wins": 0, "pnl": 0.0}
@@ -193,6 +205,7 @@ class SetupTracker:
                 "hold_min": round(hold_min, 1),
                 "exit_reason": exit_reason,
                 "trend": trend,
+                "regime": regime,
                 "hour": hour,
             }
             self._trades.append(trade_entry)
@@ -307,6 +320,7 @@ class SetupTracker:
                     "best_hour": best_hour,
                     "worst_hour": worst_hour,
                     "by_trend": dict(stat["by_trend"]),
+                    "by_regime": dict(stat.get("by_regime", {})),
                     "by_direction": dict(stat["by_direction"]),
                     "last_trade_ts": stat["last_trade_ts"],
                 }

@@ -1329,13 +1329,14 @@ async function updateEngineTab() {
   stHtml += '</div>';
   stEl.innerHTML = stHtml;
 
-  // Heatmap: Setup x Regime
+  // Heatmap: Flow x Regime
   const hm = data.heatmap || {};
   const regimes = ['trending_up','trending_down','ranging','volatile'];
+  const regimeLabels = {'trending_up':'Trend Up','trending_down':'Trend Down','ranging':'Ranging','volatile':'Volatile'};
   const hmBody = document.getElementById('heatmapBody');
   let hmHtml = '';
-  for (const s of ['A','B','C']) {
-    hmHtml += `<tr><td style="font-weight:700;color:${SETUP_COLORS[s]}">Setup ${s}</td>`;
+  for (const s of Object.keys(hm)) {
+    hmHtml += `<tr><td style="font-weight:700;color:var(--blue)">${s}</td>`;
     for (const rk of regimes) {
       const cell = (hm[s]||{})[rk] || {};
       const n = cell.n || 0;
@@ -1345,7 +1346,7 @@ async function updateEngineTab() {
       if (n > 0 && wr !== null && wr !== undefined) {
         bg = wr >= 50 ? 'rgba(63,185,80,0.15)' : wr >= 35 ? 'rgba(210,153,34,0.15)' : 'rgba(248,81,73,0.15)';
         const wrC = wr >= 50 ? 'var(--green)' : wr >= 35 ? 'var(--yellow)' : 'var(--red)';
-        txt = `<span style="color:${wrC};font-weight:700">${wr.toFixed(0)}%</span><br><span style="color:var(--text-muted);font-size:10px;">${n} trades</span>`;
+        txt = `<span style="color:${wrC};font-weight:700">${wr.toFixed(0)}%</span><br><span style="color:var(--text-muted);font-size:10px;">${n}건</span>`;
       } else if (n === 0) {
         txt = '<span style="color:var(--text-muted)">-</span>';
       }
@@ -1353,6 +1354,7 @@ async function updateEngineTab() {
     }
     hmHtml += '</tr>';
   }
+  if (!hmHtml) hmHtml = '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:16px;">데이터 수집 중...</td></tr>';
   hmBody.innerHTML = hmHtml;
 
   // Real vs Paper comparison

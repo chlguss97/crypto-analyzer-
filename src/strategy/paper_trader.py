@@ -541,7 +541,8 @@ class PaperTrader:
                 self.setup_tracker.record_trade(
                     setup=pos.setup, direction=pos.direction,
                     pnl_pct=net_pnl_pct, pnl_usdt=pnl_usdt,
-                    hold_min=hold_min, exit_reason=reason, trend=trend,
+                    hold_min=hold_min, exit_reason=reason,
+                    trend=trend, regime=regime,
                 )
             except Exception as e:
                 logger.debug(f"[PAPER] setup_tracker 기록 실패: {e}")

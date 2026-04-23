@@ -704,16 +704,16 @@ async def get_engine_overview():
     except Exception as e:
         logger.debug(f"real/paper 집계 실패: {e}")
 
-    # 5) Setup × Trend 히트맵 (FLOW 셋업)
+    # 5) Flow × Regime 히트맵
     heatmap = {}
     for setup_name in setup_summary:
-        by_trend = (setup_summary.get(setup_name) or {}).get("by_trend", {}) or {}
+        by_regime = (setup_summary.get(setup_name) or {}).get("by_regime", {}) or {}
         heatmap[setup_name] = {}
-        for trend_key in ("up", "down", "neutral"):
-            r = by_trend.get(trend_key, {}) or {}
+        for regime_key in ("trending_up", "trending_down", "ranging", "volatile"):
+            r = by_regime.get(regime_key, {}) or {}
             n = r.get("total", 0)
             w = r.get("wins", 0)
-            heatmap[setup_name][trend_key] = {
+            heatmap[setup_name][regime_key] = {
                 "n": n,
                 "wins": w,
                 "wr": (w / max(n, 1)) * 100 if n > 0 else None,
