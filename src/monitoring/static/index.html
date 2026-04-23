@@ -770,7 +770,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
     <!-- Paper Overview Cards -->
     <div class="grid" style="grid-template-columns: repeat(4, 1fr); margin-bottom:14px;">
       <div class="card" style="text-align:center;">
-        <div class="big-num" id="paperBalance" style="font-size:28px;">$10,000</div>
+        <div class="big-num" id="paperBalance" style="font-size:28px;">$7,500</div>
         <div class="big-sub" data-i18n="paper.virtual_balance">Virtual Balance</div>
         <div style="margin-top:10px;">
           <span class="metric-value" id="paperReturnPct" style="font-size:16px;">0.00%</span>
@@ -1563,31 +1563,65 @@ async function updatePaperStats() {
   avgEl.textContent = 'Avg: ' + (avgPnl >= 0 ? '+' : '') + avgPnl.toFixed(2) + '%';
   avgEl.style.color = avgPnl >= 0 ? 'var(--green)' : 'var(--red)';
 
-  // Virtual balance & return
-  const vBal = data.virtual_balance || 10000;
+  // Virtual balance & return — account 객체에서 가져옴
+  const acct = data.account || {};
+  const initBal = acct.initial_balance || 7500;
+  const vBal = acct.balance || initBal;
   document.getElementById('paperBalance').textContent = '$' + fmt(vBal, 2);
-  const returnPct = ((vBal - 10000) / 10000 * 100);
+  const returnPct = acct.total_return_pct || ((vBal - initBal) / initBal * 100);
   const retEl = document.getElementById('paperReturnPct');
   retEl.textContent = (returnPct >= 0 ? '+' : '') + returnPct.toFixed(2) + '%';
   retEl.className = 'metric-value ' + pnlClass(returnPct);
 
-  // Stats detail
-  setEl('paperBestTrade', 'textContent', data.best_trade_pct != null ? '+' + (data.best_trade_pct||0).toFixed(2) + '%' : '--');
-  setEl('paperWorstTrade', 'textContent', data.worst_trade_pct != null ? (data.worst_trade_pct||0).toFixed(2) + '%' : '--');
-  setEl('paperAvgHold', 'textContent', data.avg_hold_min != null ? (data.avg_hold_min||0) + 'm' : '--');
-  setEl('paperLongWr', 'textContent', data.long_win_rate != null ? (data.long_win_rate||0).toFixed(1) + '%' : '--');
-  setEl('paperShortWr', 'textContent', data.short_win_rate != null ? (data.short_win_rate||0).toFixed(1) + '%' : '--');
-  setEl('paperProfitFactor', 'textContent', data.profit_factor != null ? (data.profit_factor||0).toFixed(2) : '--');
+  // Stats detail — account + DB 데이터 조합
+  const bestPct = acct.best_trade_pct || 0;
+  const worstPct = acct.worst_trade_pct || 0;
+  setEl('paperBestTrade', 'textContent', data.total > 0 ? (bestPct >= 0 ? '+' : '') + bestPct.toFixed(2) + '%' : '--');
+  setEl('paperWorstTrade', 'textContent', data.total > 0 ? (worstPct >= 0 ? '+' : '') + worstPct.toFixed(2) + '%' : '--');
+
+  // 평균 보유시간: recent_trades에서 계산
+  const trades_for_hold = data.recent_trades || [];
+  if (trades_for_hold.length > 0) {
+    const avgHold = trades_for_hold.reduce((s, t) => {
+      const hold = (t.exit_time && t.entry_time) ? (t.exit_time - t.entry_time) / 60000 : 0;
+      return s + hold;
+    }, 0) / trades_for_hold.length;
+    setEl('paperAvgHold', 'textContent', avgHold.toFixed(0) + 'm');
+  } else {
+    setEl('paperAvgHold', 'textContent', '--');
+  }
+
+  // Long/Short 승률: recent_trades에서 계산
+  const longs = trades_for_hold.filter(t => t.direction === 'long');
+  const shorts = trades_for_hold.filter(t => t.direction === 'short');
+  const longWr = longs.length > 0 ? (longs.filter(t => (t.pnl_pct||0) > 0).length / longs.length * 100) : 0;
+  const shortWr = shorts.length > 0 ? (shorts.filter(t => (t.pnl_pct||0) > 0).length / shorts.length * 100) : 0;
+  setEl('paperLongWr', 'textContent', longs.length > 0 ? longWr.toFixed(1) + '%' : '--');
+  setEl('paperShortWr', 'textContent', shorts.length > 0 ? shortWr.toFixed(1) + '%' : '--');
+
+  // Profit Factor: 총익/총손
+  const totalWin = trades_for_hold.filter(t => (t.pnl_usdt||0) > 0).reduce((s, t) => s + (t.pnl_usdt||0), 0);
+  const totalLoss = Math.abs(trades_for_hold.filter(t => (t.pnl_usdt||0) < 0).reduce((s, t) => s + (t.pnl_usdt||0), 0));
+  setEl('paperProfitFactor', 'textContent', totalLoss > 0 ? (totalWin / totalLoss).toFixed(2) : (totalWin > 0 ? '∞' : '--'));
 
   // Drawdown
-  setEl('paperMaxDD', 'textContent', data.max_drawdown_pct != null ? (data.max_drawdown_pct||0).toFixed(2) + '%' : '--');
-  setEl('paperCurrDD', 'textContent', data.current_drawdown_pct != null ? (data.current_drawdown_pct||0).toFixed(2) + '%' : '--');
-  setEl('paperMaxWinStreak', 'textContent', data.max_win_streak != null ? data.max_win_streak : '--');
-  setEl('paperMaxLossStreak', 'textContent', data.max_loss_streak != null ? data.max_loss_streak : '--');
-  const cs = data.current_streak || 0;
-  const csEl = setEl('paperCurrentStreak', 'textContent', cs > 0 ? '+' + cs + 'W' : cs < 0 ? cs + 'L' : '0');
-  if (csEl) csEl.style.color = cs > 0 ? 'var(--green)' : cs < 0 ? 'var(--red)' : 'var(--text-muted)';
-  setEl('paperSharpe', 'textContent', data.sharpe_ratio != null ? (data.sharpe_ratio||0).toFixed(2) : '--');
+  const ddPct = acct.drawdown_pct || 0;
+  setEl('paperMaxDD', 'textContent', data.total > 0 ? ddPct.toFixed(2) + '%' : '--');
+  setEl('paperCurrDD', 'textContent', data.total > 0 ? ddPct.toFixed(2) + '%' : '--');
+
+  // 연패/연승 계산
+  let maxWin = 0, maxLoss = 0, curStreak = 0, cw = 0, cl = 0;
+  for (const t of trades_for_hold) {
+    if ((t.pnl_pct||0) > 0) { cw++; cl = 0; } else { cl++; cw = 0; }
+    maxWin = Math.max(maxWin, cw);
+    maxLoss = Math.max(maxLoss, cl);
+  }
+  curStreak = cw > 0 ? cw : -cl;
+  setEl('paperMaxWinStreak', 'textContent', data.total > 0 ? maxWin : '--');
+  setEl('paperMaxLossStreak', 'textContent', data.total > 0 ? maxLoss : '--');
+  const csEl = setEl('paperCurrentStreak', 'textContent', data.total > 0 ? (curStreak > 0 ? '+' + curStreak + 'W' : curStreak < 0 ? curStreak + 'L' : '0') : '--');
+  if (csEl) csEl.style.color = curStreak > 0 ? 'var(--green)' : curStreak < 0 ? 'var(--red)' : 'var(--text-muted)';
+  setEl('paperSharpe', 'textContent', '--');
 
   // Trade history table
   const tbody = document.getElementById('paperTradesBody');
@@ -1622,9 +1656,10 @@ async function updatePaperPositions() {
   if (!data) return;
 
   const container = document.getElementById('paperActivePositions');
-  const positions = data.active_positions || [];
+  // live_positions = Redis 실시간 포지션 배열, active_positions = DB 카운트(숫자)
+  const positions = data.live_positions || [];
 
-  if (positions.length === 0) {
+  if (!positions || positions.length === 0) {
     container.innerHTML = '<div class="position-empty">No active paper positions</div>';
     return;
   }
