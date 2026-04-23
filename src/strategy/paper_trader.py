@@ -160,6 +160,71 @@ class PaperTrader:
         self._equity_history: list[dict] = []
         self._last_equity_snap = 0.0
 
+    async def restore_from_db(self):
+        """DB의 과거 페이퍼 매매 기록에서 잔고/통계 복원 (재시작 시 호출)"""
+        try:
+            cursor = await self.db._db.execute(
+                """SELECT pnl_usdt, pnl_pct, direction
+                   FROM trades
+                   WHERE grade LIKE 'PAPER_%' AND exit_time IS NOT NULL
+                   ORDER BY exit_time ASC"""
+            )
+            rows = await cursor.fetchall()
+            if not rows:
+                logger.info("[PAPER] 복원할 과거 매매 없음 — 초기 잔고 유지")
+                return
+
+            total_pnl = 0.0
+            wins = 0
+            losses = 0
+            best_pct = 0.0
+            worst_pct = 0.0
+            streak = 0
+            peak = self.initial_balance
+
+            for row in rows:
+                pnl_usdt = row[0] or 0
+                pnl_pct = row[1] or 0
+                total_pnl += pnl_usdt
+
+                current_bal = self.initial_balance + total_pnl
+                if current_bal > peak:
+                    peak = current_bal
+
+                if pnl_pct > 0:
+                    wins += 1
+                    streak = 0
+                elif pnl_pct < 0:
+                    losses += 1
+                    streak += 1
+
+                best_pct = max(best_pct, pnl_pct)
+                worst_pct = min(worst_pct, pnl_pct)
+
+            self.balance = max(0, self.initial_balance + total_pnl)
+            self.peak_balance = max(peak, self.balance)
+            self._loss_streak = streak
+            self._stats["total"] = wins + losses
+            self._stats["wins"] = wins
+            self._stats["losses"] = losses
+            self._stats["total_pnl_usdt"] = round(total_pnl, 2)
+            self._stats["best_trade_pct"] = round(best_pct, 2)
+            self._stats["worst_trade_pct"] = round(worst_pct, 2)
+
+            total_return = (self.balance - self.initial_balance) / self.initial_balance * 100
+            win_rate = wins / max(wins + losses, 1) * 100
+            logger.info(
+                f"[PAPER] DB 복원 완료: {wins + losses}건 | "
+                f"잔고 ${self.balance:,.0f} ({total_return:+.1f}%) | "
+                f"승률 {win_rate:.0f}% | 연패 {streak}"
+            )
+
+            # Redis에도 즉시 반영
+            await self._update_redis_state()
+
+        except Exception as e:
+            logger.error(f"[PAPER] DB 복원 실패: {e}")
+
     # ══════════════════════════════════════════
     #  진입 판단
     # ══════════════════════════════════════════

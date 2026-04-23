@@ -144,6 +144,7 @@ class CryptoAnalyzer:
             signal_tracker=self.signal_tracker,
             setup_tracker=self.setup_tracker,
         )
+        await self.paper_trader.restore_from_db()
         logger.info(
             f"📝 페이퍼 트레이딩 모드 — 가상 잔고 ${self.paper_trader.balance:,.0f} | "
             f"실거래 OFF"
