@@ -29,7 +29,7 @@
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-primary); color: var(--text-primary); min-height: 100vh; -webkit-font-smoothing: antialiased; }
 
-/* ── Header ── */
+/* -- Header -- */
 .header {
   background: linear-gradient(180deg, rgba(13,17,23,0.95) 0%, rgba(6,8,13,0.98) 100%);
   backdrop-filter: blur(20px);
@@ -55,31 +55,31 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
 .status-unknown::before { background: var(--text-muted); }
 .clock { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-muted); }
 
-/* ── Layout ── */
+/* -- Layout -- */
 .main { max-width: 1600px; margin: 0 auto; padding: 0 24px; }
 
-/* ── Tabs ── */
-.tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 16px; margin-top: 8px; }
+/* -- Tabs -- */
+.tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 16px; margin-top: 8px; overflow-x: auto; }
 .tab {
   padding: 10px 24px; font-size: 13px; font-weight: 600; cursor: pointer;
   color: var(--text-muted); border-bottom: 2px solid transparent;
   transition: all 0.2s; background: none; border-top: none; border-left: none; border-right: none;
-  font-family: 'Inter', sans-serif;
+  font-family: 'Inter', sans-serif; white-space: nowrap;
 }
 .tab:hover { color: var(--text-secondary); }
 .tab.active { color: var(--text-primary); border-bottom-color: var(--accent); }
 .tab-content { display: none; }
 .tab-content.active { display: block; }
 
-/* ── Chart ── */
+/* -- Chart -- */
 .chart-wrapper { margin: 0 0 14px 0; border-radius: 16px; border: 1px solid var(--border); background: var(--bg-card); }
 .chart-container { width: 100%; height: 600px; }
 
-/* ── Cards Grid ── */
+/* -- Cards Grid -- */
 .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 14px; }
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
 
-/* ── Card ── */
+/* -- Card -- */
 .card {
   background: var(--bg-card);
   border: 1px solid var(--border);
@@ -93,7 +93,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
 .card-icon { font-size: 14px; }
 .full-width { grid-column: 1 / -1; }
 
-/* ── Help Tooltip ── */
+/* -- Help Tooltip -- */
 .help {
   display: inline-flex;
   align-items: center;
@@ -157,7 +157,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
   opacity: 1;
 }
 
-/* ── Metric Rows ── */
+/* -- Metric Rows -- */
 .metric { display: flex; justify-content: space-between; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--border-subtle); }
 .metric:last-child { border-bottom: none; }
 .metric-label { color: var(--text-secondary); font-size: 12.5px; font-weight: 400; }
@@ -166,11 +166,11 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
 .negative { color: var(--red); }
 .neutral { color: var(--text-muted); }
 
-/* ── Big Number ── */
+/* -- Big Number -- */
 .big-num { font-size: 36px; font-weight: 700; font-family: 'JetBrains Mono', monospace; letter-spacing: -2px; line-height: 1; }
 .big-sub { color: var(--text-muted); font-size: 11px; font-weight: 500; margin-top: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
 
-/* ── Position ── */
+/* -- Position -- */
 .position-card { position: relative; overflow: hidden; }
 .position-card::before { content: ''; position: absolute; top: 0; left: 0; width: 3px; height: 100%; background: var(--accent); border-radius: 3px 0 0 3px; }
 .position-card.long::before { background: linear-gradient(180deg, var(--green), rgba(63,185,80,0.3)); }
@@ -179,7 +179,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
 .pos-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
 .pos-dir { font-size: 20px; font-weight: 700; letter-spacing: -0.5px; }
 
-/* ── Signal Grid ── */
+/* -- Signal Grid -- */
 .signal-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
 .signal-item {
   display: flex; justify-content: space-between; align-items: center;
@@ -196,13 +196,13 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
 .strength-bar { width: 48px; height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; }
 .strength-fill { height: 100%; border-radius: 2px; transition: width 0.3s; }
 
-/* ── Grade Badge ── */
+/* -- Grade Badge -- */
 .grade-badge { padding: 3px 10px; border-radius: 6px; font-size: 10px; font-weight: 700; letter-spacing: 0.5px; font-family: 'JetBrains Mono', monospace; }
 .grade-a { background: rgba(63,185,80,0.12); color: var(--green); border: 1px solid rgba(63,185,80,0.2); }
 .grade-b { background: rgba(88,166,255,0.12); color: var(--accent); border: 1px solid rgba(88,166,255,0.2); }
 .grade-c { background: rgba(139,148,158,0.1); color: var(--text-muted); border: 1px solid var(--border); }
 
-/* ── Buttons ── */
+/* -- Buttons -- */
 .btn {
   padding: 9px 20px; border: 1px solid transparent; border-radius: 10px;
   font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s;
@@ -216,55 +216,13 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
 .btn-kill:hover { background: rgba(248,81,73,0.18); border-color: rgba(248,81,73,0.4); }
 .btn-group { display: flex; gap: 10px; margin-top: 14px; }
 
-/* ── Table ── */
+/* -- Table -- */
 .trade-table { width: 100%; border-collapse: collapse; font-size: 12px; }
 .trade-table th { text-align: left; color: var(--text-muted); padding: 10px 8px; border-bottom: 1px solid var(--border); font-weight: 600; font-size: 10px; text-transform: uppercase; letter-spacing: 0.8px; }
 .trade-table td { padding: 10px 8px; border-bottom: 1px solid var(--border-subtle); font-family: 'JetBrains Mono', monospace; font-size: 11.5px; }
 .trade-table tr:hover { background: var(--bg-surface); }
 
-/* ── Hero Price ── */
-.hero-price {
-  display: flex; align-items: center; gap: 16px;
-  padding: 20px 0 8px 0;
-}
-.hero-price-value {
-  font-size: 48px; font-weight: 700; font-family: 'JetBrains Mono', monospace;
-  letter-spacing: -3px; line-height: 1; transition: color 0.3s;
-}
-.hero-price-change {
-  font-size: 16px; font-weight: 700; font-family: 'JetBrains Mono', monospace;
-  padding: 4px 12px; border-radius: 8px;
-}
-.hero-price-change.up { color: var(--green); background: rgba(63,185,80,0.12); }
-.hero-price-change.down { color: var(--red); background: rgba(248,81,73,0.12); }
-.hero-price-symbol { font-size: 16px; font-weight: 600; color: var(--text-secondary); align-self: flex-end; margin-bottom: 6px; }
-
-/* ── Price Ticker Bar ── */
-.ticker-bar {
-  display: flex; align-items: center; gap: 24px; padding: 12px 0;
-  margin-bottom: 14px; border-bottom: 1px solid var(--border);
-  overflow-x: auto; white-space: nowrap;
-}
-.ticker-price {
-  display: flex; align-items: baseline; gap: 8px;
-}
-.ticker-symbol { font-size: 13px; font-weight: 600; color: var(--text-secondary); }
-.ticker-value {
-  font-size: 28px; font-weight: 700; font-family: 'JetBrains Mono', monospace;
-  letter-spacing: -1.5px; transition: color 0.3s;
-}
-.ticker-change {
-  font-size: 13px; font-weight: 600; font-family: 'JetBrains Mono', monospace;
-  padding: 3px 8px; border-radius: 6px;
-}
-.ticker-change.up { color: var(--green); background: rgba(63,185,80,0.1); }
-.ticker-change.down { color: var(--red); background: rgba(248,81,73,0.1); }
-.ticker-stat { display: flex; flex-direction: column; gap: 2px; }
-.ticker-stat-label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
-.ticker-stat-value { font-size: 12px; font-weight: 600; font-family: 'JetBrains Mono', monospace; color: var(--text-secondary); }
-.ticker-divider { width: 1px; height: 32px; background: var(--border); flex-shrink: 0; }
-
-/* ── Unit Toggle (USDT/BTC) ── */
+/* -- Unit Toggle (USDT/BTC) -- */
 .unit-toggle {
   display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
   margin-bottom: 12px;
@@ -277,7 +235,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
 .unit-btn.active { background: var(--accent); color: #fff; }
 .unit-btn:hover:not(.active) { color: var(--text-primary); }
 
-/* ── Trading Panel ── */
+/* -- Trading Panel -- */
 .trade-panel { display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
 .trade-side { padding: 20px; }
 .trade-side-long { border-right: 1px solid var(--border); }
@@ -330,7 +288,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
 .trade-msg.success { color: var(--green); }
 .trade-msg.error { color: var(--red); }
 
-/* ── Auto Toggle ── */
+/* -- Auto Toggle -- */
 .auto-toggle { display: flex; align-items: center; gap: 12px; padding: 16px 20px; border-top: 1px solid var(--border); }
 .auto-toggle-label { font-size: 13px; font-weight: 600; }
 .toggle-switch { position: relative; width: 44px; height: 24px; cursor: pointer; }
@@ -348,7 +306,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
 .toggle-switch input:checked + .toggle-slider::before { transform: translateX(20px); background: var(--green); }
 .auto-status { font-size: 11px; font-family: 'JetBrains Mono', monospace; font-weight: 600; text-transform: uppercase; }
 
-/* ── Live Positions ── */
+/* -- Live Positions -- */
 .live-pos { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
 .live-pos-item {
   flex: 1; min-width: 200px; padding: 12px; background: var(--bg-surface); border-radius: 10px;
@@ -356,7 +314,15 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
 }
 .live-pos-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
 
-/* ── Responsive ── */
+/* -- Progress Bar -- */
+.progress-bar {
+  width: 100%; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; margin-top: 4px;
+}
+.progress-fill {
+  height: 100%; border-radius: 3px; transition: width 0.5s ease;
+}
+
+/* -- Responsive -- */
 @media (max-width: 1200px) { .grid { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 768px) {
   .grid { grid-template-columns: 1fr; }
@@ -388,30 +354,31 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
 <div class="main">
 
   <!-- Chart -->
-  <!-- Chart -->
   <div class="chart-wrapper">
     <div class="chart-container" id="tv-widget-container"></div>
   </div>
   <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
   <script type="text/javascript">
-    new TradingView.widget({
-      "container_id": "tv-widget-container",
-      "width": "100%",
-      "height": 600,
-      "symbol": "OKX:BTCUSDT.P",
-      "interval": "15",
-      "timezone": "Asia/Seoul",
-      "theme": "dark",
-      "style": "1",
-      "locale": "kr",
-      "toolbar_bg": "#0d1117",
-      "enable_publishing": false,
-      "hide_side_toolbar": false,
-      "allow_symbol_change": false,
-      "details": true,
-      "calendar": false,
-      "support_host": "https://www.tradingview.com",
-    });
+    try {
+      new TradingView.widget({
+        "container_id": "tv-widget-container",
+        "width": "100%",
+        "height": 600,
+        "symbol": "OKX:BTCUSDT.P",
+        "interval": "15",
+        "timezone": "Asia/Seoul",
+        "theme": "dark",
+        "style": "1",
+        "locale": "kr",
+        "toolbar_bg": "#0d1117",
+        "enable_publishing": false,
+        "hide_side_toolbar": false,
+        "allow_symbol_change": false,
+        "details": true,
+        "calendar": false,
+        "support_host": "https://www.tradingview.com"
+      });
+    } catch(e) { console.warn('TradingView widget failed to load:', e); }
   </script>
 
   <!-- Tabs -->
@@ -419,6 +386,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
     <button class="tab active" onclick="switchTab('trading', this)" data-i18n="tab.trading">Dashboard</button>
     <button class="tab" onclick="switchTab('info', this)" data-i18n="tab.info">Market & Signals</button>
     <button class="tab" onclick="switchTab('ml', this)" data-i18n="tab.ml">Engine</button>
+    <button class="tab" onclick="switchTab('paper', this)" data-i18n="tab.paper">Paper Trading</button>
     <button class="tab" onclick="switchTab('risk', this)" data-i18n="tab.risk">Risk & Logs</button>
   </div>
 
@@ -569,7 +537,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
   <div class="grid" style="grid-template-columns: 1fr 1fr;">
 
     <div class="card">
-      <div class="card-header"><div style="display:flex;align-items:center;"><span class="card-title" data-i18n="account.title">Account</span><span class="help" data-tip="봇 계좌 잔고와 일일 손익을 표시합니다.&#10;• USDT 잔고: OKX 거래소 실제 잔고&#10;• Daily P&L: 오늘 누적 손익&#10;• Win Streak: 연속 승리 횟수">?</span></div></div>
+      <div class="card-header"><div style="display:flex;align-items:center;"><span class="card-title" data-i18n="account.title">Account</span><span class="help" data-tip="봇 계좌 잔고와 일일 손익을 표시합니다.&#10;&#8226; USDT 잔고: OKX 거래소 실제 잔고&#10;&#8226; Daily P&amp;L: 오늘 누적 손익&#10;&#8226; Win Streak: 연속 승리 횟수">?</span></div></div>
       <div class="big-num" id="balance">$--</div>
       <div class="big-sub">USDT Balance</div>
       <div style="margin-top: 18px;">
@@ -590,7 +558,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
   <!-- FlowEngine Status -->
   <div class="card" style="margin-bottom:24px;">
     <div class="card-header">
-      <div style="display:flex;align-items:center;"><span class="card-title">FlowEngine Status</span><span class="help" data-tip="오더플로우 엔진 상태&#10;• Signal: 현재 시그널 (FLOW / none)&#10;• Direction: 진입 방향&#10;• Score: 확신도 (0~10)&#10;• Trend: HTF 추세 (1d/4h)&#10;• Flow: CVD 방향&#10;• Streak: 연패">?</span></div>
+      <div style="display:flex;align-items:center;"><span class="card-title">FlowEngine Status</span><span class="help" data-tip="오더플로우 엔진 상태&#10;&#8226; Signal: 현재 시그널 (FLOW / none)&#10;&#8226; Direction: 진입 방향&#10;&#8226; Score: 확신도 (0~10)&#10;&#8226; Trend: HTF 추세 (1d/4h)&#10;&#8226; Flow: CVD 방향&#10;&#8226; Streak: 연패">?</span></div>
     </div>
     <div class="grid" style="grid-template-columns: repeat(6, 1fr); gap: 12px; margin-bottom:12px;">
       <div style="text-align:center;">
@@ -667,8 +635,6 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
       </div>
     </div>
 
-    <!-- 구 15 Signal Indicators 제거됨 (FlowEngine은 Setup ABC 사용) -->
-
     <!-- Row 3: Bot Control -->
     <div class="grid" style="grid-template-columns: 1fr 1fr;">
       <div class="card">
@@ -681,7 +647,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
           <button class="btn btn-resume" onclick="resumeBot()">Resume</button>
           <button class="btn btn-kill" onclick="killBot()">Kill Switch</button>
         </div>
-        <div id="controlMsg2" style="margin-top:10px;font-size:11px;color:var(--text-muted);"></div>
+        <div id="controlMsg" style="margin-top:10px;font-size:11px;color:var(--text-muted);"></div>
       </div>
 
       <div class="card">
@@ -697,11 +663,11 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
 
   </div><!-- /tab-info -->
 
-  <!-- ══ Engine Tab (04-17 전면 개편) ══ -->
+  <!-- ══ Engine Tab ══ -->
   <div class="tab-content" id="tab-ml">
     <style>@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}</style>
 
-    <!-- FlowEngine Status Bar (동적) -->
+    <!-- FlowEngine Status Bar -->
     <div class="card" style="margin-bottom:14px;padding:16px 22px;">
       <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;">
         <div style="display:flex;align-items:center;gap:10px;">
@@ -749,13 +715,13 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
       </div>
     </div>
 
-    <!-- Setup Performance (동적 — /api/engine/overview 소비) -->
+    <!-- Setup Performance -->
     <div class="card" style="margin-bottom:14px;">
-      <div class="card-header"><div style="display:flex;align-items:center;"><span class="card-title">Flow Performance</span><span class="help" data-tip="FlowEngine 실매매 성과.&#10;10건 이상 + 승률 35% 미만 → 자동 비활성화.&#10;감지 vs 실행 비율 추적.">?</span></div></div>
+      <div class="card-header"><div style="display:flex;align-items:center;"><span class="card-title">Flow Performance</span><span class="help" data-tip="FlowEngine 실매매 성과.&#10;10건 이상 + 승률 35% 미만 -> 자동 비활성화.&#10;감지 vs 실행 비율 추적.">?</span></div></div>
       <div id="setupTrackerContent" style="font-size:12px;color:var(--text-muted);">데이터 수집 중...</div>
     </div>
 
-    <!-- Setup x Regime 히트맵 -->
+    <!-- Setup x Regime Heatmap -->
     <div class="card" style="margin-bottom:14px;">
       <div class="card-header"><div style="display:flex;align-items:center;"><span class="card-title">Flow x Regime Heatmap</span><span class="help" data-tip="FlowEngine이 어떤 레짐에서 승률이 높은지.&#10;초록=50%+, 노랑=35~50%, 빨강=35% 미만.">?</span></div></div>
       <div id="heatmapContent" style="overflow-x:auto;">
@@ -770,9 +736,9 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
       </div>
     </div>
 
-    <!-- FlowML 상태 -->
+    <!-- FlowML Status -->
     <div class="card" style="margin-bottom:14px;">
-      <div class="card-header"><div style="display:flex;align-items:center;"><span class="card-title">FlowML (Machine Learning)</span><span class="help" data-tip="FlowEngine 전용 ML. 과거 거래 패턴 학습 → 진입 점수 보정.&#10;학습 데이터 30건+ 시 자동 활성화.&#10;OOS = 미래 데이터 검증 정확도 (높을��록 좋음).">?</span></div></div>
+      <div class="card-header"><div style="display:flex;align-items:center;"><span class="card-title">FlowML (Machine Learning)</span><span class="help" data-tip="FlowEngine 전용 ML. 과거 거래 패턴 학습 -> 진입 점수 보정.&#10;학습 데이터 30건+ 시 자동 활성화.&#10;OOS = 미래 데이터 검증 정확도 (높을수록 좋음).">?</span></div></div>
       <div id="flowMlContent" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;text-align:center;">
         <div><div class="big-num" id="mlTrained" style="font-size:20px;color:var(--text-muted);">--</div><span class="big-sub">Status</span></div>
         <div><div class="big-num" id="mlSamples" style="font-size:20px;">0</div><span class="big-sub">Samples</span></div>
@@ -781,7 +747,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
       </div>
     </div>
 
-    <!-- Real vs Paper 비교 -->
+    <!-- Real vs Paper Comparison -->
     <div class="card" style="margin-bottom:14px;">
       <div class="card-header"><div style="display:flex;align-items:center;"><span class="card-title">Real vs Paper Comparison</span><span class="help" data-tip="실거래와 가상매매(시뮬레이션) 성과를 나란히 비교.&#10;가상매매가 우위면 진입 기준 완화 검토,&#10;실거래가 크게 열위면 슬리피지/타이밍 이슈.">?</span></div></div>
       <div id="comparisonContent">
@@ -796,17 +762,83 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
       </div>
     </div>
 
-    <!-- Paper Trading Stats -->
-    <div class="card" style="margin-bottom:14px;">
-      <div class="card-header"><div style="display:flex;align-items:center;"><span class="card-title">Virtual Trades (Paper)</span><span class="help" data-tip="가상매매 시뮬레이션 결과.&#10;ML 학습 데이터 수집 + 전략 검증용.">?</span></div></div>
-      <div class="grid" style="grid-template-columns: repeat(5, 1fr); gap: 16px; margin-bottom: 16px;">
-        <div style="text-align:center;"><div class="big-num" id="paperTotal" style="font-size:28px;">0</div><span class="big-sub">Total</span></div>
-        <div style="text-align:center;"><div class="big-num" id="paperWins" style="font-size:28px;color:var(--green);">0</div><span class="big-sub">Wins</span></div>
-        <div style="text-align:center;"><div class="big-num" id="paperLosses" style="font-size:28px;color:var(--red);">0</div><span class="big-sub">Losses</span></div>
-        <div style="text-align:center;"><div class="big-num" id="paperWR" style="font-size:28px;">0%</div><span class="big-sub">Win Rate</span></div>
-        <div style="text-align:center;"><div class="big-num" id="paperPnL" style="font-size:28px;">$0</div><span class="big-sub">Total P&L</span></div>
+  </div><!-- /tab-ml -->
+
+  <!-- ══ Paper Trading Tab ══ -->
+  <div class="tab-content" id="tab-paper">
+
+    <!-- Paper Overview Cards -->
+    <div class="grid" style="grid-template-columns: repeat(4, 1fr); margin-bottom:14px;">
+      <div class="card" style="text-align:center;">
+        <div class="big-num" id="paperBalance" style="font-size:28px;">$10,000</div>
+        <div class="big-sub" data-i18n="paper.virtual_balance">Virtual Balance</div>
+        <div style="margin-top:10px;">
+          <span class="metric-value" id="paperReturnPct" style="font-size:16px;">0.00%</span>
+        </div>
+        <div class="big-sub" data-i18n="paper.total_return">Total Return</div>
       </div>
-      <div style="overflow-x:auto;max-height:350px;overflow-y:auto;">
+      <div class="card" style="text-align:center;">
+        <div class="big-num" id="paperTotalCount" style="font-size:28px;">0</div>
+        <div class="big-sub" data-i18n="paper.total">Total Trades</div>
+        <div style="margin-top:10px;display:flex;justify-content:center;gap:16px;">
+          <div><span style="color:var(--green);font-weight:700;font-family:'JetBrains Mono',monospace;" id="paperWinCount">0</span><div class="big-sub">Wins</div></div>
+          <div><span style="color:var(--red);font-weight:700;font-family:'JetBrains Mono',monospace;" id="paperLossCount">0</span><div class="big-sub">Losses</div></div>
+        </div>
+      </div>
+      <div class="card" style="text-align:center;">
+        <div class="big-num" id="paperWinRate" style="font-size:28px;">0%</div>
+        <div class="big-sub" data-i18n="paper.winrate">Win Rate</div>
+        <div style="margin-top:10px;">
+          <div class="progress-bar">
+            <div class="progress-fill" id="paperWrBar" style="width:0%;background:var(--green);"></div>
+          </div>
+        </div>
+      </div>
+      <div class="card" style="text-align:center;">
+        <div class="big-num" id="paperTotalPnl" style="font-size:28px;">$0.00</div>
+        <div class="big-sub" data-i18n="paper.pnl">Total P&L</div>
+        <div style="margin-top:10px;">
+          <span class="metric-value" id="paperAvgPnl" style="font-size:13px;color:var(--text-muted);">Avg: 0.00%</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Paper Stats Detail + Drawdown -->
+    <div class="grid" style="grid-template-columns: 1fr 1fr; margin-bottom:14px;">
+
+      <div class="card">
+        <div class="card-header"><div style="display:flex;align-items:center;"><span class="card-title" data-i18n="paper.stats_title">Performance Stats</span><span class="help" data-tip="페이퍼 매매 상세 성과 지표.&#10;실거래 전 전략 검증에 활용됩니다.">?</span></div></div>
+        <div class="metric"><span class="metric-label" data-i18n="paper.best_trade">Best Trade</span><span class="metric-value positive" id="paperBestTrade">--</span></div>
+        <div class="metric"><span class="metric-label" data-i18n="paper.worst_trade">Worst Trade</span><span class="metric-value negative" id="paperWorstTrade">--</span></div>
+        <div class="metric"><span class="metric-label" data-i18n="paper.avg_hold">Avg Hold Time</span><span class="metric-value" id="paperAvgHold">--</span></div>
+        <div class="metric"><span class="metric-label" data-i18n="paper.long_wr">Long Win Rate</span><span class="metric-value" id="paperLongWr">--</span></div>
+        <div class="metric"><span class="metric-label" data-i18n="paper.short_wr">Short Win Rate</span><span class="metric-value" id="paperShortWr">--</span></div>
+        <div class="metric"><span class="metric-label" data-i18n="paper.profit_factor">Profit Factor</span><span class="metric-value" id="paperProfitFactor">--</span></div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><div style="display:flex;align-items:center;"><span class="card-title" data-i18n="paper.drawdown_title">Drawdown & Risk</span><span class="help" data-tip="페이퍼 매매의 최대 손실폭(MDD)과 연패 기록.&#10;MDD가 너무 크면 리스크 파라미터 조정 필요.">?</span></div></div>
+        <div class="metric"><span class="metric-label" data-i18n="paper.max_dd">Max Drawdown</span><span class="metric-value negative" id="paperMaxDD">--</span></div>
+        <div class="metric"><span class="metric-label" data-i18n="paper.current_dd">Current Drawdown</span><span class="metric-value" id="paperCurrDD">--</span></div>
+        <div class="metric"><span class="metric-label" data-i18n="paper.max_streak">Max Win Streak</span><span class="metric-value positive" id="paperMaxWinStreak">--</span></div>
+        <div class="metric"><span class="metric-label" data-i18n="paper.max_loss_streak">Max Loss Streak</span><span class="metric-value negative" id="paperMaxLossStreak">--</span></div>
+        <div class="metric"><span class="metric-label" data-i18n="paper.current_streak">Current Streak</span><span class="metric-value" id="paperCurrentStreak">--</span></div>
+        <div class="metric"><span class="metric-label" data-i18n="paper.sharpe">Sharpe Ratio</span><span class="metric-value" id="paperSharpe">--</span></div>
+      </div>
+    </div>
+
+    <!-- Active Paper Positions -->
+    <div class="card" style="margin-bottom:14px;">
+      <div class="card-header"><div style="display:flex;align-items:center;"><span class="card-title" data-i18n="paper.active_positions">Active Paper Positions</span><span class="help" data-tip="현재 열려있는 가상 포지션.&#10;실제 주문은 발생하지 않습니다.">?</span></div></div>
+      <div id="paperActivePositions">
+        <div class="position-empty">No active paper positions</div>
+      </div>
+    </div>
+
+    <!-- Paper Trade History -->
+    <div class="card" style="margin-bottom:14px;">
+      <div class="card-header"><div style="display:flex;align-items:center;"><span class="card-title" data-i18n="paper.history_title">Paper Trade History</span><span class="help" data-tip="가상매매 체결 내역.&#10;ML 학습 데이터 + 전략 검증용입니다.">?</span></div></div>
+      <div style="overflow-x:auto;max-height:450px;overflow-y:auto;">
         <table class="trade-table">
           <thead><tr><th>Time</th><th>Setup</th><th>Dir</th><th>Entry</th><th>Exit</th><th>P&L %</th><th>P&L $</th><th>Reason</th></tr></thead>
           <tbody id="paperTradesBody">
@@ -816,14 +848,14 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
       </div>
     </div>
 
-  </div><!-- /tab-ml -->
+  </div><!-- /tab-paper -->
 
   <!-- ══ Risk & Logs Tab ══ -->
   <div class="tab-content" id="tab-risk">
 
     <!-- Real Trading Risk State -->
     <div class="card" style="margin-bottom:24px;">
-      <div class="card-header"><div style="display:flex;align-items:center;"><span class="card-title">Real Trading Risk Limits</span><span class="help" data-tip="실거래 손실 한도 모니터링.&#10;• 일일 -10% 도달 시 → 당일 매매 자동 중단&#10;• 주간 -20% 도달 시 → 주간 매매 자동 중단&#10;3연패: 5분 쿨다운 / 5연패: 30분 쿨다운">?</span></div></div>
+      <div class="card-header"><div style="display:flex;align-items:center;"><span class="card-title">Real Trading Risk Limits</span><span class="help" data-tip="실거래 손실 한도 모니터링.&#10;&#8226; 일일 -10% 도달 시 -> 당일 매매 자동 중단&#10;&#8226; 주간 -20% 도달 시 -> 주간 매매 자동 중단&#10;3연패: 5분 쿨다운 / 5연패: 30분 쿨다운">?</span></div></div>
       <div class="grid" style="grid-template-columns: repeat(4, 1fr); gap: 12px;">
         <div style="text-align:center;">
           <div class="big-num" id="riskDailyPnl" style="font-size:28px;">0%</div>
@@ -843,7 +875,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
         </div>
       </div>
       <div id="riskBlocked" style="display:none;text-align:center;padding:12px;background:var(--red);color:white;border-radius:6px;font-weight:700;font-size:13px;margin-top:12px;">
-        ⚠ REAL TRADING BLOCKED — Loss limit reached
+        REAL TRADING BLOCKED -- Loss limit reached
       </div>
     </div>
 
@@ -874,15 +906,26 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
 const API = '';
 
 async function api(path) {
-  try { const r = await fetch(API + path, {credentials:'include'}); return await r.json(); } catch(e) { return null; }
+  try { const r = await fetch(API + path, {credentials:'include'}); return await r.json(); } catch(e) { console.warn('API error:', path, e); return null; }
 }
 async function apiPost(path) {
-  try { const r = await fetch(API + path, {method:'POST', credentials:'include'}); return await r.json(); } catch(e) { return null; }
+  try { const r = await fetch(API + path, {method:'POST', credentials:'include'}); return await r.json(); } catch(e) { console.warn('API POST error:', path, e); return null; }
 }
 
 function fmt(n, d=0) { return n != null ? Number(n).toLocaleString('en', {minimumFractionDigits:d, maximumFractionDigits:d}) : '--'; }
 function pnlClass(v) { return v > 0 ? 'positive' : v < 0 ? 'negative' : 'neutral'; }
 function gradeClass(g) { return g && g.startsWith('A') ? 'grade-a' : g && g.startsWith('B') ? 'grade-b' : 'grade-c'; }
+
+// ── Safe element setter (prevents errors for missing elements) ──
+function setEl(id, prop, val) {
+  const el = document.getElementById(id);
+  if (!el) return null;
+  if (prop === 'textContent') el.textContent = val;
+  else if (prop === 'innerHTML') el.innerHTML = val;
+  else if (prop === 'className') el.className = val;
+  else if (prop === 'style') Object.assign(el.style, val);
+  return el;
+}
 
 async function updateStatus() {
   const data = await api('/api/status');
@@ -891,20 +934,24 @@ async function updateStatus() {
   const status = data.status || 'unknown';
   el.textContent = status.toUpperCase();
   el.className = 'status-pill status-' + status;
-  document.getElementById('dailyPnl').textContent = (data.daily_pnl_pct || 0).toFixed(2) + '%';
-  document.getElementById('dailyPnl').className = 'metric-value ' + pnlClass(data.daily_pnl_pct);
+
+  const dpEl = document.getElementById('dailyPnl');
+  dpEl.textContent = (data.daily_pnl_pct || 0).toFixed(2) + '%';
+  dpEl.className = 'metric-value ' + pnlClass(data.daily_pnl_pct);
   document.getElementById('streak').textContent = data.streak || 0;
   document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString('ko');
 
   // Info tab
-  document.getElementById('infoStatus').textContent = status.toUpperCase();
-  document.getElementById('infoStatus').className = 'metric-value ' + (status === 'running' ? 'positive' : status === 'paused' ? 'neutral' : 'negative');
-  document.getElementById('infoDailyPnl').textContent = (data.daily_pnl_pct || 0).toFixed(2) + '%';
-  document.getElementById('infoDailyPnl').className = 'metric-value ' + pnlClass(data.daily_pnl_pct);
+  const infoStatusEl = document.getElementById('infoStatus');
+  infoStatusEl.textContent = status.toUpperCase();
+  infoStatusEl.className = 'metric-value ' + (status === 'running' ? 'positive' : status === 'paused' ? 'neutral' : 'negative');
+  const infoDpEl = document.getElementById('infoDailyPnl');
+  infoDpEl.textContent = (data.daily_pnl_pct || 0).toFixed(2) + '%';
+  infoDpEl.className = 'metric-value ' + pnlClass(data.daily_pnl_pct);
   document.getElementById('infoStreak').textContent = data.streak || 0;
   document.getElementById('infoUpdate').textContent = new Date().toLocaleTimeString('ko');
 
-  // Auto Trading 상태 동기화
+  // Auto Trading sync
   updateAutoUI(data.autotrading === 'on');
 }
 
@@ -924,6 +971,9 @@ async function updateMarket() {
   document.getElementById('infoOI').textContent = data.open_interest ? fmt(data.open_interest / 1e6, 1) + 'M' : '--';
   document.getElementById('infoFunding').textContent = data.funding_rate ? (data.funding_rate * 100).toFixed(4) + '%' : '--';
   document.getElementById('infoLS').textContent = data.long_short_ratio ? fmt(data.long_short_ratio, 2) : '--';
+
+  // Store last price for manual trading
+  if (t.last) lastTickerPrice = parseFloat(t.last) || 0;
 }
 
 async function updatePosition() {
@@ -977,31 +1027,6 @@ async function updateSignals() {
     document.getElementById('infoShort').textContent = (a.short_score||0).toFixed(1);
     document.getElementById('infoBonus').textContent = `+${(a.confluence_bonus||0).toFixed(1)}`;
   }
-
-  // Info tab - Signal Grid
-  const signals = { ...(data.fast_signals || {}), ...(data.slow_signals || {}) };
-  const keys = Object.keys(signals);
-  const grid = document.getElementById('infoSignalGrid');
-  if (keys.length === 0) {
-    grid.innerHTML = '<div class="signal-item"><span class="signal-name" style="color:var(--text-muted)">Waiting for signals...</span></div>';
-    return;
-  }
-  const html = keys.map(k => {
-    const s = signals[k];
-    const dir = s.direction || 'neutral';
-    const str = s.strength || 0;
-    const dirClass = dir === 'long' ? 'signal-long' : dir === 'short' ? 'signal-short' : 'signal-neutral';
-    const pct = Math.min(100, str * 100);
-    const barColor = dir === 'long' ? 'var(--green)' : dir === 'short' ? 'var(--red)' : 'var(--text-muted)';
-    return `<div class="signal-item">
-      <span class="signal-name">${k}</span>
-      <span class="signal-right">
-        <span class="signal-dir ${dirClass}">${dir.toUpperCase()}</span>
-        <span class="strength-bar"><span class="strength-fill" style="width:${pct}%;background:${barColor}"></span></span>
-      </span>
-    </div>`;
-  }).join('');
-  grid.innerHTML = html;
 }
 
 async function updateTrades() {
@@ -1034,7 +1059,13 @@ function switchTab(tabName, btn) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
   btn.classList.add('active');
-  document.getElementById('tab-' + tabName).classList.add('active');
+  const target = document.getElementById('tab-' + tabName);
+  if (target) target.classList.add('active');
+
+  // Refresh data for the active tab
+  if (tabName === 'paper') updatePaperTab();
+  else if (tabName === 'ml') updateEngineTab();
+  else if (tabName === 'risk') { updateRiskState(); updateNews(); updateSystemStatus(); }
 }
 
 // ── Unit state ──
@@ -1060,55 +1091,6 @@ function setUnit(side, unit, btn) {
   }
 }
 
-// ── Price Ticker ──
-async function updateTicker() {
-  const data = await api('/api/market');
-  if (!data) return;
-
-  const t = data.ticker || {};
-  const price = parseFloat(t.last) || 0;
-  const high = parseFloat(t.high24h) || 0;
-  const low = parseFloat(t.low24h) || 0;
-  const vol = parseFloat(t.vol24h) || 0;
-
-  const priceEl = document.getElementById('tickerPrice');
-  const heroEl = document.getElementById('heroPrice');
-
-  if (price > 0) {
-    const formatted = '$' + price.toLocaleString('en', {minimumFractionDigits:1, maximumFractionDigits:1});
-    priceEl.textContent = formatted;
-    heroEl.textContent = formatted;
-
-    // 색상 변화
-    if (lastTickerPrice > 0) {
-      const c = price > lastTickerPrice ? 'var(--green)' : price < lastTickerPrice ? 'var(--red)' : 'var(--text-primary)';
-      priceEl.style.color = c;
-      heroEl.style.color = c;
-    }
-    lastTickerPrice = price;
-  }
-
-  // 24h 변화율
-  const changeEl = document.getElementById('tickerChange');
-  const heroChangeEl = document.getElementById('heroChange');
-  if (high > 0 && low > 0) {
-    const open24 = (high + low) / 2;
-    const changePct = ((price - open24) / open24 * 100);
-    const txt = (changePct >= 0 ? '+' : '') + changePct.toFixed(2) + '%';
-    const cls = changePct >= 0 ? 'up' : 'down';
-    changeEl.textContent = txt;
-    changeEl.className = 'ticker-change ' + cls;
-    heroChangeEl.textContent = txt;
-    heroChangeEl.className = 'hero-price-change ' + cls;
-  }
-
-  document.getElementById('tickerHigh').textContent = high > 0 ? '$' + fmt(high, 0) : '--';
-  document.getElementById('tickerLow').textContent = low > 0 ? '$' + fmt(low, 0) : '--';
-  document.getElementById('tickerVol').textContent = vol > 0 ? fmt(vol, 0) : '--';
-  document.getElementById('tickerFunding').textContent = data.funding_rate ? (data.funding_rate * 100).toFixed(4) + '%' : '--';
-  document.getElementById('tickerOI').textContent = data.open_interest ? fmt(data.open_interest / 1e6, 1) + 'M' : '--';
-}
-
 // ── Spin Buttons ──
 function spinUp(id, step) {
   const el = document.getElementById(id);
@@ -1124,12 +1106,23 @@ function spinDown(id, step) {
 }
 
 // ── Bot Control ──
-async function pauseBot() { await apiPost('/api/pause'); document.getElementById('controlMsg').textContent='Bot paused.'; updateStatus(); }
-async function resumeBot() { await apiPost('/api/resume'); document.getElementById('controlMsg').textContent='Bot resumed.'; updateStatus(); }
+async function pauseBot() {
+  await apiPost('/api/pause');
+  const msg = document.getElementById('controlMsg');
+  if (msg) msg.textContent = 'Bot paused.';
+  updateStatus();
+}
+async function resumeBot() {
+  await apiPost('/api/resume');
+  const msg = document.getElementById('controlMsg');
+  if (msg) msg.textContent = 'Bot resumed.';
+  updateStatus();
+}
 async function killBot() {
   if (!confirm('KILL SWITCH: Close ALL positions immediately?')) return;
   await apiPost('/api/close-all');
-  document.getElementById('controlMsg').textContent='Kill switch activated.';
+  const msg = document.getElementById('controlMsg');
+  if (msg) msg.textContent = 'Kill switch activated.';
   updateStatus();
 }
 
@@ -1151,7 +1144,7 @@ async function openLong() {
 
   msgEl.textContent = 'Executing...'; msgEl.className = 'trade-msg';
   try {
-    const r = await fetch('/api/trade/open', {
+    const r = await fetch(API + '/api/trade/open', {
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ direction:'long', margin_usdt:marginUsdt, leverage, sl_price:sl, tp_price:tp })
     });
@@ -1182,7 +1175,7 @@ async function openShort() {
 
   msgEl.textContent = 'Executing...'; msgEl.className = 'trade-msg';
   try {
-    const r = await fetch('/api/trade/open', {
+    const r = await fetch(API + '/api/trade/open', {
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ direction:'short', margin_usdt:marginUsdt, leverage, sl_price:sl, tp_price:tp })
     });
@@ -1199,7 +1192,7 @@ async function openShort() {
 async function closeLong() {
   if (!confirm('Close LONG position?')) return;
   try {
-    const r = await fetch('/api/trade/close', {
+    const r = await fetch(API + '/api/trade/close', {
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ direction:'long', close_pct:1.0 })
     });
@@ -1211,7 +1204,7 @@ async function closeLong() {
 async function closeShort() {
   if (!confirm('Close SHORT position?')) return;
   try {
-    const r = await fetch('/api/trade/close', {
+    const r = await fetch(API + '/api/trade/close', {
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ direction:'short', close_pct:1.0 })
     });
@@ -1278,15 +1271,7 @@ async function updateLivePositions() {
   }).join('');
 }
 
-// ── Model Select ──
-async function selectModel(model, btn) {
-  document.getElementById('modelToggle').querySelectorAll('.unit-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  await fetch('/api/ml/model', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({model})});
-  document.getElementById('mlActiveModel').textContent = model.toUpperCase();
-}
-
-// ── Engine Tab (04-17 개편) ──
+// ── Engine Tab ──
 const REGIME_COLORS = {
   'trending_up': 'var(--green)', 'trending_down': 'var(--red)',
   'ranging': 'var(--yellow)', 'volatile': 'var(--accent)'
@@ -1328,7 +1313,7 @@ async function updateEngineTab() {
     const exec = ((info.exec_rate||0) * 100).toFixed(0);
     const recentWr = ((info.recent_win_rate||0) * 100).toFixed(0);
     stHtml += `<div style="padding:14px;border-radius:8px;background:var(--bg-surface);text-align:center;">
-      <div style="font-size:14px;font-weight:700;color:${c};margin-bottom:4px;">Setup ${s} — ${status}</div>
+      <div style="font-size:14px;font-weight:700;color:${c};margin-bottom:4px;">Setup ${s} -- ${status}</div>
       <div style="font-size:11px;color:var(--text-secondary);margin-bottom:8px;">${info.name||''}</div>
       <div style="font-size:11px;line-height:1.8;">
         <b>${info.total}</b> trades | <b>${info.wins||0}</b>W / <b>${info.losses||0}</b>L<br>
@@ -1344,7 +1329,7 @@ async function updateEngineTab() {
   stHtml += '</div>';
   stEl.innerHTML = stHtml;
 
-  // Heatmap: Setup × Regime
+  // Heatmap: Setup x Regime
   const hm = data.heatmap || {};
   const regimes = ['trending_up','trending_down','ranging','volatile'];
   const hmBody = document.getElementById('heatmapBody');
@@ -1360,7 +1345,7 @@ async function updateEngineTab() {
       if (n > 0 && wr !== null && wr !== undefined) {
         bg = wr >= 50 ? 'rgba(63,185,80,0.15)' : wr >= 35 ? 'rgba(210,153,34,0.15)' : 'rgba(248,81,73,0.15)';
         const wrC = wr >= 50 ? 'var(--green)' : wr >= 35 ? 'var(--yellow)' : 'var(--red)';
-        txt = `<span style="color:${wrC};font-weight:700">${wr.toFixed(0)}%</span><br><span style="color:var(--text-muted);font-size:10px;">${n}건</span>`;
+        txt = `<span style="color:${wrC};font-weight:700">${wr.toFixed(0)}%</span><br><span style="color:var(--text-muted);font-size:10px;">${n} trades</span>`;
       } else if (n === 0) {
         txt = '<span style="color:var(--text-muted)">-</span>';
       }
@@ -1375,19 +1360,21 @@ async function updateEngineTab() {
   const real = comp.real || {};
   const paper = comp.paper || {};
   const cmpBody = document.getElementById('comparisonBody');
-  function diffCell(rv, pv, suffix='', higherBetter=true) {
-    const d = rv - pv;
-    const c = d === 0 ? 'var(--text-muted)' : (higherBetter ? (d>0?'var(--green)':'var(--red)') : (d<0?'var(--green)':'var(--red)'));
-    return `<span style="color:${c}">${d>=0?'+':''}${d.toFixed(1)}${suffix}</span>`;
+  if (real.total !== undefined && paper.total !== undefined) {
+    function diffCell(rv, pv, suffix='', higherBetter=true) {
+      const d = (rv||0) - (pv||0);
+      const c = d === 0 ? 'var(--text-muted)' : (higherBetter ? (d>0?'var(--green)':'var(--red)') : (d<0?'var(--green)':'var(--red)'));
+      return `<span style="color:${c}">${d>=0?'+':''}${d.toFixed(1)}${suffix}</span>`;
+    }
+    cmpBody.innerHTML = `
+      <tr><td>Total Trades</td><td>${real.total||0}</td><td>${paper.total||0}</td><td>${(real.total||0) - (paper.total||0)}</td></tr>
+      <tr><td>Win Rate</td><td>${(real.wr||0).toFixed(1)}%</td><td>${(paper.wr||0).toFixed(1)}%</td><td>${diffCell(real.wr, paper.wr, '%')}</td></tr>
+      <tr><td>Avg P&L</td><td>${(real.avg_pnl||0).toFixed(3)}%</td><td>${(paper.avg_pnl||0).toFixed(3)}%</td><td>${diffCell(real.avg_pnl||0, paper.avg_pnl||0, '%')}</td></tr>
+      <tr><td>Total P&L</td><td>$${real.total_pnl||0}</td><td>$${paper.total_pnl||0}</td><td>${diffCell(real.total_pnl||0, paper.total_pnl||0, '')}</td></tr>
+    `;
   }
-  cmpBody.innerHTML = `
-    <tr><td>Total Trades</td><td>${real.total}</td><td>${paper.total}</td><td>${real.total - paper.total}</td></tr>
-    <tr><td>Win Rate</td><td>${real.wr.toFixed(1)}%</td><td>${paper.wr.toFixed(1)}%</td><td>${diffCell(real.wr, paper.wr, '%')}</td></tr>
-    <tr><td>Avg P&L</td><td>${(real.avg_pnl||0).toFixed(3)}%</td><td>${(paper.avg_pnl||0).toFixed(3)}%</td><td>${diffCell(real.avg_pnl||0, paper.avg_pnl||0, '%')}</td></tr>
-    <tr><td>Total P&L</td><td>$${real.total_pnl}</td><td>$${paper.total_pnl}</td><td>${diffCell(real.total_pnl, paper.total_pnl, '')}</td></tr>
-  `;
 
-  // FlowML 상태
+  // FlowML status
   const ml = data.ml || {};
   const trainedEl = document.getElementById('mlTrained');
   if (ml.trained) {
@@ -1466,11 +1453,11 @@ async function updateNews() {
 
   const statusEl = document.getElementById('newsStatus');
   if (data.blocked) {
-    statusEl.textContent = '⚠ ' + data.reason;
+    statusEl.textContent = data.reason || 'Event blackout active';
     statusEl.style.background = 'var(--red)';
     statusEl.style.color = 'white';
   } else {
-    statusEl.textContent = '✓ No active blackout';
+    statusEl.textContent = 'No active blackout';
     statusEl.style.background = 'var(--bg-surface)';
     statusEl.style.color = 'var(--green)';
   }
@@ -1484,38 +1471,12 @@ async function updateNews() {
       const days = Math.floor(e.minutes_until / 1440);
       const hours = Math.floor((e.minutes_until % 1440) / 60);
       const time = days > 0 ? `${days}d ${hours}h` : `${hours}h`;
-      return `<div style="margin-bottom:4px;"><b>${e.name}</b> — ${time} 후 (±${e.buffer_min}분 차단)</div>`;
+      return `<div style="margin-bottom:4px;"><b>${e.name}</b> -- ${time} later (+/-${e.buffer_min}min blackout)</div>`;
     }).join('');
   }
 }
 
-// ── (레거시 Backtest/Meta/ML 함수 04-17 삭제됨) ──
-}
-
-async function updateSetupTracker() {
-  const data = await api('/api/setup-tracker');
-  if (!data) return;
-  const el = document.getElementById('setupTrackerContent');
-  let html = '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">';
-  for (const [setup, info] of Object.entries(data)) {
-    const color = info.enabled ? 'var(--green)' : 'var(--red)';
-    const status = info.enabled ? 'ACTIVE' : 'DISABLED';
-    const wr = (info.win_rate * 100).toFixed(0);
-    html += `<div style="padding:12px;border-radius:8px;background:var(--bg-surface);text-align:center;">
-      <div style="font-size:13px;font-weight:700;color:${color};margin-bottom:4px;">Setup ${setup} — ${status}</div>
-      <div style="font-size:11px;color:var(--text-secondary);">${info.name}</div>
-      <div style="margin-top:8px;font-size:11px;">
-        ${info.total} trades | ${info.wins}W/${info.losses}L | WR: ${wr}%<br>
-        PnL: ${info.total_pnl_pct.toFixed(1)}% | Avg Hold: ${info.avg_hold_min}m<br>
-        Detected: ${info.detections} | Exec Rate: ${(info.exec_rate*100).toFixed(0)}%
-      </div>
-    </div>`;
-  }
-  html += '</div>';
-  el.innerHTML = html;
-}
-
-// ── Engine State (Trading tab 카드) ──
+// ── Engine State (Trading tab card) ──
 async function updateEngineState() {
   const data = await api('/api/engine/state');
   if (!data) return;
@@ -1532,10 +1493,6 @@ async function updateEngineState() {
   const smcEl = document.getElementById('scalpSMC');
   smcEl.textContent = data.streak || 0;
   smcEl.style.color = (data.streak||0)>=3?'var(--red)':'var(--text-primary)';
-  const cdEl = document.getElementById('scalpCooldown');
-  if (cdEl) cdEl.style.display = data.cooldown?'block':'none';
-  const stEl = document.getElementById('scalpStopped');
-  if (stEl) stEl.style.display = (data.daily_pnl||0)<=-10?'block':'none';
 }
 
 // ── Market Regime ──
@@ -1574,27 +1531,71 @@ async function updateRegime() {
   }).join('');
 }
 
-// ── Paper Trading Stats ──
+// ── Paper Trading Tab ──
+async function updatePaperTab() {
+  await Promise.all([updatePaperStats(), updatePaperPositions()]);
+}
+
 async function updatePaperStats() {
   const data = await api('/api/paper/stats');
   if (!data) return;
-  document.getElementById('paperTotal').textContent = data.total||0;
-  document.getElementById('paperWins').textContent = data.wins||0;
-  document.getElementById('paperLosses').textContent = data.losses||0;
-  document.getElementById('paperWR').textContent = (data.win_rate||0).toFixed(1)+'%';
-  const pnl = data.total_pnl||0;
-  const pnlEl = document.getElementById('paperPnL');
-  pnlEl.textContent = (pnl>=0?'+':'')+pnl.toFixed(2);
-  pnlEl.style.color = pnl>=0?'var(--green)':'var(--red)';
 
+  // Overview cards
+  document.getElementById('paperTotalCount').textContent = data.total || 0;
+  document.getElementById('paperWinCount').textContent = data.wins || 0;
+  document.getElementById('paperLossCount').textContent = data.losses || 0;
+
+  const wr = data.win_rate || 0;
+  document.getElementById('paperWinRate').textContent = wr.toFixed(1) + '%';
+  const wrBar = document.getElementById('paperWrBar');
+  wrBar.style.width = Math.min(100, wr) + '%';
+  wrBar.style.background = wr >= 50 ? 'var(--green)' : wr >= 35 ? 'var(--yellow)' : 'var(--red)';
+
+  const totalPnl = data.total_pnl || 0;
+  const pnlEl = document.getElementById('paperTotalPnl');
+  pnlEl.textContent = (totalPnl >= 0 ? '+' : '') + '$' + fmt(Math.abs(totalPnl), 2);
+  pnlEl.style.color = totalPnl >= 0 ? 'var(--green)' : 'var(--red)';
+
+  const avgPnl = data.avg_pnl_pct || 0;
+  const avgEl = document.getElementById('paperAvgPnl');
+  avgEl.textContent = 'Avg: ' + (avgPnl >= 0 ? '+' : '') + avgPnl.toFixed(2) + '%';
+  avgEl.style.color = avgPnl >= 0 ? 'var(--green)' : 'var(--red)';
+
+  // Virtual balance & return
+  const vBal = data.virtual_balance || 10000;
+  document.getElementById('paperBalance').textContent = '$' + fmt(vBal, 2);
+  const returnPct = ((vBal - 10000) / 10000 * 100);
+  const retEl = document.getElementById('paperReturnPct');
+  retEl.textContent = (returnPct >= 0 ? '+' : '') + returnPct.toFixed(2) + '%';
+  retEl.className = 'metric-value ' + pnlClass(returnPct);
+
+  // Stats detail
+  setEl('paperBestTrade', 'textContent', data.best_trade_pct != null ? '+' + (data.best_trade_pct||0).toFixed(2) + '%' : '--');
+  setEl('paperWorstTrade', 'textContent', data.worst_trade_pct != null ? (data.worst_trade_pct||0).toFixed(2) + '%' : '--');
+  setEl('paperAvgHold', 'textContent', data.avg_hold_min != null ? (data.avg_hold_min||0) + 'm' : '--');
+  setEl('paperLongWr', 'textContent', data.long_win_rate != null ? (data.long_win_rate||0).toFixed(1) + '%' : '--');
+  setEl('paperShortWr', 'textContent', data.short_win_rate != null ? (data.short_win_rate||0).toFixed(1) + '%' : '--');
+  setEl('paperProfitFactor', 'textContent', data.profit_factor != null ? (data.profit_factor||0).toFixed(2) : '--');
+
+  // Drawdown
+  setEl('paperMaxDD', 'textContent', data.max_drawdown_pct != null ? (data.max_drawdown_pct||0).toFixed(2) + '%' : '--');
+  setEl('paperCurrDD', 'textContent', data.current_drawdown_pct != null ? (data.current_drawdown_pct||0).toFixed(2) + '%' : '--');
+  setEl('paperMaxWinStreak', 'textContent', data.max_win_streak != null ? data.max_win_streak : '--');
+  setEl('paperMaxLossStreak', 'textContent', data.max_loss_streak != null ? data.max_loss_streak : '--');
+  const cs = data.current_streak || 0;
+  const csEl = setEl('paperCurrentStreak', 'textContent', cs > 0 ? '+' + cs + 'W' : cs < 0 ? cs + 'L' : '0');
+  if (csEl) csEl.style.color = cs > 0 ? 'var(--green)' : cs < 0 ? 'var(--red)' : 'var(--text-muted)';
+  setEl('paperSharpe', 'textContent', data.sharpe_ratio != null ? (data.sharpe_ratio||0).toFixed(2) : '--');
+
+  // Trade history table
   const tbody = document.getElementById('paperTradesBody');
-  const trades = data.recent_trades||[];
+  const trades = data.recent_trades || [];
   if (!trades.length) {
-    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:28px;">No paper trades yet — waiting for signals...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:28px;">No paper trades yet -- waiting for signals...</td></tr>';
     return;
   }
   tbody.innerHTML = trades.map(t => {
-    const time = new Date(t.entry_time).toLocaleString('ko',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+    const time = t.entry_time ? new Date(t.entry_time).toLocaleString('ko',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : '--';
     const mode = (t.grade||'').replace('PAPER_','');
     const dirColor = t.direction==='long'?'var(--green)':'var(--red)';
     const pnlPct = t.pnl_pct||0;
@@ -1614,10 +1615,50 @@ async function updatePaperStats() {
   }).join('');
 }
 
+async function updatePaperPositions() {
+  const data = await api('/api/paper/stats');
+  if (!data) return;
+
+  const container = document.getElementById('paperActivePositions');
+  const positions = data.active_positions || [];
+
+  if (positions.length === 0) {
+    container.innerHTML = '<div class="position-empty">No active paper positions</div>';
+    return;
+  }
+
+  container.innerHTML = '<div class="live-pos">' + positions.map(p => {
+    const dir = p.direction || '?';
+    const color = dir === 'long' ? 'var(--green)' : 'var(--red)';
+    const pnl = p.unrealized_pnl_pct || 0;
+    const pnlColor = pnl >= 0 ? 'var(--green)' : 'var(--red)';
+    const holdMin = p.hold_minutes || 0;
+    return `<div class="live-pos-item">
+      <div class="live-pos-header">
+        <span style="font-weight:700;color:${color}">${dir.toUpperCase()} (PAPER)</span>
+        <span style="font-weight:600;color:${pnlColor};font-family:'JetBrains Mono',monospace">${pnl>=0?'+':''}${pnl.toFixed(2)}%</span>
+      </div>
+      <div class="metric" style="padding:4px 0"><span class="metric-label">Setup</span><span class="metric-value">${p.setup||'--'}</span></div>
+      <div class="metric" style="padding:4px 0"><span class="metric-label">Entry</span><span class="metric-value">$${fmt(p.entry_price,1)}</span></div>
+      <div class="metric" style="padding:4px 0"><span class="metric-label">Current</span><span class="metric-value">$${fmt(p.current_price,1)}</span></div>
+      <div class="metric" style="padding:4px 0"><span class="metric-label">Hold</span><span class="metric-value">${holdMin}m</span></div>
+    </div>`;
+  }).join('') + '</div>';
+}
+
 // ── Refresh ──
 async function refreshAll() {
-  await Promise.all([updateStatus(), updateMarket(), updatePosition(), updateSignals(), updateTrades(), updateLivePositions(), updateTicker()]);
+  await Promise.all([
+    updateStatus(),
+    updateMarket(),
+    updatePosition(),
+    updateSignals(),
+    updateTrades(),
+    updateLivePositions()
+  ]);
 }
+
+// Initial load
 refreshAll();
 updateEngineTab();
 updatePaperStats();
@@ -1626,8 +1667,9 @@ updateEngineState();
 updateRiskState();
 updateNews();
 updateSystemStatus();
+
+// Periodic refresh
 setInterval(refreshAll, 5000);
-setInterval(updateTicker, 2000);
 setInterval(updateEngineState, 5000);
 setInterval(updateRiskState, 10000);
 setInterval(updateEngineTab, 15000);
@@ -1640,12 +1682,12 @@ setInterval(updateSystemStatus, 5000);
 const LANG = {
   en: {
     // Tabs
-    'tab.trading': 'Dashboard', 'tab.info': 'Market & Signals', 'tab.ml': 'Engine', 'tab.risk': 'Risk & System',
+    'tab.trading': 'Dashboard', 'tab.info': 'Market & Signals', 'tab.ml': 'Engine', 'tab.paper': 'Paper Trading', 'tab.risk': 'Risk & System',
     // Trading tab
     'scalping.title': 'Scalping Mode', 'scalping.score': 'Score', 'scalping.direction': 'Direction',
     'scalping.daily_pnl': 'Daily P&L', 'scalping.streak': 'Streak', 'scalping.explosive': 'Explosive',
-    'scalping.smc': 'SMC Entry', 'scalping.cooldown': 'COOLDOWN ACTIVE — Waiting...',
-    'scalping.stopped': 'DAILY LOSS LIMIT (-10%) — Scalping Stopped',
+    'scalping.smc': 'SMC Entry', 'scalping.cooldown': 'COOLDOWN ACTIVE -- Waiting...',
+    'scalping.stopped': 'DAILY LOSS LIMIT (-10%) -- Scalping Stopped',
     'account.title': 'Account', 'position.title': 'Active Position', 'position.empty': 'No active position',
     'trades.title': 'Recent Trades', 'trades.empty': 'No trades yet',
     'trades.time': 'Time', 'trades.direction': 'Direction', 'trades.grade': 'Grade',
@@ -1658,22 +1700,25 @@ const LANG = {
     'bot.autotrading': 'Auto Trading', 'bot.pause': 'Pause', 'bot.resume': 'Resume', 'bot.killswitch': 'Kill Switch',
     // ML tab
     'regime.title': 'Market Regime', 'regime.scores': 'Regime Scores',
-    'swing_regime.title': 'Swing — Regime Models', 'scalp_regime.title': 'Scalp — Regime Models',
-    'swing_model.title': 'Swing Model', 'scalp_model.title': 'Scalp Model',
     'ml.trades_learned': 'trades learned', 'ml.status': 'Status', 'ml.threshold': 'Entry Threshold',
     'ml.winrate': 'Recent Win Rate', 'ml.buffer': 'Data Buffer', 'ml.weights': 'Weights',
-    'paper.title': 'Paper Trading (ML Learning)', 'paper.empty': 'No paper trades yet — waiting for signals...',
-    'paper.total': 'Total', 'paper.wins': 'Wins', 'paper.losses': 'Losses', 'paper.winrate': 'Win Rate', 'paper.pnl': 'Total P&L',
-    'swing_history.title': 'Swing Trade History (ML)', 'scalp_history.title': 'Scalp Trade History (ML)',
-    'ml.train_acc': 'Train Accuracy', 'ml.oos_acc': 'OOS Accuracy (Walk-Forward)', 'ml.ensemble': 'Ensemble Models',
-    'ml.retrain': 'Retrain Now',
+    // Paper tab
+    'paper.title': 'Paper Trading', 'paper.empty': 'No paper trades yet -- waiting for signals...',
+    'paper.total': 'Total Trades', 'paper.wins': 'Wins', 'paper.losses': 'Losses', 'paper.winrate': 'Win Rate', 'paper.pnl': 'Total P&L',
+    'paper.virtual_balance': 'Virtual Balance', 'paper.total_return': 'Total Return',
+    'paper.stats_title': 'Performance Stats', 'paper.drawdown_title': 'Drawdown & Risk',
+    'paper.best_trade': 'Best Trade', 'paper.worst_trade': 'Worst Trade', 'paper.avg_hold': 'Avg Hold Time',
+    'paper.long_wr': 'Long Win Rate', 'paper.short_wr': 'Short Win Rate', 'paper.profit_factor': 'Profit Factor',
+    'paper.max_dd': 'Max Drawdown', 'paper.current_dd': 'Current Drawdown',
+    'paper.max_streak': 'Max Win Streak', 'paper.max_loss_streak': 'Max Loss Streak', 'paper.current_streak': 'Current Streak',
+    'paper.sharpe': 'Sharpe Ratio', 'paper.active_positions': 'Active Paper Positions', 'paper.history_title': 'Paper Trade History',
   },
   ko: {
-    'tab.trading': '대시보드', 'tab.info': '시장 & 시그널', 'tab.ml': '엔진', 'tab.risk': '리스크 & 시스템',
+    'tab.trading': '대시보드', 'tab.info': '시장 & 시그널', 'tab.ml': '엔진', 'tab.paper': '페이퍼 매매', 'tab.risk': '리스크 & 시스템',
     'scalping.title': '스캘핑 모드', 'scalping.score': '점수', 'scalping.direction': '방향',
     'scalping.daily_pnl': '일일 손익', 'scalping.streak': '연패', 'scalping.explosive': '급변동',
-    'scalping.smc': 'SMC 진입', 'scalping.cooldown': '쿨다운 활성 — 대기 중...',
-    'scalping.stopped': '일일 손실 한도 (-10%) — 스캘핑 중단',
+    'scalping.smc': 'SMC 진입', 'scalping.cooldown': '쿨다운 활성 -- 대기 중...',
+    'scalping.stopped': '일일 손실 한도 (-10%) -- 스캘핑 중단',
     'account.title': '계좌', 'position.title': '활성 포지션', 'position.empty': '활성 포지션 없음',
     'trades.title': '최근 거래', 'trades.empty': '거래 내역 없음',
     'trades.time': '시간', 'trades.direction': '방향', 'trades.grade': '등급',
@@ -1684,15 +1729,15 @@ const LANG = {
     'bot.title': '봇 제어', 'system.title': '시스템 상태',
     'bot.autotrading': '자동매매', 'bot.pause': '일시정지', 'bot.resume': '재개', 'bot.killswitch': '긴급 청산',
     'regime.title': '마켓 레짐', 'regime.scores': '레짐 점수',
-    'swing_regime.title': '스윙 — 레짐별 모델', 'scalp_regime.title': '스캘핑 — 레짐별 모델',
-    'swing_model.title': '스윙 모델', 'scalp_model.title': '스캘핑 모델',
-    'ml.trades_learned': '건 학습됨', 'ml.status': '상태', 'ml.threshold': '진입 임계값',
-    'ml.winrate': '최근 승률', 'ml.buffer': '데이터 버퍼', 'ml.weights': '가중치',
-    'paper.title': '가상매매 (ML 학습)', 'paper.empty': '가상매매 없음 — 시그널 대기 중...',
-    'paper.total': '총합', 'paper.wins': '승리', 'paper.losses': '패배', 'paper.winrate': '승률', 'paper.pnl': '총 손익',
-    'swing_history.title': '스윙 거래 내역 (ML)', 'scalp_history.title': '스캘핑 거래 내역 (ML)',
-    'ml.train_acc': '학습 정확도', 'ml.oos_acc': 'OOS 정확도 (Walk-Forward)', 'ml.ensemble': '앙상블 모델',
-    'ml.retrain': '재학습',
+    'paper.title': '페이퍼 매매', 'paper.empty': '페이퍼 매매 없음 -- 시그널 대기 중...',
+    'paper.total': '총 거래', 'paper.wins': '승리', 'paper.losses': '패배', 'paper.winrate': '승률', 'paper.pnl': '총 손익',
+    'paper.virtual_balance': '가상 잔고', 'paper.total_return': '총 수익률',
+    'paper.stats_title': '성과 지표', 'paper.drawdown_title': '드로다운 & 리스크',
+    'paper.best_trade': '최고 수익', 'paper.worst_trade': '최대 손실', 'paper.avg_hold': '평균 보유시간',
+    'paper.long_wr': '롱 승률', 'paper.short_wr': '숏 승률', 'paper.profit_factor': '수익 팩터',
+    'paper.max_dd': '최대 드로다운', 'paper.current_dd': '현재 드로다운',
+    'paper.max_streak': '최대 연승', 'paper.max_loss_streak': '최대 연패', 'paper.current_streak': '현재 연속',
+    'paper.sharpe': '샤프 비율', 'paper.active_positions': '활성 페이퍼 포지션', 'paper.history_title': '페이퍼 거래 내역',
   }
 };
 
@@ -1719,7 +1764,7 @@ function applyLang() {
   });
 }
 
-// 초기 적용
+// Initial language apply
 setLang(currentLang);
 
 </script>

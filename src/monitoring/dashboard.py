@@ -342,6 +342,19 @@ async def get_paper_stats():
     )
     active = (await cursor3.fetchone())[0]
 
+    # Redis에서 실시간 페이퍼 계좌 상태
+    paper_state = {}
+    paper_positions = []
+    try:
+        ps = await redis.get_json("paper:state")
+        if ps:
+            paper_state = ps
+        pp = await redis.get_json("paper:positions")
+        if pp:
+            paper_positions = pp
+    except Exception:
+        pass
+
     return {
         "total": row["total"],
         "wins": row["wins"] or 0,
@@ -351,6 +364,8 @@ async def get_paper_stats():
         "avg_pnl_pct": round(row["avg_pnl_pct"], 4),
         "active_positions": active,
         "recent_trades": recent,
+        "account": paper_state,
+        "live_positions": paper_positions,
     }
 
 
