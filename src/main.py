@@ -305,7 +305,7 @@ class CryptoAnalyzer:
         score = result["score"]
 
         # 최소 점수 체크
-        MIN_ENTRY_SCORE = 5.5
+        MIN_ENTRY_SCORE = 5.0
         if score < MIN_ENTRY_SCORE:
             if now - getattr(self, "_last_low_score_log", 0) >= 30:
                 self._last_low_score_log = now
@@ -317,12 +317,12 @@ class CryptoAnalyzer:
                 )
             return
 
-        # FLOW 셋업 비활성 체크
-        if not self.setup_tracker.is_setup_enabled("FLOW"):
-            logger.info(f"[TRADE] FLOW 셋업 비활성 (성과 부진) → 스킵")
+        # 셋업별 비활성 체크
+        if not self.setup_tracker.is_setup_enabled(setup):
+            logger.info(f"[TRADE] {setup} 셋업 비활성 (성과 부진) → 스킵")
             return
 
-        self.setup_tracker.record_detection("FLOW", direction, score, float(df_5m["close"].iloc[-1]))
+        self.setup_tracker.record_detection(setup, direction, score, float(df_5m["close"].iloc[-1]))
 
         # 셋업 감지 텔레그램 알림
         price_now = float(df_5m["close"].iloc[-1])
@@ -354,7 +354,7 @@ class CryptoAnalyzer:
                 return
 
         # 같은 방향 연속 4회 이상 차단
-        MAX_SAME_DIR = 4
+        MAX_SAME_DIR = 6
         if self._unified_last_dir == direction:
             if self._unified_same_dir_count >= MAX_SAME_DIR:
                 logger.info(
@@ -559,8 +559,10 @@ class CryptoAnalyzer:
             self.signal_tracker.record_trade(signals, pnl_pct, mode="unified", regime=regime)
 
         trend = signals.get("big_trend", "neutral")
+        # 셋업 이름: last_flow_result에서 가져옴
+        setup_name = self._last_flow_result.get("setup", "LVL") if self._last_flow_result else "LVL"
         self.setup_tracker.record_trade(
-            setup="FLOW", direction=direction, pnl_pct=pnl_pct,
+            setup=setup_name, direction=direction, pnl_pct=pnl_pct,
             pnl_usdt=pnl_usdt, hold_min=hold_min,
             exit_reason=exit_reason, trend=trend, regime=regime,
         )

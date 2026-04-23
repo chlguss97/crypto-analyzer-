@@ -49,22 +49,22 @@ risk:
 
 # ── 셋업별 SL/TP/보유 설정 ──
 hold_modes:
-  quick:       # 셋업 A (추세 모멘텀)
-    max_hold_min: 30
-    sl_margin_pct: 6.0          # 마진 -6%
-    tp1_margin_pct: 9.0         # 마진 +9% (RR 1.5)
-    tp2_mult: 2.0               # TP2 = SL × 2
+  quick:       # MOM, SES (빠른 진입/청산)
+    max_hold_min: 15
+    sl_margin_pct: 5.0          # 마진 -5%
+    tp1_margin_pct: 7.5         # 마진 +7.5% (RR 1.5)
+    tp2_mult: 2.0
     tp3_mult: 3.0
-  standard:    # 셋업 B, C (OB 리테스트, 브레이크아웃)
-    max_hold_min: 60
+  standard:    # LVL, PB, DIV (중간 보유)
+    max_hold_min: 45
     sl_margin_pct: 8.0          # 마진 -8%
     tp1_margin_pct: 12.0        # 마진 +12% (RR 1.5)
     tp2_mult: 2.5
     tp3_mult: 4.0
-  swing:       # 구조적으로 강한 셋업 (미래 확장용)
-    max_hold_min: 120
-    sl_margin_pct: 8.0
-    tp1_margin_pct: 15.0
+  runner:      # BRK (브레이크아웃 러너)
+    max_hold_min: 90
+    sl_margin_pct: 6.0
+    tp1_margin_pct: 12.0        # 마진 +12% (RR 2.0)
     tp2_mult: 3.0
     tp3_mult: 5.0
 
@@ -77,10 +77,10 @@ trailing:
 
 # ── 쿨다운 (조건부) ──
 cooldown:
-  after_loss_sec: 180           # 손절 후 3분
-  after_win_sec: 60             # 익절 후 1분
-  direction_flip_sec: 300       # 방향 전환 시 5분
-  min_interval_sec: 60          # 최소 진입 간격 1분
+  after_loss_sec: 60            # 손절 후 1분 (데이터 축적용)
+  after_win_sec: 20             # 익절 후 20초
+  direction_flip_sec: 60        # 방향 전환 시 1분
+  min_interval_sec: 20          # 최소 진입 간격 20초
 
 # ── 폴링 주기 (04-17: Binance 기준 가속) ──
 polling:

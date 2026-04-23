@@ -28,7 +28,14 @@ DEFAULT_PATH = DATA_DIR / "setup_tracker.json"
 MIN_TRADES_FOR_DISABLE = 10
 MIN_WIN_RATE = 0.35  # 35%
 
-SETUP_NAMES = {"FLOW": "OrderFlow Engine"}
+SETUP_NAMES = {
+    "LVL": "Level Bounce",
+    "MOM": "Momentum",
+    "PB":  "Pullback",
+    "BRK": "Breakout",
+    "DIV": "RSI Divergence",
+    "SES": "Session Open",
+}
 
 
 class SetupTracker:

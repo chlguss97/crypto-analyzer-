@@ -24,7 +24,7 @@ INITIAL_BALANCE_USDT = 7500.0
 MAX_DAILY_LOSS_PCT = 10.0     # 일일 -10%
 COOLDOWN_AFTER_LOSS_SEC = 180  # 손절 후 3분
 COOLDOWN_AFTER_WIN_SEC = 60    # 익절 후 1분
-MAX_SAME_DIR = 4               # 같은 방향 연속 최대 4회
+MAX_SAME_DIR = 6               # 같은 방향 연속 최대 6회 (데이터 축적)
 
 # 점수→등급 매핑
 SCORE_GRADE_MAP = [
@@ -188,7 +188,7 @@ class PaperTrader:
             return None
 
         # 최소 점수 5.5
-        MIN_ENTRY_SCORE = 5.5
+        MIN_ENTRY_SCORE = 5.0
         if score < MIN_ENTRY_SCORE:
             self._add_shadow(signal_result, current_price)
             return None
