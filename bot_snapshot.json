@@ -1,27 +1,20 @@
 {
-  "ts": 1777033758,
-  "ts_iso": "2026-04-24T12:29:18.665173+00:00",
+  "ts": 1777034665,
+  "ts_iso": "2026-04-24T12:44:25.498598+00:00",
   "balance": 228.98,
   "autotrading": "on",
   "regime": "trending_up",
   "trade_state": {
-    "setup": "DIV",
-    "direction": "short",
-    "score": 7.5,
+    "setup": null,
+    "direction": "neutral",
+    "score": 0,
     "trend": "up",
     "vol_band": "low",
     "session": "london",
     "regime": "trending_up",
     "streak": 1,
     "hold_mode": "standard",
-    "last_signal": {
-      "setup": "DIV",
-      "direction": "short",
-      "score": 7.5,
-      "reason": "bearish_divergence rsi=65",
-      "hold_mode": "standard",
-      "ts": 1777033757
-    }
+    "last_signal": null
   },
   "positions": {},
   "streak": 1,
