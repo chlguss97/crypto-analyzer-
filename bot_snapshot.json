@@ -1,23 +1,39 @@
 {
-  "ts": 1777004107,
-  "ts_iso": "2026-04-24T04:15:07.158281+00:00",
-  "balance": 239.0,
+  "ts": 1777005003,
+  "ts_iso": "2026-04-24T04:30:03.973081+00:00",
+  "balance": 233.94,
   "autotrading": "on",
   "regime": "ranging",
-  "trade_state": {
-    "setup": "PB",
-    "direction": "long",
-    "score": 7.0,
-    "trend": "up",
-    "vol_band": "low",
-    "session": "asia",
-    "regime": "ranging",
-    "streak": 1,
-    "hold_mode": "standard"
+  "trade_state": {},
+  "positions": {
+    "BTC/USDT:USDT": {
+      "trade_id": 39,
+      "symbol": "BTC/USDT:USDT",
+      "direction": "long",
+      "entry_price": 77721.8,
+      "size": 3.0,
+      "remaining_size": 0.03,
+      "leverage": 20,
+      "sl_price": 77449.8,
+      "tp1_price": 77997.2,
+      "tp2_price": 78401.9,
+      "tp3_price": 78809.9,
+      "grade": "A",
+      "entry_time": 1777005000000,
+      "tp1_filled": 0,
+      "tp2_filled": 0,
+      "tp3_filled": 0,
+      "runner_mode": 0,
+      "best_price": 0.0,
+      "trail_distance": 0.0,
+      "manual_sl_override": 0,
+      "manual_tp_override": 0,
+      "algo_ids": "{\"sl\": \"sl17770050011571427\", \"tp1\": \"tp117770050013513756\", \"tp2\": null, \"tp3\": null}",
+      "hold_minutes": 0
+    }
   },
-  "positions": {},
-  "streak": 1,
-  "daily_pnl": -7.05,
+  "streak": 0,
+  "daily_pnl": 0.0,
   "paper": {
     "balance": 7638.75,
     "initial_balance": 7500.0,
@@ -25,11 +41,26 @@
     "drawdown_pct": 0.47,
     "total_trades": 5,
     "win_rate": 40.0,
-    "daily_pnl_pct": -0.47,
+    "daily_pnl_pct": 0.0,
     "loss_streak": 1,
     "active_positions": 0,
     "shadow_missed": 0,
     "shadow_correct": 0
   },
-  "pending_algos": []
+  "pending_algos": [
+    {
+      "id": "tp117770050013513756",
+      "type": "trigger",
+      "trigger": "77997.2",
+      "side": "sell",
+      "sz": "1"
+    },
+    {
+      "id": "sl17770050011571427",
+      "type": "trigger",
+      "trigger": "77449.8",
+      "side": "sell",
+      "sz": "3"
+    }
+  ]
 }
