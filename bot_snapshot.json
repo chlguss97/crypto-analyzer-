@@ -1,39 +1,31 @@
 {
-  "ts": 1777021182,
-  "ts_iso": "2026-04-24T08:59:42.393378+00:00",
-  "balance": 232.36,
+  "ts": 1777022090,
+  "ts_iso": "2026-04-24T09:14:50.642641+00:00",
+  "balance": 228.98,
   "autotrading": "on",
-  "regime": "unknown",
-  "trade_state": {},
-  "positions": {
-    "BTC/USDT:USDT": {
-      "trade_id": 43,
-      "symbol": "BTC/USDT:USDT",
-      "direction": "long",
-      "entry_price": 77702.5,
-      "size": 0.02,
-      "remaining_size": 0.01,
-      "leverage": 15,
-      "sl_price": 77430.5,
-      "tp1_price": 77869.3,
-      "tp2_price": 78382.4,
-      "tp3_price": 78790.3,
-      "grade": "B",
-      "entry_time": 1777014916000,
-      "tp1_filled": 0,
-      "tp2_filled": 0,
-      "tp3_filled": 0,
-      "runner_mode": 0,
-      "best_price": 0.0,
-      "trail_distance": 0.0,
-      "manual_sl_override": 0,
-      "manual_tp_override": 0,
-      "algo_ids": "{\"sl\": \"sl17770185186625722\", \"tp1\": null, \"tp2\": null, \"tp3\": null}",
-      "hold_minutes": 104
+  "regime": "ranging",
+  "trade_state": {
+    "setup": "MOM",
+    "direction": "short",
+    "score": 9.0,
+    "trend": "up",
+    "vol_band": "low",
+    "session": "london",
+    "regime": "ranging",
+    "streak": 1,
+    "hold_mode": "quick",
+    "last_signal": {
+      "setup": "MOM",
+      "direction": "short",
+      "score": 9.0,
+      "reason": "momentum death_cross 5m",
+      "hold_mode": "quick",
+      "ts": 1777022090
     }
   },
-  "streak": 0,
-  "daily_pnl": 5.96,
+  "positions": {},
+  "streak": 1,
+  "daily_pnl": 3.65,
   "paper": {
     "balance": 7509.88,
     "initial_balance": 7500.0,
@@ -47,13 +39,5 @@
     "shadow_missed": 0,
     "shadow_correct": 0
   },
-  "pending_algos": [
-    {
-      "id": "sl17770185186625722",
-      "type": "trigger",
-      "trigger": "77430.5",
-      "side": "sell",
-      "sz": "1"
-    }
-  ]
+  "pending_algos": []
 }
