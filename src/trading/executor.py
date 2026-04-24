@@ -13,9 +13,8 @@ LIMIT_TIMEOUT_SEC = 30  # 120→30초: 미체결 시 빠르게 시장가 전환 
 MAX_SLIPPAGE_PCT = 0.1
 
 # 04-16: 수수료 절감 — maker 0.02% vs taker 0.05% → 전 주문 limit post-only 우선
-POST_ONLY_TIMEOUT_SEC = 12       # post-only 리밋 체결 대기 (빠른 폴백)
+POST_ONLY_TIMEOUT_SEC = 5        # post-only 체결 대기 (5초 → 총 최대 15초)
 POST_ONLY_MAX_RETRIES = 3        # 가격 추격 시도 횟수
-POST_ONLY_SLIP_TICK_PCT = 0.0003  # 재시도 시 호가 보정 (0.03%)
 
 
 class OrderExecutor:
@@ -209,15 +208,13 @@ class OrderExecutor:
                 logger.warning("best bid/ask 0 → market 폴백")
                 return await self._market_order(side, size, pos_side)
 
-            # maker 로 남으려면: 롱 진입=bid 측, 숏 진입=ask 측
-            # 한 tick 양보해서 큐 끼기 (OKX BTC-USDT-SWAP tick = 0.1)
-            slip = 1 + POST_ONLY_SLIP_TICK_PCT * (attempt - 1)
+            # maker: 첫 시도를 가장 공격적(시장가 근처)으로, 이후 보수적으로
+            # BTC $78k 기준 1$ = 0.0013% — 스프레드 수준
+            offset = 1.0 * (attempt - 1)  # 시도1: 0$, 시도2: +1$, 시도3: +2$
             if side == "buy":
-                price = round(best_bid * (1 - POST_ONLY_SLIP_TICK_PCT * 0.5) / slip, 1)
-                # attempt 증가 시 bid 에 더 가까이 → 추격
-                price = round(best_bid - 0.1 * (POST_ONLY_MAX_RETRIES - attempt), 1)
+                price = round(best_bid - offset, 1)
             else:
-                price = round(best_ask + 0.1 * (POST_ONLY_MAX_RETRIES - attempt), 1)
+                price = round(best_ask + offset, 1)
 
             try:
                 order = await self.exchange.create_order(
@@ -598,8 +595,8 @@ class OrderExecutor:
 
         # 긴급 사유 → 지연 없이 market 으로 (손실 확대 방지 우선)
         URGENT_REASONS = (
-            "sl_failsafe", "kill_switch", "kill_switch_dashboard",
-            "manual_sl_failed", "emergency",
+            "sl_failsafe", "sl_hit", "kill_switch", "kill_switch_dashboard",
+            "manual_sl_failed", "emergency", "trail_sl",
         )
         is_urgent = any(u in reason for u in URGENT_REASONS)
 
@@ -629,11 +626,12 @@ class OrderExecutor:
             if best_bid <= 0 or best_ask <= 0:
                 return None
 
-            # maker 로 남으려면: 롱 청산(sell)=ask 측, 숏 청산(buy)=bid 측
+            # maker: 첫 시도 공격적, 이후 보수적
+            offset = 1.0 * (attempt - 1)
             if side == "sell":
-                price = round(best_ask + 0.1 * (POST_ONLY_MAX_RETRIES - attempt), 1)
+                price = round(best_ask + offset, 1)
             else:
-                price = round(best_bid - 0.1 * (POST_ONLY_MAX_RETRIES - attempt), 1)
+                price = round(best_bid - offset, 1)
 
             try:
                 order = await self.exchange.create_order(
