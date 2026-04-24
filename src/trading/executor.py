@@ -416,7 +416,7 @@ class OrderExecutor:
                     "algoClOrdId": algo_id,
                 },
             )
-            fill_type = "limit" if is_tp else "market"
+            fill_type = "limit" if is_limit_trigger else "market"
             logger.info(
                 f"알고 주문 등록 [{prefix}/{fill_type}]: trigger=${trigger_price:.1f} "
                 f"size={size:.6f} id={algo_id}"
