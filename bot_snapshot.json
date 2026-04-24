@@ -1,7 +1,7 @@
 {
-  "ts": 1777015787,
-  "ts_iso": "2026-04-24T07:29:47.821345+00:00",
-  "balance": 231.28,
+  "ts": 1777016697,
+  "ts_iso": "2026-04-24T07:44:57.039519+00:00",
+  "balance": 230.15,
   "autotrading": "on",
   "regime": "unknown",
   "trade_state": {},
@@ -29,21 +29,21 @@
       "manual_sl_override": 0,
       "manual_tp_override": 0,
       "algo_ids": "{\"sl\": \"sl17770149157199279\", \"tp1\": \"tp117770149158526425\", \"tp2\": null, \"tp3\": null}",
-      "hold_minutes": 14
+      "hold_minutes": 29
     }
   },
   "streak": 0,
   "daily_pnl": 5.96,
   "paper": {
-    "balance": 7614.26,
+    "balance": 7509.88,
     "initial_balance": 7500.0,
-    "total_return_pct": 1.52,
-    "drawdown_pct": 0.79,
-    "total_trades": 6,
-    "win_rate": 33.3,
-    "daily_pnl_pct": 0.0,
-    "loss_streak": 2,
-    "active_positions": 1,
+    "total_return_pct": 0.13,
+    "drawdown_pct": 2.15,
+    "total_trades": 7,
+    "win_rate": 28.6,
+    "daily_pnl_pct": -1.39,
+    "loss_streak": 3,
+    "active_positions": 0,
     "shadow_missed": 0,
     "shadow_correct": 0
   },
