@@ -224,7 +224,9 @@ async def get_signals():
     """FlowEngine 최신 상태 (sys:trade_state)"""
     trade_state = await redis.get_json("sys:trade_state")
     if not trade_state:
-        trade_state = {"setup": None, "direction": "neutral", "score": 0}
+        trade_state = {"setup": None, "direction": "neutral", "score": 0,
+                       "trend": "neutral", "regime": "ranging", "vol_band": "mid",
+                       "session": "unknown", "streak": 0}
     return trade_state
 
 

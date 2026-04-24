@@ -580,7 +580,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
       </div>
       <div style="text-align:center;">
         <div class="big-num" id="flowStructure" style="font-size:20px;color:var(--text-muted);">--</div>
-        <span class="big-sub">Structure</span>
+        <span class="big-sub">Volatility</span>
       </div>
       <div style="text-align:center;">
         <div class="big-num" id="flowStreak" style="font-size:20px;color:var(--text-muted);">0</div>
@@ -1486,7 +1486,7 @@ async function updateEngineState() {
   const streakEl = document.getElementById('flowTrend');
   streakEl.textContent = (data.trend||'--').toUpperCase();
   streakEl.style.color = data.trend==='up'?'var(--green)':data.trend==='down'?'var(--red)':'var(--text-muted)';
-  document.getElementById('flowStructure').textContent = data.structure || '--';
+  document.getElementById('flowStructure').textContent = (data.vol_band || '--').toUpperCase();
   const fstreakEl = document.getElementById('flowStreak');
   fstreakEl.textContent = data.streak || 0;
   fstreakEl.style.color = (data.streak||0)>=3?'var(--red)':'var(--text-primary)';
@@ -1530,7 +1530,7 @@ async function updateRegime() {
 
 // ── Paper Trading Tab ──
 async function updatePaperTab() {
-  await Promise.all([updatePaperStats(), updatePaperPositions()]);
+  await updatePaperStats();  // positions도 같은 API에서 처리
 }
 
 async function updatePaperStats() {
@@ -1644,12 +1644,8 @@ async function updatePaperStats() {
       <td style="color:var(--text-muted);font-size:11px;">${reason}</td>
     </tr>`;
   }).join('');
-}
 
-async function updatePaperPositions() {
-  const data = await api('/api/paper/stats');
-  if (!data) return;
-
+  // 활성 포지션도 같은 데이터에서 렌더
   const container = document.getElementById('paperActivePositions');
   // live_positions = Redis 실시간 포지션 배열, active_positions = DB 카운트(숫자)
   const positions = data.live_positions || [];
