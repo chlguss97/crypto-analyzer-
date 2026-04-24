@@ -80,6 +80,8 @@ cooldown:
   after_win_sec: 20             # 익절 후 20초
   direction_flip_sec: 60        # 방향 전환 시 1분
   min_interval_sec: 20          # 최소 진입 간격 20초
+  streak_3_min: 5               # 3연패 쿨다운 5분
+  streak_5_min: 15              # 5연패 쿨다운 15분
 
 # ── 폴링 주기 (04-17: Binance 기준 가속) ──
 polling:

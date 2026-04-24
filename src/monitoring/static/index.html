@@ -542,7 +542,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
       <div class="big-num" id="balance">$--</div>
       <div class="big-sub">USDT Balance</div>
       <div style="margin-top: 18px;">
-        <div class="metric"><span class="metric-label" data-i18n="scalping.daily_pnl">Daily P&L</span><span class="metric-value" id="dailyPnl">--</span></div>
+        <div class="metric"><span class="metric-label" data-i18n="account.daily_pnl">Daily P&L</span><span class="metric-value" id="dailyPnl">--</span></div>
         <div class="metric"><span class="metric-label">Win Streak</span><span class="metric-value" id="streak">--</span></div>
         <div class="metric"><span class="metric-label">BTC Price</span><span class="metric-value" id="btcPrice" style="color:var(--text-primary)">$--</span></div>
       </div>
@@ -563,27 +563,27 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
     </div>
     <div class="grid" style="grid-template-columns: repeat(6, 1fr); gap: 12px; margin-bottom:12px;">
       <div style="text-align:center;">
-        <div class="big-num" id="scalpScore" style="font-size:24px;">--</div>
+        <div class="big-num" id="flowSignal" style="font-size:24px;">--</div>
         <span class="big-sub">Signal</span>
       </div>
       <div style="text-align:center;">
-        <div class="big-num" id="scalpDir" style="font-size:24px;">--</div>
+        <div class="big-num" id="flowDir" style="font-size:24px;">--</div>
         <span class="big-sub">Direction</span>
       </div>
       <div style="text-align:center;">
-        <div class="big-num" id="scalpDailyPnl" style="font-size:24px;">--</div>
+        <div class="big-num" id="flowScore" style="font-size:24px;">--</div>
         <span class="big-sub">Score</span>
       </div>
       <div style="text-align:center;">
-        <div class="big-num" id="scalpStreak" style="font-size:24px;">--</div>
+        <div class="big-num" id="flowTrend" style="font-size:24px;">--</div>
         <span class="big-sub">Trend</span>
       </div>
       <div style="text-align:center;">
-        <div class="big-num" id="scalpExplosive" style="font-size:20px;color:var(--text-muted);">--</div>
+        <div class="big-num" id="flowStructure" style="font-size:20px;color:var(--text-muted);">--</div>
         <span class="big-sub">Structure</span>
       </div>
       <div style="text-align:center;">
-        <div class="big-num" id="scalpSMC" style="font-size:20px;color:var(--text-muted);">0</div>
+        <div class="big-num" id="flowStreak" style="font-size:20px;color:var(--text-muted);">0</div>
         <span class="big-sub">Streak</span>
       </div>
     </div>
@@ -1478,18 +1478,18 @@ async function updateEngineState() {
   const data = await api('/api/engine/state');
   if (!data) return;
 
-  document.getElementById('scalpScore').textContent = data.setup || 'none';
-  const dirEl = document.getElementById('scalpDir');
+  document.getElementById('flowSignal').textContent = data.setup || 'none';
+  const dirEl = document.getElementById('flowDir');
   dirEl.textContent = (data.direction||'--').toUpperCase();
   dirEl.style.color = data.direction==='long'?'var(--green)':data.direction==='short'?'var(--red)':'var(--text-muted)';
-  document.getElementById('scalpDailyPnl').textContent = (data.score||0).toFixed(1);
-  const streakEl = document.getElementById('scalpStreak');
+  document.getElementById('flowScore').textContent = (data.score||0).toFixed(1);
+  const streakEl = document.getElementById('flowTrend');
   streakEl.textContent = (data.trend||'--').toUpperCase();
   streakEl.style.color = data.trend==='up'?'var(--green)':data.trend==='down'?'var(--red)':'var(--text-muted)';
-  document.getElementById('scalpExplosive').textContent = data.structure || '--';
-  const smcEl = document.getElementById('scalpSMC');
-  smcEl.textContent = data.streak || 0;
-  smcEl.style.color = (data.streak||0)>=3?'var(--red)':'var(--text-primary)';
+  document.getElementById('flowStructure').textContent = data.structure || '--';
+  const fstreakEl = document.getElementById('flowStreak');
+  fstreakEl.textContent = data.streak || 0;
+  fstreakEl.style.color = (data.streak||0)>=3?'var(--red)':'var(--text-primary)';
 }
 
 // ── Market Regime ──
@@ -1717,10 +1717,7 @@ const LANG = {
     // Tabs
     'tab.trading': 'Dashboard', 'tab.info': 'Market & Signals', 'tab.ml': 'Engine', 'tab.paper': 'Paper Trading', 'tab.risk': 'Risk & System',
     // Trading tab
-    'scalping.title': 'Scalping Mode', 'scalping.score': 'Score', 'scalping.direction': 'Direction',
-    'scalping.daily_pnl': 'Daily P&L', 'scalping.streak': 'Streak', 'scalping.explosive': 'Explosive',
-    'scalping.smc': 'SMC Entry', 'scalping.cooldown': 'COOLDOWN ACTIVE -- Waiting...',
-    'scalping.stopped': 'DAILY LOSS LIMIT (-10%) -- Scalping Stopped',
+    'account.daily_pnl': 'Daily P&L',
     'account.title': 'Account', 'position.title': 'Active Position', 'position.empty': 'No active position',
     'trades.title': 'Recent Trades', 'trades.empty': 'No trades yet',
     'trades.time': 'Time', 'trades.direction': 'Direction', 'trades.grade': 'Grade',
@@ -1748,10 +1745,7 @@ const LANG = {
   },
   ko: {
     'tab.trading': '대시보드', 'tab.info': '시장 & 시그널', 'tab.ml': '엔진', 'tab.paper': '페이퍼 매매', 'tab.risk': '리스크 & 시스템',
-    'scalping.title': '스캘핑 모드', 'scalping.score': '점수', 'scalping.direction': '방향',
-    'scalping.daily_pnl': '일일 손익', 'scalping.streak': '연패', 'scalping.explosive': '급변동',
-    'scalping.smc': 'SMC 진입', 'scalping.cooldown': '쿨다운 활성 -- 대기 중...',
-    'scalping.stopped': '일일 손실 한도 (-10%) -- 스캘핑 중단',
+    'account.daily_pnl': '일일 손익',
     'account.title': '계좌', 'position.title': '활성 포지션', 'position.empty': '활성 포지션 없음',
     'trades.title': '최근 거래', 'trades.empty': '거래 내역 없음',
     'trades.time': '시간', 'trades.direction': '방향', 'trades.grade': '등급',
