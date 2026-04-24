@@ -1,13 +1,13 @@
 {
-  "ts": 1776993246,
-  "ts_iso": "2026-04-24T01:14:06.841113+00:00",
-  "balance": 243.36,
-  "autotrading": "off",
+  "ts": 1776994151,
+  "ts_iso": "2026-04-24T01:29:11.219312+00:00",
+  "balance": 239.42,
+  "autotrading": "on",
   "regime": "ranging",
   "trade_state": {
     "setup": "PB",
     "direction": "long",
-    "score": 7.5,
+    "score": 9.0,
     "trend": "up",
     "vol_band": "low",
     "session": "asia",
