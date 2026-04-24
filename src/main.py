@@ -335,12 +335,6 @@ class CryptoAnalyzer:
 
         self.setup_tracker.record_detection(setup, direction, score, float(df_5m["close"].iloc[-1]))
 
-        # 셋업 감지 텔레그램 알림
-        price_now = float(df_5m["close"].iloc[-1])
-        await self.telegram.notify_setup_detected(
-            setup, direction, score, price_now, result.get("reason", "")
-        )
-
         if direction == "neutral":
             return
 
