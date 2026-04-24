@@ -731,7 +731,9 @@ class CryptoAnalyzer:
                 trade_state = await self.redis.get_json("sys:trade_state") or {}
                 autotrading = await self.redis.get("sys:autotrading") or "off"
 
-                # 페이퍼 상태도 포함
+                # 페이퍼 상태 Redis 갱신 (60초마다, TTL 없이 영구)
+                if self.paper_trader:
+                    await self.paper_trader._update_redis_state()
                 paper_stats = self.paper_trader.get_stats() if self.paper_trader else {}
 
                 snapshot = {

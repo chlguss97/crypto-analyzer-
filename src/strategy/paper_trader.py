@@ -813,7 +813,7 @@ class PaperTrader:
         }
 
         try:
-            await self.redis.set("paper:state", state, ttl=3600)
+            await self.redis.set("paper:state", state)
 
             # 활성 포지션 정보
             if self.positions:
@@ -834,9 +834,9 @@ class PaperTrader:
                         "pnl_usdt": round(pos.unrealized_pnl_usdt(p), 2),
                         "hold_min": round(pos.hold_minutes()),
                     })
-                await self.redis.set("paper:positions", pos_list, ttl=3600)
+                await self.redis.set("paper:positions", pos_list)
             else:
-                await self.redis.set("paper:positions", [], ttl=3600)
+                await self.redis.set("paper:positions", [])
         except Exception as e:
             logger.debug(f"[PAPER] Redis 상태 저장 실패: {e}")
 
