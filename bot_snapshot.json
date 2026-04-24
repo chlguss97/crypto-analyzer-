@@ -1,7 +1,7 @@
 {
-  "ts": 1777010378,
-  "ts_iso": "2026-04-24T05:59:38.787490+00:00",
-  "balance": 234.62,
+  "ts": 1777011301,
+  "ts_iso": "2026-04-24T06:15:01.486397+00:00",
+  "balance": 234.6,
   "autotrading": "on",
   "regime": "unknown",
   "trade_state": {},
@@ -11,7 +11,7 @@
       "symbol": "BTC/USDT:USDT",
       "direction": "long",
       "entry_price": 77471.4,
-      "size": 0.02,
+      "size": 1.0,
       "remaining_size": 0.01,
       "leverage": 20,
       "sl_price": 77703.7,
@@ -19,7 +19,7 @@
       "tp2_price": 78188.6,
       "tp3_price": 78595.5,
       "grade": "B+",
-      "entry_time": 1777005581000,
+      "entry_time": 1777011238000,
       "tp1_filled": 1,
       "tp2_filled": 0,
       "tp3_filled": 0,
@@ -28,12 +28,12 @@
       "trail_distance": 273.6000000000058,
       "manual_sl_override": 0,
       "manual_tp_override": 0,
-      "algo_ids": "{\"sl\": \"rsl17770101789207505\", \"tp1\": null, \"tp2\": null, \"tp3\": null}",
-      "hold_minutes": 79
+      "algo_ids": "{\"sl\": \"sl17770112391348685\", \"tp1\": null, \"tp2\": null, \"tp3\": null}",
+      "hold_minutes": 1
     }
   },
-  "streak": 1,
-  "daily_pnl": -7.35,
+  "streak": 0,
+  "daily_pnl": 0.0,
   "paper": {
     "balance": 7614.26,
     "initial_balance": 7500.0,
@@ -41,7 +41,7 @@
     "drawdown_pct": 0.79,
     "total_trades": 6,
     "win_rate": 33.3,
-    "daily_pnl_pct": -0.32,
+    "daily_pnl_pct": 0.0,
     "loss_streak": 2,
     "active_positions": 0,
     "shadow_missed": 0,
@@ -49,7 +49,7 @@
   },
   "pending_algos": [
     {
-      "id": "rsl17770101789207505",
+      "id": "sl17770112391348685",
       "type": "trigger",
       "trigger": "77703.7",
       "side": "sell",
