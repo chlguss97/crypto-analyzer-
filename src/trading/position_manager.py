@@ -167,9 +167,9 @@ class PositionManager:
             dist        = min(dist, price * 0.012)  # 최대 1.2% (마진 30% cap)
             발동 조건: 옵션 C 안정화 후
         """
-        risk_cfg = self.config.get("risk", {})
-        trail_margin_pct = risk_cfg.get("trail_margin_pct", 5.0)
-        min_price_pct = risk_cfg.get("trail_min_price_pct", 0.5)  # 옛 0.2 → 0.5
+        trailing_cfg = self.config.get("trailing", {})
+        trail_margin_pct = trailing_cfg.get("trail_margin_pct", 5.0)
+        min_price_pct = trailing_cfg.get("trail_min_price_pct", 0.5)  # 옛 0.2 → 0.5
 
         # 마진 손실 % / leverage = 가격 변동 %
         dist_from_margin = price * (trail_margin_pct / pos.leverage / 100)
@@ -226,9 +226,19 @@ class PositionManager:
 
         direction = trade_request["direction"]
         fill_price = float(order.get("average") or order.get("price") or 0)
-        filled_size = float(order.get("filled") or 0)
+        filled_raw = float(order.get("filled") or 0)
         # fee 가 None 일 수 있음 — null-safe
         fee = (order.get("fee") or {}).get("cost", 0) or 0
+
+        # ccxt OKX swap: filled는 contracts 수 (1 ct = 0.01 BTC)
+        # → BTC 단위로 변환 (get_position_size와 동일 단위)
+        try:
+            contract_size = float(
+                self.executor.exchange.market(symbol).get("contractSize", 0.01)
+            )
+        except Exception:
+            contract_size = 0.01
+        filled_size = filled_raw * contract_size
 
         # 🔒 fill_price/size 가 즉시 안 오는 경우 (ccxt OKX 시장가 응답 일부)
         # → fetch_positions 로 정확한 entry 와 size 확보 (재시도 포함)
