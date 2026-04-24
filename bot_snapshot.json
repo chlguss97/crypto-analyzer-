@@ -1,10 +1,18 @@
 {
-  "ts": 1776987848,
-  "ts_iso": "2026-04-23T23:44:08.142914+00:00",
+  "ts": 1776988750,
+  "ts_iso": "2026-04-23T23:59:10.990440+00:00",
   "balance": 243.36,
   "autotrading": "off",
   "regime": "unknown",
-  "trade_state": {},
+  "trade_state": {
+    "setup": null,
+    "direction": "neutral",
+    "score": 0,
+    "trend": "neutral",
+    "structure": "unknown",
+    "streak": 0,
+    "hold_mode": "standard"
+  },
   "positions": {},
   "streak": 0,
   "daily_pnl": 0.0,
