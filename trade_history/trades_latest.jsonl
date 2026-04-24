@@ -22,3 +22,6 @@
 {"type": "paper_equity", "paper": true, "ts": 1776993979, "balance": 7674.91, "equity": 7680.2, "unrealized": 5.29, "positions": 1, "total_trades": 4, "ts_iso": "2026-04-24T01:26:19+00:00"}
 {"type": "entry", "direction": "long", "grade": "SETUP-PB", "score": 9.0, "entry_price": 78020.0, "sl_price": 77746.9, "leverage": 20, "margin": 120.86, "ts": 1776994009, "ts_iso": "2026-04-24T01:26:49+00:00"}
 {"type": "exit", "direction": "long", "exit_reason": "sl_failsafe", "entry_price": 78020.0, "exit_price": 0.0, "pnl_pct": 0.0, "pnl_usdt": 0.0, "hold_min": 0, "fee": 1.17, "ts": 1776994013, "ts_iso": "2026-04-24T01:26:53+00:00"}
+{"type": "paper_entry", "paper": true, "trade_id": 34, "direction": "long", "entry_price": 78027.3, "margin": 3823.34, "size_btc": 0.98, "leverage": 20, "sl_price": 77754.2, "tp1_price": 78269.8, "score": 7.0, "setup": "PB", "hold_mode": "standard", "balance": 7674.91, "ts": 1776994744, "ts_iso": "2026-04-24T01:39:04+00:00"}
+{"type": "paper_equity", "paper": true, "ts": 1776994749, "balance": 7674.91, "equity": 7692.55, "unrealized": 17.64, "positions": 1, "total_trades": 4, "ts_iso": "2026-04-24T01:39:09+00:00"}
+{"type": "entry", "direction": "long", "grade": "SETUP-PB", "score": 7.0, "entry_price": 78057.9, "sl_price": 77784.7, "leverage": 20, "margin": 121.36, "ts": 1776994779, "ts_iso": "2026-04-24T01:39:39+00:00"}
