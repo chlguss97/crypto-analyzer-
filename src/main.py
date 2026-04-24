@@ -877,7 +877,7 @@ class CryptoAnalyzer:
 
         logger.info("봇 시작 — FlowEngine v2 (6셋업 + PaperTrader)")
         await self.redis.set("sys:bot_status", "running")
-        await self.redis.set("sys:autotrading", "off")  # 페이퍼 모드: 실거래 OFF
+        await self.redis.set("sys:autotrading", "on")  # 실거래 ON (페이퍼 병행)
 
         # 텔레그램 명령어 처리용 주입
         self.telegram.redis = self.redis
@@ -890,9 +890,9 @@ class CryptoAnalyzer:
             bal = await self.executor.get_balance()
             paper_bal = self.paper_trader.balance if self.paper_trader else 0
             await self.telegram._send(
-                "\U0001f4dd <b>FlowEngine v1 — PAPER MODE</b>\n"
-                "Mode: OrderFlow (Trend+Level+CVD)\n"
-                "Trading: <b>PAPER ONLY</b> (실거래 OFF)\n"
+                "\U0001f7e2 <b>FlowEngine v2 — LIVE + PAPER</b>\n"
+                "Mode: OrderFlow (6 Setups)\n"
+                "Trading: <b>LIVE ON</b> + Paper 병행\n"
                 f"ML: {'Active' if self.flow_ml.trained else 'Cold Start'}\n"
                 f"Real Balance: ${bal:,.2f}\n"
                 f"Paper Balance: ${paper_bal:,.0f}"
