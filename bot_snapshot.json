@@ -1,25 +1,25 @@
 {
-  "ts": 1777005003,
-  "ts_iso": "2026-04-24T04:30:03.973081+00:00",
-  "balance": 233.94,
+  "ts": 1777005892,
+  "ts_iso": "2026-04-24T04:44:52.195116+00:00",
+  "balance": 230.23,
   "autotrading": "on",
-  "regime": "ranging",
+  "regime": "unknown",
   "trade_state": {},
   "positions": {
     "BTC/USDT:USDT": {
-      "trade_id": 39,
+      "trade_id": 41,
       "symbol": "BTC/USDT:USDT",
       "direction": "long",
-      "entry_price": 77721.8,
-      "size": 3.0,
-      "remaining_size": 0.03,
+      "entry_price": 77471.4,
+      "size": 0.02,
+      "remaining_size": 0.02,
       "leverage": 20,
-      "sl_price": 77449.8,
-      "tp1_price": 77997.2,
-      "tp2_price": 78401.9,
-      "tp3_price": 78809.9,
-      "grade": "A",
-      "entry_time": 1777005000000,
+      "sl_price": 77239.1,
+      "tp1_price": 77736.5,
+      "tp2_price": 78188.6,
+      "tp3_price": 78595.5,
+      "grade": "B+",
+      "entry_time": 1777005581000,
       "tp1_filled": 0,
       "tp2_filled": 0,
       "tp3_filled": 0,
@@ -28,12 +28,12 @@
       "trail_distance": 0.0,
       "manual_sl_override": 0,
       "manual_tp_override": 0,
-      "algo_ids": "{\"sl\": \"sl17770050011571427\", \"tp1\": \"tp117770050013513756\", \"tp2\": null, \"tp3\": null}",
-      "hold_minutes": 0
+      "algo_ids": "{\"sl\": \"sl17770055803344899\", \"tp1\": \"tp117770055804566034\", \"tp2\": null, \"tp3\": null}",
+      "hold_minutes": 5
     }
   },
-  "streak": 0,
-  "daily_pnl": 0.0,
+  "streak": 1,
+  "daily_pnl": -7.35,
   "paper": {
     "balance": 7638.75,
     "initial_balance": 7500.0,
@@ -43,24 +43,24 @@
     "win_rate": 40.0,
     "daily_pnl_pct": 0.0,
     "loss_streak": 1,
-    "active_positions": 0,
+    "active_positions": 1,
     "shadow_missed": 0,
     "shadow_correct": 0
   },
   "pending_algos": [
     {
-      "id": "tp117770050013513756",
+      "id": "tp117770055804566034",
       "type": "trigger",
-      "trigger": "77997.2",
+      "trigger": "77736.5",
       "side": "sell",
       "sz": "1"
     },
     {
-      "id": "sl17770050011571427",
+      "id": "sl17770055803344899",
       "type": "trigger",
-      "trigger": "77449.8",
+      "trigger": "77239.1",
       "side": "sell",
-      "sz": "3"
+      "sz": "2"
     }
   ]
 }
