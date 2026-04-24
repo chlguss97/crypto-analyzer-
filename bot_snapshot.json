@@ -1,7 +1,7 @@
 {
-  "ts": 1776995103,
-  "ts_iso": "2026-04-24T01:45:03.439487+00:00",
-  "balance": 240.09,
+  "ts": 1776995996,
+  "ts_iso": "2026-04-24T01:59:56.974748+00:00",
+  "balance": 250.33,
   "autotrading": "on",
   "regime": "unknown",
   "trade_state": {},
@@ -11,25 +11,25 @@
       "symbol": "BTC/USDT:USDT",
       "direction": "long",
       "entry_price": 78057.9,
-      "size": 0.03,
-      "remaining_size": 0.03,
+      "size": 2.0,
+      "remaining_size": 0.02,
       "leverage": 20,
-      "sl_price": 77784.7,
+      "sl_price": 78254.65,
       "tp1_price": 78300.4,
       "tp2_price": 78740.9,
       "tp3_price": 79150.7,
       "grade": "B+",
-      "entry_time": 1776994779000,
-      "tp1_filled": 0,
+      "entry_time": 1776995860000,
+      "tp1_filled": 1,
       "tp2_filled": 0,
       "tp3_filled": 0,
-      "runner_mode": 0,
-      "best_price": 0.0,
-      "trail_distance": 0.0,
+      "runner_mode": 1,
+      "best_price": 78424.4,
+      "trail_distance": 169.75,
       "manual_sl_override": 0,
       "manual_tp_override": 0,
-      "algo_ids": "{\"sl\": \"sl17769947784588828\", \"tp1\": \"tp117769947785933528\", \"tp2\": null, \"tp3\": null}",
-      "hold_minutes": 5
+      "algo_ids": "{\"sl\": \"rsl17769959751038414\", \"tp1\": null, \"tp2\": null, \"tp3\": null}",
+      "hold_minutes": 2
     }
   },
   "streak": 0,
@@ -43,24 +43,17 @@
     "win_rate": 50.0,
     "daily_pnl_pct": 0.0,
     "loss_streak": 0,
-    "active_positions": 1,
+    "active_positions": 0,
     "shadow_missed": 0,
     "shadow_correct": 0
   },
   "pending_algos": [
     {
-      "id": "tp117769947785933528",
+      "id": "rsl17769959751038414",
       "type": "trigger",
-      "trigger": "78300.4",
+      "trigger": "78254.7",
       "side": "sell",
-      "sz": "1.5"
-    },
-    {
-      "id": "sl17769947784588828",
-      "type": "trigger",
-      "trigger": "77784.7",
-      "side": "sell",
-      "sz": "3"
+      "sz": "2"
     }
   ]
 }
