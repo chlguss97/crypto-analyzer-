@@ -162,7 +162,7 @@ class TelegramNotifier:
 
             # 페이퍼 계좌 상태
             if self.redis:
-                paper = await self.redis.get("paper:state")
+                paper = await self.redis.get_json("paper:state")
                 if paper and isinstance(paper, dict):
                     p_bal = paper.get("balance", 0)
                     p_ret = paper.get("total_return_pct", 0)

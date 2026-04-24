@@ -1354,7 +1354,7 @@ class PositionManager:
             mode = "unified"  # TradeEngine 통합 모델
             margin = pos.remaining_size * pos.entry_price / pos.leverage if pos.leverage > 0 else 0
             fee_pct = (pos.total_fee + pos.funding_cost) / margin * 100 if margin > 0 else 0
-            hold_min = (time.time() * 1000 - pos.entry_time) / 60000 if pos.entry_time > 0 else 0
+            hold_min = (time.time() - pos.entry_time) / 60 if pos.entry_time > 0 else 0
             try:
                 await self.on_trade_closed(mode, pos.signals_snapshot, pnl_pct,
                                            fee_pct=fee_pct, direction=pos.direction,

@@ -616,11 +616,11 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
         <div class="big-num neutral" id="infoSignalScore">--</div>
         <div class="big-sub">Score / 10</div>
         <div style="margin-top: 18px;">
-          <div class="metric"><span class="metric-label">Grade</span><span class="metric-value" id="infoGrade">--</span></div>
+          <div class="metric"><span class="metric-label">Setup</span><span class="metric-value" id="infoGrade">--</span></div>
           <div class="metric"><span class="metric-label">Direction</span><span class="metric-value" id="infoDirection">--</span></div>
-          <div class="metric"><span class="metric-label">Long Score</span><span class="metric-value" id="infoLong">--</span></div>
-          <div class="metric"><span class="metric-label">Short Score</span><span class="metric-value" id="infoShort">--</span></div>
-          <div class="metric"><span class="metric-label">Confluence Bonus</span><span class="metric-value" id="infoBonus">--</span></div>
+          <div class="metric"><span class="metric-label">Trend</span><span class="metric-value" id="infoLong">--</span></div>
+          <div class="metric"><span class="metric-label">Regime</span><span class="metric-value" id="infoShort">--</span></div>
+          <div class="metric"><span class="metric-label">Volatility</span><span class="metric-value" id="infoBonus">--</span></div>
         </div>
       </div>
 
@@ -1011,23 +1011,19 @@ async function updatePosition() {
 async function updateSignals() {
   const data = await api('/api/signals');
   if (!data) return;
-  const agg = data.aggregated;
-  if (agg && agg.aggregated) {
-    const a = agg.aggregated, g = agg.grade || {};
 
-    // Info tab - Signal Score
-    const scoreEl = document.getElementById('infoSignalScore');
-    scoreEl.textContent = (a.score || 0).toFixed(1);
-    scoreEl.className = 'big-num ' + (a.score >= 6 ? 'positive' : a.score >= 4 ? 'neutral' : 'negative');
-    document.getElementById('infoGrade').innerHTML = `<span class="grade-badge ${gradeClass(g.grade)}">${g.grade || '--'}</span>`;
-    const dir = a.direction || '--';
-    const dirEl = document.getElementById('infoDirection');
-    dirEl.textContent = dir.toUpperCase();
-    dirEl.className = 'metric-value ' + (dir === 'long' ? 'positive' : dir === 'short' ? 'negative' : 'neutral');
-    document.getElementById('infoLong').textContent = (a.long_score||0).toFixed(1);
-    document.getElementById('infoShort').textContent = (a.short_score||0).toFixed(1);
-    document.getElementById('infoBonus').textContent = `+${(a.confluence_bonus||0).toFixed(1)}`;
-  }
+  // FlowEngine trade_state 형식
+  const scoreEl = document.getElementById('infoSignalScore');
+  scoreEl.textContent = (data.score || 0).toFixed(1);
+  scoreEl.className = 'big-num ' + (data.score >= 6 ? 'positive' : data.score >= 4 ? 'neutral' : 'negative');
+  document.getElementById('infoGrade').innerHTML = `<span class="grade-badge">${data.setup || '--'}</span>`;
+  const dir = data.direction || '--';
+  const dirEl = document.getElementById('infoDirection');
+  dirEl.textContent = dir.toUpperCase();
+  dirEl.className = 'metric-value ' + (dir === 'long' ? 'positive' : dir === 'short' ? 'negative' : 'neutral');
+  document.getElementById('infoLong').textContent = data.trend || '--';
+  document.getElementById('infoShort').textContent = data.regime || '--';
+  document.getElementById('infoBonus').textContent = data.vol_band || '--';
 }
 
 async function updateTrades() {
@@ -1255,19 +1251,17 @@ async function updateLivePositions() {
   }
 
   container.innerHTML = positions.map(p => {
-    const dir = p.direction;
-    const pnl = p.unrealized_pnl || 0;
+    const dir = p.direction || '?';
     const color = dir === 'long' ? 'var(--green)' : 'var(--red)';
-    const pnlColor = pnl >= 0 ? 'var(--green)' : 'var(--red)';
     return `<div class="live-pos-item">
       <div class="live-pos-header">
         <span style="font-weight:700;color:${color}">${dir.toUpperCase()}</span>
-        <span style="font-weight:600;color:${pnlColor};font-family:'JetBrains Mono',monospace">$${pnl>=0?'+':''}${fmt(pnl,2)}</span>
+        <span style="font-size:11px;color:var(--text-muted)">${p.grade||''}</span>
       </div>
       <div class="metric" style="padding:4px 0"><span class="metric-label">Entry</span><span class="metric-value">$${fmt(p.entry_price,1)}</span></div>
-      <div class="metric" style="padding:4px 0"><span class="metric-label">Size</span><span class="metric-value">${p.size} BTC</span></div>
-      <div class="metric" style="padding:4px 0"><span class="metric-label">Lev</span><span class="metric-value">${p.leverage}x</span></div>
-      <div class="metric" style="padding:4px 0"><span class="metric-label">Liq.</span><span class="metric-value" style="color:var(--red)">$${fmt(p.liquidation_price,0)}</span></div>
+      <div class="metric" style="padding:4px 0"><span class="metric-label">Size</span><span class="metric-value">${p.size||p.remaining_size||'?'} BTC</span></div>
+      <div class="metric" style="padding:4px 0"><span class="metric-label">Lev</span><span class="metric-value">${p.leverage||'?'}x</span></div>
+      <div class="metric" style="padding:4px 0"><span class="metric-label">SL</span><span class="metric-value" style="color:var(--red)">$${fmt(p.sl_price,0)}</span></div>
     </div>`;
   }).join('');
 }

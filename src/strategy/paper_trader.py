@@ -596,7 +596,7 @@ class PaperTrader:
         if self.signal_tracker:
             try:
                 self.signal_tracker.record_trade(
-                    pos.signals_snapshot, net_pnl_pct, mode="paper", regime=regime
+                    pos.signals_snapshot, net_pnl_pct, mode="unified", regime=regime
                 )
             except Exception as e:
                 logger.debug(f"[PAPER] signal_tracker 기록 실패: {e}")
