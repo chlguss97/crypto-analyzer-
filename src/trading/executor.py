@@ -390,14 +390,13 @@ class OrderExecutor:
         pos_side = "long" if direction == "long" else "short"
         algo_id = self._gen_algo_id(prefix)
 
-        # prefix 로 TP/SL 구분 → orderPx 결정
-        is_tp = prefix.startswith("tp")
-        if is_tp:
-            # TP: limit-on-trigger. 약간 불리한 쪽으로 설정해 체결률 확보 (maker 최적화보단 체결 우선)
-            # 롱 TP 는 sell@triggerPx, 숏 TP 는 buy@triggerPx — 가격이 유리할 때만 체결됨
+        # prefix 로 TP/SL/러너SL 구분 → orderPx 결정
+        is_limit_trigger = prefix.startswith("tp") or prefix == "rsl"
+        if is_limit_trigger:
+            # TP / 러너SL: limit-on-trigger (maker 0.02%)
             order_px = str(round(trigger_price, 1))
         else:
-            # SL: market-on-trigger (안전 우선, 0.05% taker 수용)
+            # 최초 SL: market-on-trigger (안전 우선, taker 0.05%)
             order_px = "-1"
 
         try:
@@ -428,9 +427,14 @@ class OrderExecutor:
             return None
 
     async def set_stop_loss(
-        self, direction: str, size: float, sl_price: float
+        self, direction: str, size: float, sl_price: float,
+        use_limit: bool = False,
     ) -> str | None:
-        """서버사이드 SL 등록 → algoClOrdId 반환"""
+        """서버사이드 SL 등록 → algoClOrdId 반환.
+        use_limit=True: 러너 SL용 limit-on-trigger (maker 수수료)
+        """
+        if use_limit:
+            return await self._create_algo_order(direction, size, sl_price, "rsl")
         return await self._create_algo_order(direction, size, sl_price, "sl")
 
     async def set_take_profit(
@@ -520,9 +524,10 @@ class OrderExecutor:
         size: float,
         new_sl: float,
         old_algo_id: str | None,
+        use_limit: bool = False,
     ) -> str | None:
         """SL 갱신: 새 SL 먼저 등록 → 성공 시에만 old 취소 (나체 포지션 방지)"""
-        new_id = await self.set_stop_loss(direction, size, new_sl)
+        new_id = await self.set_stop_loss(direction, size, new_sl, use_limit=use_limit)
         if new_id and old_algo_id:
             # 새 SL 성공 → 이제 old 취소 (실패해도 두 개 공존은 안전)
             await self.cancel_algo_order(old_algo_id)

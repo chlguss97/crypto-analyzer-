@@ -795,10 +795,13 @@ class PositionManager:
             )
 
     async def _move_sl(self, pos: Position, new_sl: float, label: str):
-        """SL 알고 cancel + 새로 등록 (잔여 사이즈 기준)"""
+        """SL 알고 cancel + 새로 등록 (잔여 사이즈 기준).
+        러너 모드 SL은 limit-on-trigger (maker 수수료) — 이미 이익 구간이므로 안전.
+        """
         old_id = pos.algo_ids.get("sl")
+        use_limit = pos.runner_mode  # 러너 SL → limit (maker 0.02%)
         new_id = await self.executor.update_stop_loss(
-            pos.direction, pos.remaining_size, new_sl, old_id
+            pos.direction, pos.remaining_size, new_sl, old_id, use_limit=use_limit
         )
         pos.algo_ids["sl"] = new_id
         pos.current_sl = new_sl
