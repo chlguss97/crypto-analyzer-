@@ -295,6 +295,25 @@ class CryptoAnalyzer:
 
         # TradeEngine 상태 Redis 저장
         regime_now = self._current_regime["regime"] if self._current_regime else "ranging"
+
+        # 셋업 감지 시 마지막 시그널 기록 (30초 유지)
+        if result.get("setup"):
+            import time as _ts
+            self._last_signal = {
+                "setup": result["setup"],
+                "direction": result["direction"],
+                "score": result["score"],
+                "reason": result.get("reason", ""),
+                "hold_mode": result.get("hold_mode", "standard"),
+                "ts": int(_ts.time()),
+            }
+
+        # 마지막 시그널 정보 (30초 이내면 표시)
+        import time as _ts
+        last_sig = getattr(self, "_last_signal", None)
+        if last_sig and (_ts.time() - last_sig["ts"]) > 30:
+            last_sig = None  # 30초 경과 → 만료
+
         await self.redis.set("sys:trade_state", {
             "setup": result.get("setup"),
             "direction": result.get("direction", "neutral"),
@@ -305,6 +324,7 @@ class CryptoAnalyzer:
             "regime": regime_now,
             "streak": self._unified_streak,
             "hold_mode": result.get("hold_mode", "standard"),
+            "last_signal": last_sig,
         }, ttl=30)
 
         # 셋업 없으면 리턴

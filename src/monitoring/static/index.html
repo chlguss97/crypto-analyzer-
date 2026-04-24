@@ -1012,15 +1012,26 @@ async function updateSignals() {
   const data = await api('/api/signals');
   if (!data) return;
 
-  // FlowEngine trade_state 형식
+  // 현재 시그널 or 마지막 시그널 (30초 이내)
+  const ls = data.last_signal;
+  const hasLive = data.setup != null;
+  const hasLast = ls != null;
+  const score = hasLive ? data.score : (hasLast ? ls.score : 0);
+  const setup = hasLive ? data.setup : (hasLast ? ls.setup : null);
+  const dir = hasLive ? data.direction : (hasLast ? ls.direction : 'neutral');
+
   const scoreEl = document.getElementById('infoSignalScore');
-  scoreEl.textContent = (data.score || 0).toFixed(1);
-  scoreEl.className = 'big-num ' + (data.score >= 6 ? 'positive' : data.score >= 4 ? 'neutral' : 'negative');
-  document.getElementById('infoGrade').innerHTML = `<span class="grade-badge">${data.setup || '--'}</span>`;
-  const dir = data.direction || '--';
+  scoreEl.textContent = score.toFixed(1);
+  scoreEl.className = 'big-num ' + (score >= 6 ? 'positive' : score >= 4 ? 'neutral' : 'negative');
+
+  const setupLabel = setup ? setup : 'Waiting';
+  const stale = !hasLive && hasLast;
+  document.getElementById('infoGrade').innerHTML = `<span class="grade-badge" style="${stale?'opacity:0.5':''}">${setupLabel}${stale?' (last)':''}</span>`;
+
   const dirEl = document.getElementById('infoDirection');
   dirEl.textContent = dir.toUpperCase();
   dirEl.className = 'metric-value ' + (dir === 'long' ? 'positive' : dir === 'short' ? 'negative' : 'neutral');
+
   document.getElementById('infoLong').textContent = data.trend || '--';
   document.getElementById('infoShort').textContent = data.regime || '--';
   document.getElementById('infoBonus').textContent = data.vol_band || '--';
