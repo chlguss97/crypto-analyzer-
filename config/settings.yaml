@@ -3,8 +3,7 @@ exchange:
   symbol: "BTC/USDT:USDT"
   margin_mode: "isolated"
 
-# ── 통합 모델 (04-15 전면 개편) ──
-# Scalp/Swing 분리 → 단일 UnifiedEngine (셋업 ABC)
+# ── FlowEngine v2 (6셋업: LVL/MOM/PB/BRK/DIV/SES) ──
 
 timeframes:
   execution: "15m"

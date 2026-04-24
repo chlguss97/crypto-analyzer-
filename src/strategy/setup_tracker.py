@@ -1,7 +1,7 @@
 """
 SetupTracker — 셋업 성과 추적 + 자동 비활성화
 
-FlowEngine v1: "FLOW" 단일 셋업 추적
+FlowEngine v2: 6셋업 (LVL/MOM/PB/BRK/DIV/SES) 추적
 - 승률, RR, 평균 PnL, 거래 수
 - 시간대별(hour) / 추세별(trend) / 방향별 성과
 - 자동 비활성화: 10+ 거래 & 승률 < 35%

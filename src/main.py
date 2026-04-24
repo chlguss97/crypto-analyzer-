@@ -714,6 +714,9 @@ class CryptoAnalyzer:
         """헬스체크 (60초마다)"""
         while self._running:
             await self.redis.set("sys:last_heartbeat", str(int(_time.time())))
+            # 통합 엔진 streak/pnl → Redis (대시보드용)
+            await self.redis.set("risk:streak", str(self._unified_streak))
+            await self.redis.set("risk:daily_pnl", f"{self._unified_daily_pnl:.2f}")
             bal = 0
             try:
                 bal = await asyncio.wait_for(self.executor.get_balance(), timeout=5.0)
@@ -872,11 +875,9 @@ class CryptoAnalyzer:
         self._running = True
         self._current_day = datetime.now(timezone.utc).day
 
-        logger.info("봇 시작 — FlowEngine v1 (오더플로우 + 레벨)")
+        logger.info("봇 시작 — FlowEngine v2 (6셋업 + PaperTrader)")
         await self.redis.set("sys:bot_status", "running")
         await self.redis.set("sys:autotrading", "off")  # 페이퍼 모드: 실거래 OFF
-        await self.redis.set("sys:ml_enabled", "on")
-        await self.redis.set("sys:active_model", "both")
 
         # 텔레그램 명령어 처리용 주입
         self.telegram.redis = self.redis

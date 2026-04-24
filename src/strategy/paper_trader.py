@@ -64,7 +64,7 @@ class PaperPosition:
     hold_mode: str = "standard"
     signals_snapshot: dict = field(default_factory=dict)
     flow_result: dict = field(default_factory=dict)  # FlowML 학습용 원본
-    setup: str = "FLOW"
+    setup: str = "LVL"
     tp1_hit: bool = False
     tp2_hit: bool = False
     best_price: float = 0.0    # 트레일링용
@@ -589,8 +589,8 @@ class PaperTrader:
         # ── ML 학습 (FlowML — flow_result 원본 전달) ──
         regime = self._get_regime()
         if self.flow_ml and pos.flow_result:
-            # FlowML.record_trade(flow_result: dict, pnl_pct: float, fee_pct: float)
-            self.flow_ml.record_trade(pos.flow_result, net_pnl_pct, fee_pct)
+            # net_pnl_pct는 이미 수수료 차감됨 → fee_pct=0 (이중공제 방지)
+            self.flow_ml.record_trade(pos.flow_result, net_pnl_pct, 0)
 
         # 시그널 기여도 추적
         if self.signal_tracker:

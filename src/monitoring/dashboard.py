@@ -221,18 +221,11 @@ async def get_position():
 @app.get("/api/signals")
 async def get_signals():
     await _ensure_initialized()
-    """최신 시그널 합산 결과"""
-    symbol = config["exchange"]["symbol"]
-
-    fast = await redis.get_json(f"sig:fast:{symbol}")
-    slow = await redis.get_json(f"sig:slow:{symbol}")
-    aggregated = await redis.get_json(f"sig:aggregated:{symbol}")
-
-    return {
-        "fast_signals": fast,
-        "slow_signals": slow,
-        "aggregated": aggregated,
-    }
+    """FlowEngine 최신 상태 (sys:trade_state)"""
+    trade_state = await redis.get_json("sys:trade_state")
+    if not trade_state:
+        trade_state = {"setup": None, "direction": "neutral", "score": 0}
+    return trade_state
 
 
 @app.get("/api/trades")
@@ -620,7 +613,7 @@ async def get_engine_state():
     state = await redis.get_json("sys:trade_state")
     if not state:
         state = {"setup": None, "direction": "neutral", "score": 0,
-                 "trend": "neutral", "structure": "unknown", "streak": 0}
+                 "trend": "neutral", "regime": "ranging", "streak": 0}
     return state
 
 
@@ -671,7 +664,7 @@ async def get_engine_overview():
     real_stats = {"total": 0, "wins": 0, "wr": 0.0, "total_pnl": 0.0, "avg_pnl": 0.0}
     paper_stats = {"total": 0, "wins": 0, "wr": 0.0, "total_pnl": 0.0, "avg_pnl": 0.0}
     try:
-        # Real (SETUP_A/B/C grade, PAPER_ 접두어 없음)
+        # Real (PAPER_ 접두어 없는 모든 거래)
         cur = await db._db.execute(
             """SELECT COUNT(*) as total,
                       SUM(CASE WHEN pnl_pct > 0 THEN 1 ELSE 0 END) as wins,
@@ -679,8 +672,7 @@ async def get_engine_overview():
                       COALESCE(AVG(pnl_pct), 0) as avg_pnl
                FROM trades
                WHERE exit_time IS NOT NULL
-                 AND grade NOT LIKE 'PAPER_%'
-                 AND (grade LIKE 'SETUP_%' OR grade = 'MANUAL')"""
+                 AND grade NOT LIKE 'PAPER_%'"""
         )
         row = dict(await cur.fetchone())
         real_stats["total"] = row["total"] or 0

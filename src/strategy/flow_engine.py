@@ -111,9 +111,14 @@ class FlowEngine:
             "ema20_15m": round(ema20_15m, 1),
             "price": price, "hour": hour,
         }
+        # 레벨 근접 판단 (FlowML 피처용)
+        near_support = any(abs(price - lv["price"]) <= atr_5m * 3.0 for lv in levels.get("supports", []))
+        near_resistance = any(abs(price - lv["price"]) <= atr_5m * 3.0 for lv in levels.get("resistances", []))
+
         result["signals"] = {
             "trend_1d": trend_1d, "trend_4h": trend_4h, "trend_1h": trend_1h,
             "big_trend": big_trend, "levels": levels, "flow": flow,
+            "near_support": near_support, "near_resistance": near_resistance,
             "context": ctx,
         }
 
