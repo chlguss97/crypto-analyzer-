@@ -45,7 +45,9 @@ class Position:
         # 러너 트레일링 (TP1 익절 후 활성화)
         self.runner_mode = False
         self.best_price = 0.0       # 러너 모드 진입 후 최고/최저가
-        self.trail_distance = 0.0   # 러너 트레일 거리 (가격 단위, 절대값)
+        self.trail_distance = 0.0   # 러너 트레일 거리 (가격 단위, 절대값) — 레거시 호환
+        self.original_sl = sl_price # 원본 SL 거리 계산용
+        self.last_new_high_time = 0 # 마지막 신고점/신저점 시각
 
         # 사용자 수동 SL/TP 수정 → self_heal/트레일이 안 덮음
         self.manual_sl_override = False
@@ -145,51 +147,67 @@ class PositionManager:
     # 옛 ratio (호환용) — config 의 trail_margin_pct 가 우선
     RUNNER_TRAIL_RATIO = 0.5
 
-    def _get_trail_distance(self, pos: "Position", price: float) -> float:
+    def _calc_dynamic_trail(self, pos: "Position", current_price: float) -> float:
         """
-        러너 트레일 거리 계산 — 마진 % 기반 + 노이즈 floor
+        동적 트레일 SL 계산.
 
-        현재: 옵션 A — dist_min 0.5% (25x leverage 에선 항상 0.5% floor)
-              BTC 5분 ATR 활발 시간대 0.25% 의 2배 → 노이즈 방어 + 추세 추격 균형
-
-        ── 진화 backlog ──
-        옵션 C (ATR 기반 동적): 시장 변동성 자동 적응
-            atr_dist = price * (atr_pct / 100) * 0.8
-            return max(atr_dist, price * 0.003)
-            장점: 죽은 시간 작게, 활발 시간 크게
-            단점: ATR 폭주 시 trail 폭주 (cap 필요), 호출 경로에 atr_pct 전달 필요
-            발동 조건: 운영 데이터 1~2주 모인 후, trail SL 발동 패턴 분석 후 도입
-
-        옵션 D (ATR + margin + min/max cap): 가장 정교
-            atr_dist    = price * atr_pct/100 * 0.8
-            margin_dist = price * (10 / leverage / 100)  # 마진 10% 기반
-            dist        = max(atr_dist, margin_dist, price * 0.003)
-            dist        = min(dist, price * 0.012)  # 최대 1.2% (마진 30% cap)
-            발동 조건: 옵션 C 안정화 후
+        공식: final_sl = max(best_price - trail, profit_lock)
+        trail = max(ATR*2, 이익*반납비율)  capped at 0.8%
+        반납비율: 시간 경과 + 신고점 정체 시 축소
+        profit_lock: R배수별 최소 이익 확보
         """
-        trailing_cfg = self.config.get("trailing", {})
-        trail_margin_pct = trailing_cfg.get("trail_margin_pct", 5.0)
-        min_price_pct = trailing_cfg.get("trail_min_price_pct", 0.5)  # 옛 0.2 → 0.5
+        import time as _t
 
-        # 마진 손실 % / leverage = 가격 변동 %
-        dist_from_margin = price * (trail_margin_pct / pos.leverage / 100)
-        # 최소 노이즈 보호
-        dist_min = price * (min_price_pct / 100)
-        dist = max(dist_from_margin, dist_min)
+        profit = abs(pos.best_price - pos.entry_price)
+        sl_dist = abs(pos.entry_price - pos.original_sl) if pos.original_sl else current_price * 0.003
+        if sl_dist <= 0:
+            sl_dist = current_price * 0.003
 
-        # 04-13: TP1 거리 대비 cap — trail이 TP1 이익보다 크면 러��가 무의미
-        # trail_distance <= TP1 거리 × 0.7 (TP1 이익의 30%는 보전)
-        tp1_dist = abs(pos.tp1_price - pos.entry_price)
-        if tp1_dist > 0:
-            max_trail = tp1_dist * 0.7
-            if dist > max_trail:
-                logger.info(
-                    f"트레일 거리 ${dist:.1f} > TP1거리 ${tp1_dist:.1f}×0.7 "
-                    f"→ cap ${max_trail:.1f}"
-                )
-                dist = max_trail
+        # 반납 비율: 시간 + 정체 감지
+        hold_min = pos.hold_minutes
+        if hold_min < 15:
+            giveback = 0.35
+        elif hold_min < 30:
+            giveback = 0.25
+        else:
+            giveback = 0.15
 
-        return dist
+        # 신고점 정체 페널티
+        stale_sec = _t.time() - pos.last_new_high_time if pos.last_new_high_time > 0 else 0
+        stale_min = stale_sec / 60
+        if stale_min > 10:
+            giveback *= 0.5
+        elif stale_min > 5:
+            giveback *= 0.75
+
+        # 트레일 거리: max(ATR*2, 이익*반납) with cap
+        atr = getattr(self, '_cached_atr', current_price * 0.002)
+        trail = max(atr * 2, profit * giveback)
+        trail = min(trail, current_price * 0.008)  # 최대 0.8% cap
+        trail = max(trail, current_price * 0.001)  # 최소 0.1% floor
+
+        # 단계별 이익 잠금 (R-lock)
+        r_multiple = profit / sl_dist if sl_dist > 0 else 0
+
+        if pos.direction == "long":
+            if r_multiple >= 3:
+                min_sl = pos.entry_price + sl_dist * 2
+            elif r_multiple >= 2:
+                min_sl = pos.entry_price + sl_dist * 1
+            else:
+                min_sl = pos.entry_price  # 본절 보장
+            final_sl = max(pos.best_price - trail, min_sl)
+        else:
+            if r_multiple >= 3:
+                min_sl = pos.entry_price - sl_dist * 2
+            elif r_multiple >= 2:
+                min_sl = pos.entry_price - sl_dist * 1
+            else:
+                min_sl = pos.entry_price
+            final_sl = min(pos.best_price + trail, min_sl)
+
+        return round(final_sl, 1)
+
 
     # OKX BTC-USDT-SWAP 최소 주문: 1 contract = 0.01 BTC
     MIN_ORDER_SIZE_BTC = 0.01
@@ -568,6 +586,7 @@ class PositionManager:
                     await self._move_sl(pos, new_sl, label="본절(서버TP)")
 
                     pos.runner_mode = True
+                    pos.last_new_high_time = int(time.time())
                     # 러너 모드 전환 → TP2/TP3 미사용 → 즉시 정리 (OKX 잔존 방지)
                     await self._cancel_unused_tps(pos)
                     # 04-13: best_price를 최소 TP1 가격으로 설정
@@ -576,7 +595,7 @@ class PositionManager:
                         pos.best_price = max(current_price, pos.tp1_price)
                     else:
                         pos.best_price = min(current_price, pos.tp1_price) if current_price > 0 else pos.tp1_price
-                    pos.trail_distance = self._get_trail_distance(pos, pos.best_price)
+                    pos.trail_distance = abs(pos.best_price - self._calc_dynamic_trail(pos, pos.best_price))
                     logger.info(
                         f"✅ 서버 TP1 자동 체결 감지 → SL 본전 ${new_sl:.0f} | "
                         f"🏃 러너 모드 ON (best ${pos.best_price:.0f}, 트레일 ${pos.trail_distance:.1f})"
@@ -701,7 +720,7 @@ class PositionManager:
                 pos.best_price = max(current_price, pos.tp1_price)
             else:
                 pos.best_price = min(current_price, pos.tp1_price) if current_price > 0 else pos.tp1_price
-            pos.trail_distance = self._get_trail_distance(pos, pos.best_price)
+            pos.trail_distance = abs(pos.best_price - self._calc_dynamic_trail(pos, pos.best_price))
 
             # 러너 모드 전환 → TP2/TP3 미사용 → 즉시 정리 (OKX 잔존 방지)
             await self._cancel_unused_tps(pos)
@@ -730,38 +749,65 @@ class PositionManager:
 
     async def _update_runner_trail(self, pos: Position, current_price: float):
         """
-        러너 모드: 가격이 새 고/저 갱신 시 트레일링 SL 끌어올림
-        - 사용자가 SL 수동 수정한 경우 (manual_sl_override) 트레일 OFF
+        러너 모드: 동적 트레일 SL — 이익 비례 + 시간 축소 + 정체 감지 + R-lock.
         """
+        import time as _t
+
         if pos.manual_sl_override:
-            # 수동 SL 우선 — 단지 best_price 만 업데이트
             if pos.direction == "long":
                 if current_price > pos.best_price:
                     pos.best_price = current_price
+                    pos.last_new_high_time = _t.time()
             else:
                 if current_price < pos.best_price or pos.best_price == 0:
                     pos.best_price = current_price
+                    pos.last_new_high_time = _t.time()
             return
 
-        moved = False
+        # 실시간 ATR 캐싱 (Redis에서 5초마다 갱신)
+        now = _t.time()
+        if now - getattr(self, '_atr_cache_ts', 0) > 5:
+            try:
+                atr_str = await self.redis.get("rt:atr:BTC-USDT-SWAP")
+                if atr_str:
+                    self._cached_atr = float(atr_str)
+                else:
+                    self._cached_atr = current_price * 0.002  # 0.2% 폴백
+            except Exception:
+                self._cached_atr = current_price * 0.002
+            self._atr_cache_ts = now
+
+        # 신고점 갱신 체크
+        new_high = False
         if pos.direction == "long":
             if current_price > pos.best_price:
                 pos.best_price = current_price
-                new_sl = current_price - pos.trail_distance
-                if new_sl > pos.current_sl:
-                    await self._move_sl(pos, new_sl, label="러너트레일")
-                    moved = True
+                pos.last_new_high_time = now
+                new_high = True
         else:
             if current_price < pos.best_price or pos.best_price == 0:
                 pos.best_price = current_price
-                new_sl = current_price + pos.trail_distance
-                if new_sl < pos.current_sl:
-                    await self._move_sl(pos, new_sl, label="러너트레일")
-                    moved = True
+                pos.last_new_high_time = now
+                new_high = True
+
+        # 동적 SL 계산
+        new_sl = self._calc_dynamic_trail(pos, current_price)
+
+        # SL 이동 (올라가기만 / 내려가기만)
+        moved = False
+        if pos.direction == "long" and new_sl > pos.current_sl:
+            await self._move_sl(pos, new_sl, label="러너트레일")
+            moved = True
+        elif pos.direction == "short" and new_sl < pos.current_sl:
+            await self._move_sl(pos, new_sl, label="러너트레일")
+            moved = True
 
         if moved:
+            profit = abs(pos.best_price - pos.entry_price)
+            secured = abs(pos.current_sl - pos.entry_price)
             logger.info(
-                f"🏃 러너 트레일: 신고점 ${pos.best_price:.0f} → SL ${pos.current_sl:.0f}"
+                f"🏃 러너 트레일: best ${pos.best_price:.0f} → "
+                f"SL ${pos.current_sl:.0f} (이익 ${profit:.0f} 중 ${secured:.0f} 확보)"
             )
 
     async def _on_tp_hit(self, pos: Position, level: int, close_pct: float):
