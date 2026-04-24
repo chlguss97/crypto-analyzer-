@@ -1,13 +1,13 @@
 {
-  "ts": 1776992400,
-  "ts_iso": "2026-04-24T01:00:00.536730+00:00",
+  "ts": 1776993246,
+  "ts_iso": "2026-04-24T01:14:06.841113+00:00",
   "balance": 243.36,
   "autotrading": "off",
   "regime": "ranging",
   "trade_state": {
-    "setup": null,
-    "direction": "neutral",
-    "score": 0,
+    "setup": "PB",
+    "direction": "long",
+    "score": 7.5,
     "trend": "up",
     "vol_band": "low",
     "session": "asia",
@@ -27,7 +27,7 @@
     "win_rate": 50.0,
     "daily_pnl_pct": 0.0,
     "loss_streak": 0,
-    "active_positions": 0,
+    "active_positions": 1,
     "shadow_missed": 0,
     "shadow_correct": 0
   },
