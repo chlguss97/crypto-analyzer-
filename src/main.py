@@ -649,11 +649,13 @@ class CryptoAnalyzer:
                 self._unified_last_dir = None
                 self._unified_same_dir_count = 0
 
-                # 일일 리포트
+                # 일일 리포트 (실전 + 페이퍼 통합)
                 try:
                     import time as _t
                     yesterday_start = int((_t.time() - 86400) * 1000)
-                    cursor = await self.db._db.execute(
+
+                    # 실전 매매 집계
+                    cur_real = await self.db._db.execute(
                         "SELECT COUNT(*), "
                         "SUM(CASE WHEN pnl_pct > 0 THEN 1 ELSE 0 END), "
                         "SUM(CASE WHEN pnl_pct <= 0 THEN 1 ELSE 0 END), "
@@ -663,22 +665,91 @@ class CryptoAnalyzer:
                         "AND grade NOT LIKE 'PAPER_%'",
                         (yesterday_start,)
                     )
-                    row = await cursor.fetchone()
-                    total_t = (row[0] or 0) if row else 0
-                    wins = (row[1] or 0) if row else 0
-                    losses = (row[2] or 0) if row else 0
-                    total_pnl = (row[3] or 0.0) if row else 0.0
+                    r = await cur_real.fetchone()
+                    real_t, real_w, real_l = (r[0] or 0), (r[1] or 0), (r[2] or 0)
+                    real_pnl = float(r[3] or 0)
+
+                    # 페이퍼 매매 집계
+                    cur_paper = await self.db._db.execute(
+                        "SELECT COUNT(*), "
+                        "SUM(CASE WHEN pnl_pct > 0 THEN 1 ELSE 0 END), "
+                        "SUM(CASE WHEN pnl_pct <= 0 THEN 1 ELSE 0 END), "
+                        "SUM(pnl_usdt) "
+                        "FROM trades "
+                        "WHERE entry_time >= ? AND exit_time IS NOT NULL "
+                        "AND grade LIKE 'PAPER_%'",
+                        (yesterday_start,)
+                    )
+                    p = await cur_paper.fetchone()
+                    paper_t, paper_w, paper_l = (p[0] or 0), (p[1] or 0), (p[2] or 0)
+                    paper_pnl = float(p[3] or 0)
+
+                    # 셋업별 성과
+                    cur_setup = await self.db._db.execute(
+                        "SELECT grade, COUNT(*), "
+                        "SUM(CASE WHEN pnl_pct > 0 THEN 1 ELSE 0 END), "
+                        "COALESCE(AVG(pnl_pct), 0) "
+                        "FROM trades "
+                        "WHERE entry_time >= ? AND exit_time IS NOT NULL "
+                        "GROUP BY grade",
+                        (yesterday_start,)
+                    )
+                    setup_rows = await cur_setup.fetchall()
+                    setup_lines = []
+                    for sr in setup_rows:
+                        g = sr[0] or "?"
+                        st, sw = sr[1] or 0, sr[2] or 0
+                        sa = sr[3] or 0
+                        wr = sw / st * 100 if st > 0 else 0
+                        setup_lines.append(f"  {g}: {st}건 승률{wr:.0f}% avg{sa:+.1f}%")
+
+                    # 전체 누적 건수 (ML 마일스톤)
+                    cur_total = await self.db._db.execute(
+                        "SELECT COUNT(*) FROM trades WHERE exit_time IS NOT NULL"
+                    )
+                    all_trades = (await cur_total.fetchone())[0] or 0
+
                 except Exception as e:
                     logger.debug(f"일일 리포트 DB 집계 실패: {e}")
-                    total_t, wins, losses, total_pnl = 0, 0, 0, 0.0
+                    real_t, real_w, real_l, real_pnl = 0, 0, 0, 0.0
+                    paper_t, paper_w, paper_l, paper_pnl = 0, 0, 0, 0.0
+                    setup_lines, all_trades = [], 0
 
                 risk = await self.risk_manager.get_risk_state()
-                await self.telegram.notify_daily_report(
-                    now.strftime("%Y-%m-%d"),
-                    total_t, wins, losses,
-                    float(total_pnl),
-                    risk.get("balance", 0),
+                real_bal = risk.get("balance", 0)
+                paper_bal = self.paper_trader.balance if self.paper_trader else 0
+
+                real_wr = real_w / real_t * 100 if real_t > 0 else 0
+                paper_wr = paper_w / paper_t * 100 if paper_t > 0 else 0
+                r_icon = "\U0001f4c8" if real_pnl >= 0 else "\U0001f4c9"
+                p_icon = "\U0001f4c8" if paper_pnl >= 0 else "\U0001f4c9"
+
+                report = (
+                    f"\U0001f4ca <b>Daily Report | {now.strftime('%Y-%m-%d')}</b>\n\n"
+                    f"<b>실전</b>\n"
+                    f"  매매: {real_t}건 | 승률: {real_wr:.0f}%\n"
+                    f"  {r_icon} P&L: ${real_pnl:+,.2f} | 잔고: ${real_bal:,.2f}\n\n"
+                    f"<b>페이퍼</b>\n"
+                    f"  매매: {paper_t}건 | 승률: {paper_wr:.0f}%\n"
+                    f"  {p_icon} P&L: ${paper_pnl:+,.2f} | 잔고: ${paper_bal:,.0f}\n"
                 )
+                if setup_lines:
+                    report += f"\n<b>셋업별</b>\n" + "\n".join(setup_lines) + "\n"
+                report += f"\n\U0001f4dd 누적 {all_trades}건 | ML: {'Active' if self.flow_ml.trained else f'학습 대기 ({len(self.flow_ml.buffer_X)}/50)'}"
+
+                await self.telegram._send(report)
+
+                # ML 마일스톤 알림
+                ml_samples = len(self.flow_ml.buffer_X)
+                milestones = [50, 100, 200, 500]
+                for ms in milestones:
+                    if ml_samples >= ms and not getattr(self, f'_ml_milestone_{ms}', False):
+                        setattr(self, f'_ml_milestone_{ms}', True)
+                        await self.telegram._send(
+                            f"\U0001f3af <b>ML 마일스톤: {ms}건 달성!</b>\n"
+                            f"FlowML: trained={self.flow_ml.trained} "
+                            f"samples={ml_samples}"
+                        )
 
                 # FlowML 주기적 저장
                 try:
