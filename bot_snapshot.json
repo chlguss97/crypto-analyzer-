@@ -1,7 +1,7 @@
 {
-  "ts": 1777019364,
-  "ts_iso": "2026-04-24T08:29:24.066081+00:00",
-  "balance": 233.17,
+  "ts": 1777020273,
+  "ts_iso": "2026-04-24T08:44:33.158770+00:00",
+  "balance": 232.17,
   "autotrading": "on",
   "regime": "unknown",
   "trade_state": {},
@@ -29,7 +29,7 @@
       "manual_sl_override": 0,
       "manual_tp_override": 0,
       "algo_ids": "{\"sl\": \"sl17770185186625722\", \"tp1\": null, \"tp2\": null, \"tp3\": null}",
-      "hold_minutes": 74
+      "hold_minutes": 89
     }
   },
   "streak": 0,
