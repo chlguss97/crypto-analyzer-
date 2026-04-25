@@ -1,20 +1,27 @@
 {
-  "ts": 1777082366,
-  "ts_iso": "2026-04-25T01:59:26.111325+00:00",
+  "ts": 1777083272,
+  "ts_iso": "2026-04-25T02:14:32.849524+00:00",
   "balance": 228.98,
   "autotrading": "on",
   "regime": "ranging",
   "trade_state": {
-    "setup": null,
-    "direction": "neutral",
-    "score": 0,
+    "setup": "PB",
+    "direction": "long",
+    "score": 8.0,
     "trend": "up",
     "vol_band": "low",
     "session": "asia",
     "regime": "ranging",
     "streak": 0,
     "hold_mode": "standard",
-    "last_signal": null
+    "last_signal": {
+      "setup": "PB",
+      "direction": "long",
+      "score": 8.0,
+      "reason": "pullback long ema20_dist=+0.07% rsi=59",
+      "hold_mode": "standard",
+      "ts": 1777083271
+    }
   },
   "positions": {},
   "streak": 0,
