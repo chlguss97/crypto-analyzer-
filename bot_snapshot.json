@@ -1,6 +1,6 @@
 {
-  "ts": 1777127408,
-  "ts_iso": "2026-04-25T14:30:08.495077+00:00",
+  "ts": 1777128315,
+  "ts_iso": "2026-04-25T14:45:15.742883+00:00",
   "balance": 228.98,
   "autotrading": "on",
   "regime": "ranging",
@@ -20,7 +20,7 @@
       "score": 8.5,
       "reason": "level_bounce long @ $77,628 str=9",
       "hold_mode": "standard",
-      "ts": 1777127407
+      "ts": 1777128314
     }
   },
   "positions": {},
