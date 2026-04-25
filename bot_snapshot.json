@@ -1,13 +1,13 @@
 {
-  "ts": 1777117492,
-  "ts_iso": "2026-04-25T11:44:52.398861+00:00",
+  "ts": 1777118399,
+  "ts_iso": "2026-04-25T11:59:59.179801+00:00",
   "balance": 228.98,
   "autotrading": "on",
   "regime": "ranging",
   "trade_state": {
     "setup": "PB",
     "direction": "long",
-    "score": 7.5,
+    "score": 8.5,
     "trend": "up",
     "vol_band": "low",
     "session": "london",
@@ -17,10 +17,10 @@
     "last_signal": {
       "setup": "PB",
       "direction": "long",
-      "score": 7.5,
-      "reason": "pullback long ema20_dist=-0.03% rsi=37",
+      "score": 8.5,
+      "reason": "pullback long ema20_dist=-0.03% rsi=39",
       "hold_mode": "standard",
-      "ts": 1777117491
+      "ts": 1777118398
     }
   },
   "positions": {},
