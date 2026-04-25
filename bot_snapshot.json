@@ -1,13 +1,13 @@
 {
-  "ts": 1777128315,
-  "ts_iso": "2026-04-25T14:45:15.742883+00:00",
+  "ts": 1777129162,
+  "ts_iso": "2026-04-25T14:59:22.285113+00:00",
   "balance": 228.98,
   "autotrading": "on",
   "regime": "ranging",
   "trade_state": {
-    "setup": "LVL",
+    "setup": "PB",
     "direction": "long",
-    "score": 8.5,
+    "score": 7.0,
     "trend": "up",
     "vol_band": "low",
     "session": "newyork",
@@ -15,12 +15,12 @@
     "streak": 0,
     "hold_mode": "standard",
     "last_signal": {
-      "setup": "LVL",
+      "setup": "PB",
       "direction": "long",
-      "score": 8.5,
-      "reason": "level_bounce long @ $77,628 str=9",
+      "score": 7.0,
+      "reason": "pullback long ema20_dist=+0.02% rsi=51",
       "hold_mode": "standard",
-      "ts": 1777128314
+      "ts": 1777129161
     }
   },
   "positions": {},
