@@ -1,6 +1,6 @@
 {
-  "ts": 1777149898,
-  "ts_iso": "2026-04-25T20:44:58.674569+00:00",
+  "ts": 1777150805,
+  "ts_iso": "2026-04-25T21:00:05.510596+00:00",
   "balance": 228.98,
   "autotrading": "on",
   "regime": "ranging",
@@ -10,7 +10,7 @@
     "score": 0,
     "trend": "up",
     "vol_band": "low",
-    "session": "newyork",
+    "session": "late",
     "regime": "ranging",
     "streak": 0,
     "hold_mode": "standard",
