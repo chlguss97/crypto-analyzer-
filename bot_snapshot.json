@@ -1,27 +1,20 @@
 {
-  "ts": 1777240830,
-  "ts_iso": "2026-04-26T22:00:30.127188+00:00",
+  "ts": 1777241737,
+  "ts_iso": "2026-04-26T22:15:37.003766+00:00",
   "balance": 228.98,
   "autotrading": "on",
   "regime": "trending_up",
   "trade_state": {
-    "setup": "MOM",
-    "direction": "long",
-    "score": 7.5,
+    "setup": null,
+    "direction": "neutral",
+    "score": 0,
     "trend": "up",
     "vol_band": "low",
     "session": "late",
     "regime": "trending_up",
     "streak": 0,
-    "hold_mode": "quick",
-    "last_signal": {
-      "setup": "MOM",
-      "direction": "long",
-      "score": 7.5,
-      "reason": "momentum golden_cross 5m",
-      "hold_mode": "quick",
-      "ts": 1777240829
-    }
+    "hold_mode": "standard",
+    "last_signal": null
   },
   "positions": {},
   "streak": 0,
