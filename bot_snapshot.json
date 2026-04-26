@@ -1,6 +1,6 @@
 {
-  "ts": 1777230009,
-  "ts_iso": "2026-04-26T19:00:09.645171+00:00",
+  "ts": 1777230916,
+  "ts_iso": "2026-04-26T19:15:16.543129+00:00",
   "balance": 228.98,
   "autotrading": "on",
   "regime": "ranging",
@@ -18,9 +18,9 @@
       "setup": "DIV",
       "direction": "short",
       "score": 6.5,
-      "reason": "bearish_divergence rsi=69",
+      "reason": "bearish_divergence rsi=68",
       "hold_mode": "standard",
-      "ts": 1777230008
+      "ts": 1777230916
     }
   },
   "positions": {},
