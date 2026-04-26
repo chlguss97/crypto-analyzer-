@@ -1,13 +1,13 @@
 {
-  "ts": 1777190410,
-  "ts_iso": "2026-04-26T08:00:10.948279+00:00",
+  "ts": 1777191317,
+  "ts_iso": "2026-04-26T08:15:17.812024+00:00",
   "balance": 228.98,
   "autotrading": "on",
   "regime": "trending_up",
   "trade_state": {
     "setup": "SES",
-    "direction": "long",
-    "score": 8.5,
+    "direction": "short",
+    "score": 7.5,
     "trend": "up",
     "vol_band": "low",
     "session": "london",
@@ -16,11 +16,11 @@
     "hold_mode": "quick",
     "last_signal": {
       "setup": "SES",
-      "direction": "long",
-      "score": 8.5,
-      "reason": "session_london_open long move=+0.13%",
+      "direction": "short",
+      "score": 7.5,
+      "reason": "session_london_open short move=-0.06%",
       "hold_mode": "quick",
-      "ts": 1777190409
+      "ts": 1777191315
     }
   },
   "positions": {},
