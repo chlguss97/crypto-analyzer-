@@ -184,18 +184,20 @@ class WebSocketStream:
         await self.redis.set("cvd:15m:current:BTC-USDT-SWAP", str(self._cvd_15m), ttl=1000)
         await self.redis.set("cvd:1h:current:BTC-USDT-SWAP", str(self._cvd_1h), ttl=4000)
 
-        # 15m 리셋 체크 (900초)
+        # 15m 리셋 체크 (900초) — 누적 먼저 저장, delta 빼고 리셋, 새 윈도우에 delta 반영
         now = int(time.time())
         if now // 900 != self._cvd_reset_15m:
+            saved_cvd = self._cvd_15m - delta  # 이번 거래 제외한 이전 윈도우 합계
             self._cvd_reset_15m = now // 900
-            await self.redis.set("cvd:15m:BTC-USDT-SWAP", str(self._cvd_15m), ttl=1800)
-            self._cvd_15m = 0.0
+            await self.redis.set("cvd:15m:BTC-USDT-SWAP", str(saved_cvd), ttl=1800)
+            self._cvd_15m = delta  # 새 윈도우는 이번 거래부터 시작
 
         # 1h 리셋 체크 (3600초)
         if now // 3600 != self._cvd_reset_1h:
+            saved_cvd = self._cvd_1h - delta
             self._cvd_reset_1h = now // 3600
-            await self.redis.set("cvd:1h:BTC-USDT-SWAP", str(self._cvd_1h), ttl=7200)
-            self._cvd_1h = 0.0
+            await self.redis.set("cvd:1h:BTC-USDT-SWAP", str(saved_cvd), ttl=7200)
+            self._cvd_1h = delta
 
     async def _handle_candle(self, candle: list):
         """15m 캔들 완성 알림"""

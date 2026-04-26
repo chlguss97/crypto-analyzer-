@@ -100,8 +100,8 @@ class FractalIndicator(BaseIndicator):
 
         if fh2:
             last_fh = fh2[-1][1]
-            # 최근 봉이 프랙탈 고점 돌파
-            for i in range(-1, max(-4, -len(closes)), -1):
+            # 최근 봉이 프랙탈 고점 돌파 (i-1 접근 위해 -len(closes)+1 까지)
+            for i in range(-1, max(-4, -len(closes) + 1), -1):
                 if closes[i] > last_fh and closes[i - 1] <= last_fh:
                     breakout = "bullish"
                     breakout_strength = 0.7
@@ -113,7 +113,7 @@ class FractalIndicator(BaseIndicator):
         if fh2 and breakout == "none":
             if fl2:
                 last_fl = fl2[-1][1]
-                for i in range(-1, max(-4, -len(closes)), -1):
+                for i in range(-1, max(-4, -len(closes) + 1), -1):
                     if closes[i] < last_fl and closes[i - 1] >= last_fl:
                         breakout = "bearish"
                         breakout_strength = 0.7

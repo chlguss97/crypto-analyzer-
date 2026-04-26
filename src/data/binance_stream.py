@@ -180,17 +180,17 @@ class BinanceStream:
                 "recent": list(self._whales)[-10:],  # 최근 10건
             }), ttl=600)
 
-        # CVD 윈도우 리셋
+        # CVD 윈도우 리셋 — 이전 윈도우 합계 저장 후 새 윈도우는 현재 delta부터 시작
         now_sec = int(time.time())
         if now_sec // 300 != self._cvd_reset_5m:
             self._cvd_reset_5m = now_sec // 300
-            self._cvd_5m = 0.0
+            self._cvd_5m = delta  # 이번 거래만 남기고 리셋
         if now_sec // 900 != self._cvd_reset_15m:
             self._cvd_reset_15m = now_sec // 900
-            self._cvd_15m = 0.0
+            self._cvd_15m = delta
         if now_sec // 3600 != self._cvd_reset_1h:
             self._cvd_reset_1h = now_sec // 3600
-            self._cvd_1h = 0.0
+            self._cvd_1h = delta
 
         # 5분마다 로그
         if now_sec - self._last_log >= 300:

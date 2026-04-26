@@ -1158,8 +1158,8 @@ async function openLong() {
     });
     const data = await r.json();
     if (r.ok && data.success) {
-      msgEl.textContent = `Filled @ $${fmt(data.fill_price,1)} | ${data.size_btc} BTC`; msgEl.className = 'trade-msg success';
-      updateLivePositions();
+      msgEl.textContent = data.msg || 'Order queued'; msgEl.className = 'trade-msg success';
+      setTimeout(updateLivePositions, 2000);
     } else {
       msgEl.textContent = data.detail || 'Order failed'; msgEl.className = 'trade-msg error';
     }
@@ -1189,8 +1189,8 @@ async function openShort() {
     });
     const data = await r.json();
     if (r.ok && data.success) {
-      msgEl.textContent = `Filled @ $${fmt(data.fill_price,1)} | ${data.size_btc} BTC`; msgEl.className = 'trade-msg success';
-      updateLivePositions();
+      msgEl.textContent = data.msg || 'Order queued'; msgEl.className = 'trade-msg success';
+      setTimeout(updateLivePositions, 2000);
     } else {
       msgEl.textContent = data.detail || 'Order failed'; msgEl.className = 'trade-msg error';
     }

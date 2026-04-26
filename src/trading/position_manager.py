@@ -65,6 +65,9 @@ class Position:
         # 청산 시도 횟수 (cap 으로 무한 보류 방지 — BUG #C2)
         self.close_attempts = 0
 
+        # TP1 부분청산 실현 손익 누적 (최종 PnL에 합산)
+        self.realized_pnl_usdt = 0.0
+
     @property
     def hold_minutes(self) -> int:
         return (int(time.time()) - self.entry_time) // 60
@@ -685,7 +688,7 @@ class PositionManager:
         # TP1 도달 처리
         if not pos.tp1_filled and self._tp_reached(pos, current_price, pos.tp1_price):
             # 사이즈가 최소단위 × 2 미만이면 분할 불가 → 직접 전량 청산
-            small_position = pos.size < self.MIN_ORDER_SIZE_BTC * 2
+            small_position = pos.remaining_size < self.MIN_ORDER_SIZE_BTC * 2
             if small_position:
                 pos.tp1_filled = True
                 logger.info(f"✅ TP1 도달 @ ${pos.tp1_price:.0f} → 100% 청산 (소형 포지션)")
@@ -1144,6 +1147,16 @@ class PositionManager:
             fee = (order.get("fee") or {}).get("cost", 0) or 0
             pos.total_fee += float(fee)
 
+            # 부분청산 실현 손익 누적 (TP1 이익이 최종 PnL에 반영되도록)
+            fill_price = float(order.get("average") or order.get("price") or 0)
+            if fill_price > 0 and pos.entry_price > 0 and pos.leverage > 0:
+                partial_margin = close_size * pos.entry_price / pos.leverage
+                if pos.direction == "long":
+                    partial_pnl_pct = (fill_price - pos.entry_price) / pos.entry_price * pos.leverage * 100
+                else:
+                    partial_pnl_pct = (pos.entry_price - fill_price) / pos.entry_price * pos.leverage * 100
+                pos.realized_pnl_usdt += partial_margin * partial_pnl_pct / 100
+
             logger.info(
                 f"부분 청산 ({reason}): {close_pct*100:.0f}% req → "
                 f"실제 {close_size:.4f} | 잔여: {pos.remaining_size:.4f}"
@@ -1342,12 +1355,17 @@ class PositionManager:
         except Exception as e:
             logger.debug(f"펀딩비 조회 실패: {e}")
 
-        # P&L 계산 (04-13: remaining_size 기준 — TP1 50% 익절 후 남은 사이즈만)
+        # P&L 계산: 잔여 포지션 PnL + TP1 등 부분청산 실현 PnL 합산
         pnl_pct = pos.pnl_pct(exit_price) if exit_price > 0 else 0
         pnl_usdt = 0.0
         if pos.entry_price > 0 and pos.leverage > 0:
-            margin = pos.remaining_size * pos.entry_price / pos.leverage
-            pnl_usdt = margin * pnl_pct / 100
+            remaining_margin = pos.remaining_size * pos.entry_price / pos.leverage
+            runner_pnl_usdt = remaining_margin * pnl_pct / 100
+            pnl_usdt = runner_pnl_usdt + pos.realized_pnl_usdt
+            # 전체 마진 기준 퍼센트로 재계산 (DB/ML 일관성)
+            total_margin = pos.size * pos.entry_price / pos.leverage
+            if total_margin > 0:
+                pnl_pct = pnl_usdt / total_margin * 100
 
         # DB 업데이트 (음수 trade_id = 임시 ID, DB 에 없으므로 스킵)
         if pos.trade_id and pos.trade_id > 0:
@@ -1411,8 +1429,8 @@ class PositionManager:
         # ML 학습 콜백 (실거래 시그널 데이터 포함 + 수수료율 + 방향/사유)
         if self.on_trade_closed:
             mode = "unified"  # TradeEngine 통합 모델
-            margin = pos.remaining_size * pos.entry_price / pos.leverage if pos.leverage > 0 else 0
-            fee_pct = (pos.total_fee + pos.funding_cost) / margin * 100 if margin > 0 else 0
+            total_margin = pos.size * pos.entry_price / pos.leverage if pos.leverage > 0 else 0
+            fee_pct = (pos.total_fee + pos.funding_cost) / total_margin * 100 if total_margin > 0 else 0
             hold_min = (time.time() - pos.entry_time) / 60 if pos.entry_time > 0 else 0
             try:
                 await self.on_trade_closed(mode, pos.signals_snapshot, pnl_pct,

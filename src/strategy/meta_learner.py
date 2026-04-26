@@ -2,16 +2,14 @@
 MetaLearner — ML 모델 자가 업그레이드 시스템
 1) 하이퍼파라미터 자동 튜닝 (Grid Search)
 2) 피처 중요도 기반 가지치기
-3) 모델 종류 자동 선택 (GBM vs RF vs LightGBM)
-4) 동적 학습률 + 재학습 주기 조정
-5) 자가 진단 + 자동 복구
+3) 동적 학습률 + 재학습 주기 조정
+4) 자가 진단 + 자동 복구
 """
 import logging
 import time
 from collections import deque
 import numpy as np
-from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
-from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.preprocessing import StandardScaler
 
 logger = logging.getLogger(__name__)
@@ -58,19 +56,15 @@ class MetaLearner:
             adjustments = self._prune_weak_signals(ml, feature_importance)
             mode_result["weight_adjustments"] = adjustments
 
-            # 4) 모델 종류 자동 선택
-            best_model = self._select_best_model(ml)
-            mode_result["best_model"] = best_model
-
-            # 5) 재학습 주기 조정
+            # 4) 재학습 주기 조정
             new_interval = self._adjust_retrain_interval(ml)
             mode_result["new_retrain_interval"] = new_interval
 
-            # 6) 자가 진단
+            # 5) 자가 진단
             health = self._diagnose(ml)
             mode_result["health"] = health
 
-            # 7) 자동 복구
+            # 6) 자동 복구
             if health["needs_recovery"]:
                 self._recover(ml, health)
                 mode_result["recovered"] = True
@@ -102,8 +96,8 @@ class MetaLearner:
         X_train, X_test = X[:split], X[split:]
         y_train, y_test = y[:split], y[split:]
 
-        if len(set(y_test)) < 1:
-            return {"skipped": True, "reason": "no test data"}
+        if len(set(y_test)) < 2:
+            return {"skipped": True, "reason": "single-class test data"}
 
         scaler = StandardScaler()
         scaler.fit(X_train)
@@ -140,6 +134,7 @@ class MetaLearner:
                 model.fit(X_train_s, y_train)
                 ml.global_model = model
                 ml.global_scaler = scaler
+                ml.is_trained = True
                 ml.train_accuracy = float(model.score(X_train_s, y_train))
                 ml.oos_accuracy = float(best_score)
                 logger.info(f"[META] {ml.mode} 최적 파라미터: {best_params} | OOS={best_score:.3f}")
@@ -208,47 +203,7 @@ class MetaLearner:
 
         return adjustments
 
-    # ── 4. 모델 종류 자동 선택 ──
-
-    def _select_best_model(self, ml) -> str:
-        """GBM vs RF vs LR 중 OOS 가장 높은 모델 선택"""
-        if len(ml.X_buffer) < 100:
-            return "skipped"
-
-        X = np.array(list(ml.X_buffer))
-        y = np.array(list(ml.y_buffer))
-
-        if len(set(y)) < 2:
-            return "skipped"
-
-        split = int(len(X) * 0.8)
-        X_train, X_test = X[:split], X[split:]
-        y_train, y_test = y[:split], y[split:]
-
-        scaler = StandardScaler()
-        scaler.fit(X_train)
-        X_train_s = scaler.transform(X_train)
-        X_test_s = scaler.transform(X_test)
-
-        models = {
-            "gbm": GradientBoostingClassifier(n_estimators=150, max_depth=4, random_state=42),
-            "rf": RandomForestClassifier(n_estimators=150, max_depth=6, random_state=42),
-            "lr": LogisticRegression(max_iter=500, random_state=42),
-        }
-
-        scores = {}
-        for name, model in models.items():
-            try:
-                model.fit(X_train_s, y_train)
-                scores[name] = float(model.score(X_test_s, y_test))
-            except Exception:
-                scores[name] = 0
-
-        best = max(scores, key=scores.get)
-        logger.info(f"[META] {ml.mode} 모델 비교: {scores} → {best}")
-        return best
-
-    # ── 5. 재학습 주기 동적 조정 ──
+    # ── 4. 재학습 주기 동적 조정 ──
 
     def _adjust_retrain_interval(self, ml) -> int:
         """변동성 기반 재학습 주기 조정"""
@@ -274,7 +229,7 @@ class MetaLearner:
 
         return new_interval
 
-    # ── 6. 자가 진단 ──
+    # ── 5. 자가 진단 ──
 
     def _diagnose(self, ml) -> dict:
         """모델 건강 상태 진단"""
@@ -320,7 +275,7 @@ class MetaLearner:
             "oos_acc": ml.oos_accuracy,
         }
 
-    # ── 7. 자동 복구 ──
+    # ── 6. 자동 복구 ──
 
     def _recover(self, ml, health: dict):
         """문제 발견 시 자동 복구"""

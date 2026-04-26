@@ -142,11 +142,11 @@ class HistoricalLearner:
                         continue
 
                     meta = {**base_meta, "sl_mult": sl_mult}
-                    # 시뮬 수수료: 0.05% × 2(왕복) × 25x(추정) = 2.5%
-                    sim_fee_pct = 0.0005 * 2 * 25 * 100
-                    self.ml_swing.record_trade(signals, meta, pnl_pct, fee_pct=sim_fee_pct)
+                    # _simulate_trade()가 이미 수수료를 차감한 pnl_pct를 반환
+                    # record_trade에는 fee_pct=0으로 전달 (이중 차감 방지)
+                    self.ml_swing.record_trade(signals, meta, pnl_pct, fee_pct=0)
                     if timeframe in ("5m", "1m"):
-                        self.ml_scalp.record_trade(signals, meta, pnl_pct, fee_pct=sim_fee_pct)
+                        self.ml_scalp.record_trade(signals, meta, pnl_pct, fee_pct=0)
                     trades_learned += 1
                     self._stats["total"] += 1
                     if pnl_pct > 0:
@@ -382,7 +382,8 @@ class HistoricalLearner:
                 meta = {"atr_pct": result.get("atr_pct", 0.2),
                         "hour": entry_hour,
                         "regime": regime_result["regime"]}
-                self.ml_scalp.record_trade(result.get("signals", {}), meta, net_pnl, fee_pct=fee_pct)
+                # net_pnl은 이미 수수료 차감됨 → fee_pct=0 (이중 차감 방지)
+                self.ml_scalp.record_trade(result.get("signals", {}), meta, net_pnl, fee_pct=0)
 
                 scalp_stats["total"] += 1
                 if net_pnl > 0:
@@ -503,12 +504,12 @@ class HistoricalLearner:
                     meta = {"atr_pct": signals.get("atr", {}).get("atr_pct", 0.3),
                             "hour": entry_hour, "regime": regime}
 
-                    sim_fee_pct = 0.0005 * 2 * 25 * 100
                     for sl_mult in self.SL_MULTIPLIERS:
                         pnl = self._simulate_trade(direction, entry_price, future,
                                                    aggregated["score"], sl_mult)
                         if pnl is not None:
-                            self.ml_swing.record_trade(signals, meta, pnl, fee_pct=sim_fee_pct)
+                            # _simulate_trade가 이미 수수료 차감 → fee_pct=0
+                            self.ml_swing.record_trade(signals, meta, pnl, fee_pct=0)
                             learned += 1
 
                 except Exception:
@@ -614,8 +615,8 @@ class HistoricalLearner:
                 regime = self.regime_detector.detect(df_5m_slice)
                 meta = {"atr_pct": result.get("atr_pct", 0.3), "hour": entry_hour,
                         "regime": regime["regime"]}
-                exp_fee = self.FEE_RATE * 2 * 25 * 100
-                self.ml_scalp.record_trade(result.get("signals", {}), meta, net_pnl, fee_pct=exp_fee)
+                # net_pnl은 이미 수수료 차감됨 → fee_pct=0 (이중 차감 방지)
+                self.ml_scalp.record_trade(result.get("signals", {}), meta, net_pnl, fee_pct=0)
                 learned += 1
 
             except Exception:

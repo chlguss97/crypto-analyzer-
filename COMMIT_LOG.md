@@ -1,12 +1,27 @@
 # Commit Log
 
 > 자동 생성 — `scripts/update_commit_log.sh` (매 커밋 후 실행)
-> Updated: 2026-04-24 08:47:56    
-> Total commits: 206 (2026-04-03 → 2026-04-24)
+> Updated: 2026-04-24 15:13:00    
+> Total commits: 221 (2026-04-03 → 2026-04-24)
 
 Claude 가 질문/변경 작업 시 이 파일을 참고해서 과거 변경 이력 컨텍스트를 확보합니다. 수동 편집 금지 — 다음 커밋 시 덮어써집니다.
 
 ## 2026-04-24
+- `e17736e` feat: Signal Score — 마지막 시그널 30초 유지 표시
+- `a5ae220` fix: 대시보드 전수검사 — structure→vol_band + API fallback + 중복호출 제거
+- `d0078b8` feat: 일일 리포트 통합 + ML 마일스톤 알림
+- `c5740e0` fix: 페이퍼 잔고 초기화 문제 — Redis TTL 제거 + heartbeat 갱신
+- `16dbbf4` feat: 동적 트레일 SL — 이익비례 + 시간축소 + 정체감지 + R-lock
+- `f66a6c6` fix: is_tp → is_limit_trigger 변수명 수정 (NameError)
+- `136232d` feat: 러너 SL을 limit-on-trigger로 변경 (maker 수수료 0.02%)
+- `76ceac4` fix: 지정가/시장가 로직 3건 수정
+- `fa553fa` fix: CRITICAL — position_manager filled_size 단위 오류 (contracts→BTC)
+- `65dcb41` fix: 텔레그램 셋업 감지 알림 제거 — 진입 시에만 알림
+- `af8b4b8` feat: 실거래 ON — 페이퍼 병행 모드
+- `c2d441f` fix: 전수검사 최종 — streak 쿨다운 KeyError 방지 + HTML 레거시 정리
+- `2b9acf8` fix: 전수 검사 WRONG_DATA 6건 수정 (call-chain 추적)
+- `86da013` fix: 뿌리 뽑기 — CRITICAL 4 + HIGH 7 + MEDIUM 4 수정
+- `469890b` fix: 전체 버그 수정 12건 (CRITICAL 2 + HIGH 10)
 - `df9e83c` fix: 대시보드 페이퍼 탭 데이터 매핑 수정
 - `9599bd0` fix: PaperTrader 잔고 DB 복원 — 재시작 시 리셋 방지
 - `232e295` feat: FlowEngine v2 — 6셋업 다중 진입 (15건/일 목표)

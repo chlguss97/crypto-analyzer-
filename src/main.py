@@ -60,10 +60,7 @@ class CryptoAnalyzer:
         self.flow_ml = FlowML()
         self.trade_engine = FlowEngine(redis=self.redis, flow_ml=self.flow_ml)
 
-        # 통합 모델 상태
-        self._unified_streak = 0
-        self._unified_daily_pnl = 0.0
-        self._unified_cooldown_until = 0
+        # 통합 모델 상태 (streak/daily_pnl/cooldown → RiskManager가 단일 소스)
         self._unified_last_dir = None
         self._unified_last_trade_time = 0
         self._unified_last_exit_reason = None
@@ -208,15 +205,16 @@ class CryptoAnalyzer:
         now = _t.time()
         _gate_log_interval = 60
 
-        # 일일 손실 한도
-        if self._unified_daily_pnl <= -10.0:
+        # 일일 손실 한도 (RiskManager 단일 소스)
+        daily_pnl = self.risk_manager.get_daily_pnl()
+        if daily_pnl <= -10.0:
             if now - getattr(self, "_last_gate_log", 0) >= _gate_log_interval:
                 self._last_gate_log = now
-                logger.info(f"[TRADE] 게이트: 일일 손실 한도 ({self._unified_daily_pnl:.1f}%) → 스킵")
+                logger.info(f"[TRADE] 게이트: 일일 손실 한도 ({daily_pnl:.1f}%) → 스킵")
             return
 
-        # 쿨다운
-        if now < self._unified_cooldown_until:
+        # 쿨다운 (RiskManager 단일 소스)
+        if now < self.risk_manager.get_cooldown_until():
             return
 
         # 학습 중 진입 차단
@@ -282,12 +280,12 @@ class CryptoAnalyzer:
                 f"trend_1d={sigs.get('trend_1d', '?')} "
                 f"trend_4h={sigs.get('trend_4h', '?')} "
                 f"big={big_trend} "
-                f"streak={self._unified_streak} "
+                f"streak={self.risk_manager.get_streak()} "
                 f"reason={reason}"
             )
 
         # 레짐 감지 + 저장
-        if df_15m is not None and len(df_15m) >= 20:
+        if df_15m is not None and len(df_15m) >= 50:
             regime_result = self.regime_detector.detect(df_15m)
             self._current_regime = regime_result
             await self.redis.set("sys:regime", regime_result.get("regime", "ranging"), ttl=300)
@@ -322,7 +320,7 @@ class CryptoAnalyzer:
             "vol_band": ctx.get("vol_band", "mid"),
             "session": ctx.get("session", "unknown"),
             "regime": regime_now,
-            "streak": self._unified_streak,
+            "streak": self.risk_manager.get_streak(),
             "hold_mode": result.get("hold_mode", "standard"),
             "last_signal": last_sig,
         }, ttl=30)
@@ -364,13 +362,6 @@ class CryptoAnalyzer:
         if now - self._unified_last_trade_time < min_interval:
             return
 
-        # 같은 가격대 재진입 방지
-        if self._unified_last_exit_reason and "sl" in self._unified_last_exit_reason:
-            last_trade_price = self._unified_last_entry_price
-            if last_trade_price > 0 and abs(price_now - last_trade_price) / price_now < 0.003:
-                logger.info(f"[TRADE] 같은 가격대 재진입 차단")
-                return
-
         # 방향 전환 쿨다운
         if self._unified_last_dir and self._unified_last_dir != direction:
             flip_cd = cooldown_cfg.get("direction_flip_sec", 300)
@@ -393,6 +384,13 @@ class CryptoAnalyzer:
         price = float(price_str) if price_str else 0
         if price <= 0:
             return
+
+        # 같은 가격대 재진입 방지 (SL 청산 후 동일 가격대 재진입 차단)
+        if self._unified_last_exit_reason and "sl" in self._unified_last_exit_reason:
+            last_trade_price = self._unified_last_entry_price
+            if last_trade_price > 0 and abs(price - last_trade_price) / price < 0.003:
+                logger.info(f"[TRADE] 같은 가격대 재진입 차단 (${price:.0f} ≈ ${last_trade_price:.0f})")
+                return
 
         # 페이퍼 트레이딩: 독립 가상 계좌
         if self.paper_trader:
@@ -430,7 +428,7 @@ class CryptoAnalyzer:
             grade = "B"
 
         atr_pct = result.get("atr_pct", 0.3)
-        lev_result = self.leverage_calc.calculate(grade, atr_pct, self._unified_streak)
+        lev_result = self.leverage_calc.calculate(grade, atr_pct, self.risk_manager.get_streak())
         leverage = lev_result["leverage"]
 
         # SL/TP 거리
@@ -475,7 +473,7 @@ class CryptoAnalyzer:
         streak_sizing = risk_cfg.get("streak_sizing", {})
         size_mult = 1.0
         for threshold, mult in sorted(streak_sizing.items(), key=lambda x: int(x[0]), reverse=True):
-            if self._unified_streak >= int(threshold):
+            if self.risk_manager.get_streak() >= int(threshold):
                 size_mult = mult
                 break
 
@@ -487,7 +485,7 @@ class CryptoAnalyzer:
             f"[TRADE] SETUP {setup} | {direction.upper()} @ ${price:.0f} | "
             f"SL ${sl:.0f} TP1 ${tp1:.0f} TP2 ${tp2:.0f} TP3 ${tp3:.0f} | "
             f"lev {leverage}x | margin ${margin:.1f} | mode={hold_mode} | "
-            f"score={score:.1f} | streak={self._unified_streak}"
+            f"score={score:.1f} | streak={self.risk_manager.get_streak()}"
         )
 
         # OKX 사이즈 스냅
@@ -540,29 +538,32 @@ class CryptoAnalyzer:
                 leverage, margin, tp3_price=pos.tp3_price
             )
 
-    def _unified_record_result(self, pnl_pct: float, exit_reason: str = ""):
-        """통합 엔진 매매 결과 기록"""
+    async def _unified_record_result(self, pnl_pct: float, pnl_usdt: float = 0.0, exit_reason: str = ""):
+        """통합 엔진 매매 결과 기록 — RiskManager가 단일 소스"""
         import time as _t
 
-        self._unified_daily_pnl += pnl_pct
-
-        if pnl_pct < 0:
-            self._unified_streak += 1
-        else:
-            self._unified_streak = 0
+        # RiskManager에 결과 기록 (streak/daily_pnl/cooldown 모두 여기서 관리)
+        await self.risk_manager.record_trade_result(pnl_pct, pnl_usdt)
 
         self._unified_last_exit_reason = exit_reason
 
+        # 매매 후 추가 쿨다운 (RiskManager의 연패 쿨다운과 별도)
         cooldown_cfg = self.config.get("cooldown", {})
         if pnl_pct < 0:
             cd = cooldown_cfg.get("after_loss_sec", 180)
         else:
             cd = cooldown_cfg.get("after_win_sec", 60)
 
-        self._unified_cooldown_until = _t.time() + cd
+        # RiskManager 쿨다운과 비교하여 더 긴 쪽 적용
+        new_cooldown = _t.time() + cd
+        current_rm_cooldown = self.risk_manager.get_cooldown_until()
+        if new_cooldown > current_rm_cooldown:
+            self.risk_manager._state["cooldown_until"] = int(new_cooldown)
+            await self.redis.set("risk:cooldown_until", str(int(new_cooldown)))
+
         logger.info(
-            f"[TRADE] 결과: PnL {pnl_pct:+.2f}% | 연패:{self._unified_streak} | "
-            f"쿨다운:{cd}s | 일일:{self._unified_daily_pnl:+.1f}%"
+            f"[TRADE] 결과: PnL {pnl_pct:+.2f}% | 연패:{self.risk_manager.get_streak()} | "
+            f"쿨다운:{cd}s | 일일:{self.risk_manager.get_daily_pnl():+.1f}%"
         )
 
     # ── ML 학습 기록 ──
@@ -578,7 +579,7 @@ class CryptoAnalyzer:
             except Exception as e:
                 logger.debug(f"FlowML record error: {e}")
 
-        self._unified_record_result(pnl_pct, exit_reason)
+        await self._unified_record_result(pnl_pct, pnl_usdt=pnl_usdt, exit_reason=exit_reason)
 
         regime = self._current_regime["regime"] if self._current_regime else "ranging"
         if self.signal_tracker:
@@ -593,7 +594,7 @@ class CryptoAnalyzer:
             exit_reason=exit_reason, trend=trend, regime=regime,
         )
 
-        logger.info(f"[실거래] PnL {pnl_pct:+.2f}% 연패:{self._unified_streak} 레짐:{regime}")
+        logger.info(f"[실거래] PnL {pnl_pct:+.2f}% 연패:{self.risk_manager.get_streak()} 레짐:{regime}")
 
     # ── 주기적 루프들 ──
 
@@ -662,10 +663,8 @@ class CryptoAnalyzer:
                 self._current_day = today.day
                 await self.risk_manager.reset_daily()
 
-                logger.info(f"[TRADE] 일일 리셋 | 어제 P&L: {self._unified_daily_pnl:+.1f}%")
-                self._unified_daily_pnl = 0.0
-                self._unified_streak = 0
-                self._unified_cooldown_until = 0
+                logger.info(f"[TRADE] 일일 리셋 | 어제 P&L: {self.risk_manager.get_daily_pnl():+.1f}%")
+                # streak/daily_pnl/cooldown은 risk_manager.reset_daily()에서 리셋
                 self._unified_last_dir = None
                 self._unified_same_dir_count = 0
 
@@ -799,9 +798,7 @@ class CryptoAnalyzer:
         """헬스체크 (60초마다)"""
         while self._running:
             await self.redis.set("sys:last_heartbeat", str(int(_time.time())))
-            # 통합 엔진 streak/pnl → Redis (대시보드용)
-            await self.redis.set("risk:streak", str(self._unified_streak))
-            await self.redis.set("risk:daily_pnl", f"{self._unified_daily_pnl:.2f}")
+            # streak/daily_pnl은 RiskManager가 단일 소스 (중복 Redis 쓰기 제거)
             bal = 0
             try:
                 bal = await asyncio.wait_for(self.executor.get_balance(), timeout=5.0)
@@ -835,8 +832,8 @@ class CryptoAnalyzer:
                     "regime": regime,
                     "trade_state": trade_state,
                     "positions": positions_snap,
-                    "streak": self._unified_streak,
-                    "daily_pnl": round(self._unified_daily_pnl, 2),
+                    "streak": self.risk_manager.get_streak(),
+                    "daily_pnl": round(self.risk_manager.get_daily_pnl(), 2),
                     "paper": paper_stats,
                 }
 

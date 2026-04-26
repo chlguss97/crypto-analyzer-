@@ -15,6 +15,11 @@ class VolumePatternIndicator(BaseIndicator):
         return 1.5
 
     async def calculate(self, candles: pd.DataFrame, context: dict = None) -> dict:
+        if len(candles) < 4:
+            return {"type": "volume", "spike_ratio": 1.0, "pattern": "normal",
+                    "taker_buy_ratio": 0.5, "trend_confirm": False,
+                    "direction": "neutral", "strength": 0.0}
+
         vol = candles["volume"]
         close = candles["close"]
         high = candles["high"]

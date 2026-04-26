@@ -24,7 +24,7 @@ class FVGIndicator(BaseIndicator):
         ts = candles["timestamp"].values
         now_ts = ts[-1] if len(ts) > 0 else int(time.time() * 1000)
 
-        for i in range(2, len(candles) - 1):
+        for i in range(2, len(candles)):
             mid_price = (high[i - 1] + low[i - 1]) / 2
             if mid_price == 0:
                 continue

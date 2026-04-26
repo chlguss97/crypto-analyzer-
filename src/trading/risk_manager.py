@@ -171,9 +171,29 @@ class RiskManager:
         """일일 카운터 리셋 (매일 00:00 UTC)"""
         self._state["daily_pnl_pct"] = 0.0
         self._state["trade_count_today"] = 0
+        self._state["streak"] = 0
+        self._state["cooldown_until"] = 0
         await self.redis.set("risk:daily_pnl", "0")
         await self.redis.set("risk:trade_count_today", "0")
-        logger.info("일일 리스크 카운터 리셋")
+        await self.redis.set("risk:streak", "0")
+        await self.redis.set("risk:cooldown_until", "0")
+        logger.info("일일 리스크 카운터 리셋 (streak/cooldown 포함)")
+
+    def get_streak(self) -> int:
+        """현재 연패 수 반환"""
+        return self._state["streak"]
+
+    def get_daily_pnl(self) -> float:
+        """일일 P&L % 반환"""
+        return self._state["daily_pnl_pct"]
+
+    def get_cooldown_until(self) -> float:
+        """쿨다운 종료 시각(epoch) 반환"""
+        return self._state["cooldown_until"]
+
+    def get_trade_count_today(self) -> int:
+        """오늘 매매 횟수 반환"""
+        return self._state["trade_count_today"]
 
     def is_trading_allowed(self) -> tuple[bool, str]:
         """매매 가능 여부 판단"""

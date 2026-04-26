@@ -5,6 +5,40 @@
 
 ---
 
+## 2026-04-27
+
+### 전수검사 — CRITICAL 3 + HIGH 9 + MEDIUM 5건 수정
+
+42개 파일 전체 함수 호출 체인 감사 후 발견된 버그 일괄 수정.
+
+**CRITICAL (3건)**
+- `main.py:370` — `price_now` 미정의 NameError → 가격 fetch 후 올바른 `price` 변수 사용으로 이동 **(봇 정지 근본 원인)**
+- `position_manager.py:1349` — TP1 부분청산 이익이 최종 PnL에 누락 → `realized_pnl_usdt` 필드 추가, 합산 반영
+- `historical_learner.py` 4곳 — `_simulate_trade()`와 `record_trade()` 양쪽에서 수수료 이중 차감 → fee_pct=0 전달
+
+**HIGH (9건)**
+- `main.py:290` — 레짐 감지 최소 캔들 20→50 (detect() 요구사항 일치)
+- `position_manager.py:1414` — ML callback fee_pct가 remaining_margin 기준 → total_margin 기준으로
+- `position_manager.py:688` — TP1 소형 판정 pos.size → pos.remaining_size
+- `meta_learner.py:141` — 하이퍼파라미터 튜닝 후 `is_trained=True` 누락 추가
+- `meta_learner.py:105` — `len(set(y_test)) < 1` → `< 2` (단일 클래스 가드)
+- `binance_stream.py:183` — CVD 윈도우 리셋 시 첫 거래 유실 → 리셋 전 delta 분리
+- `ws_stream.py:187` — 동일 CVD 리셋 버그 수정
+- `candle_collector.py` — TF_MS에 "1w" 604,800,000 추가
+- `fractal.py:104,116` — closes[i-1] IndexError → 범위 제한 `-len(closes)+1`
+
+**나머지 HIGH 3건 추가 수정**
+- `main.py` + `risk_manager.py` — streak/daily_pnl 이중 추적 제거 → RiskManager 단일 소스 (getter 4개 추가, main.py 로컬 변수 삭제)
+- `flow_engine.py` — SignalTracker 호환: signals_snapshot에 `sig_*` 정규화 키 5개 추가 (기존 키 보존)
+- `meta_learner.py` — _select_best_model dead code 삭제 (~37줄), 미사용 import 정리
+
+**MEDIUM (5건)**
+- `fvg.py:27` — 마지막 캔들 FVG off-by-one → `len(candles)` 포함
+- `volume_pattern.py` — 캔들 4개 미만 가드 추가
+- `index.html` — 수동매매 응답 fill_price/size_btc 미존재 → data.msg 사용
+
+---
+
 ## 2026-04-17 (후반)
 
 ### FlowEngine v1 — 오더플로우 기반 매매 엔진 전환

@@ -115,11 +115,36 @@ class FlowEngine:
         near_support = any(abs(price - lv["price"]) <= atr_5m * 3.0 for lv in levels.get("supports", []))
         near_resistance = any(abs(price - lv["price"]) <= atr_5m * 3.0 for lv in levels.get("resistances", []))
 
+        # ── SignalTracker 호환 normalized 시그널 추가 ──
+        # 기존 키(trend_1d 등)는 문자열/bool 그대로 유지 (FlowML, main.py, dashboard 하위호환)
+        # SignalTracker용 {"direction":..,"strength":..} 포맷은 별도 키로 추가
+        def _trend_to_signal(trend_str, strength=0.5):
+            if trend_str == "up":
+                return {"direction": "long", "strength": strength}
+            elif trend_str == "down":
+                return {"direction": "short", "strength": strength}
+            return {"direction": "neutral", "strength": 0.0}
+
+        def _level_signal(near_sup, near_res):
+            if near_sup and not near_res:
+                return {"direction": "long", "strength": 0.5}
+            elif near_res and not near_sup:
+                return {"direction": "short", "strength": 0.5}
+            return {"direction": "neutral", "strength": 0.0}
+
         result["signals"] = {
+            # 원본 값 유지 (FlowML, main.py, dashboard 등 하위호환)
             "trend_1d": trend_1d, "trend_4h": trend_4h, "trend_1h": trend_1h,
             "big_trend": big_trend, "levels": levels, "flow": flow,
             "near_support": near_support, "near_resistance": near_resistance,
             "context": ctx,
+            # SignalTracker 호환 normalized 시그널 ({"direction":..,"strength":..} 포맷)
+            "sig_trend_1d": _trend_to_signal(trend_1d, 0.6),
+            "sig_trend_4h": _trend_to_signal(trend_4h, 0.5),
+            "sig_trend_1h": _trend_to_signal(trend_1h, 0.4),
+            "sig_big_trend": _trend_to_signal(big_trend, 0.5),
+            "sig_level": _level_signal(near_support, near_resistance),
+            # flow는 이미 {"direction":..,"strength":..} 포맷 → SignalTracker가 직접 사용
         }
 
         # ── 6종 셋업 독립 평가 ──
