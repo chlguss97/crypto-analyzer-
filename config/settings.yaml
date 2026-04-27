@@ -49,13 +49,13 @@ risk:
 # ── 셋업별 SL/TP/보유 설정 ──
 hold_modes:
   quick:       # MOM, SES (빠른 진입/청산)
-    max_hold_min: 15
+    max_hold_min: 30            # 15→30: MOM/SES 모멘텀 유지 시간 확보
     sl_margin_pct: 5.0          # 마진 -5%
     tp1_margin_pct: 7.5         # 마진 +7.5% (RR 1.5)
     tp2_mult: 2.0
     tp3_mult: 3.0
-  standard:    # LVL, PB, DIV (중간 보유)
-    max_hold_min: 45
+  standard:    # LVL, PB, DIV, LIQ (중간 보유)
+    max_hold_min: 60            # 45→60: TP1 도달 시간 확보
     sl_margin_pct: 8.0          # 마진 -8%
     tp1_margin_pct: 12.0        # 마진 +12% (RR 1.5)
     tp2_mult: 2.5

@@ -174,6 +174,11 @@ class FlowEngine:
         if s6:
             candidates.append(s6)
 
+        # 7. 청산 캐스케이드 — big_trend 무시, 급락/급등 감지
+        s7 = await self._check_liquidation_cascade(price, atr_5m, flow)
+        if s7:
+            candidates.append(s7)
+
         # 셋업별 결과를 signals에 기록 (ML 학습용)
         result["signals"]["setups_evaluated"] = [
             {"setup": c["setup"], "direction": c["direction"], "score": c["score"]}
@@ -547,6 +552,61 @@ class FlowEngine:
             "tp_distance": round(tp_dist, 1),
             "reason": f"session_{session_name}_open {direction} move={move_pct:+.2f}%",
         }
+
+    # ══════════════════════════════════════
+    # 셋업 7: Liquidation Cascade — big_trend 무시, 급락/급등 즉시 대응
+    # ══════════════════════════════════════
+
+    async def _check_liquidation_cascade(self, price, atr, flow) -> dict | None:
+        """$50만+ 청산 캐스케이드 감지 → 청산 방향 반대로 진입 (모멘텀 추종)"""
+        if not self.redis:
+            return None
+
+        try:
+            liq_str = await self.redis.get("flow:liq:surge")
+            if not liq_str:
+                return None
+
+            liq = json.loads(liq_str)
+            total = liq.get("total", 0)
+            bias = liq.get("bias", "")  # "short" = 롱 청산 많음 = 하락 강세
+            long_liq = liq.get("long_liq", 0)
+            short_liq = liq.get("short_liq", 0)
+
+            if total < 500_000 or not bias:
+                return None
+
+            # bias="short" → 롱이 대량 청산 → SHORT 진입
+            # bias="long" → 숏이 대량 청산 → LONG 진입
+            direction = bias
+
+            score = 7.0
+            # $100만+ 초대형
+            if total >= 1_000_000:
+                score += 1.5
+            # CVD 일치
+            if flow.get("direction") == direction:
+                score += 1.0
+            # 한쪽 청산이 90%+ 편중
+            if total > 0:
+                dominant_pct = max(long_liq, short_liq) / total
+                if dominant_pct > 0.9:
+                    score += 0.5
+
+            sl_dist = atr * 2.5  # 급변동 중이므로 넉넉하게
+            tp_dist = atr * 4.0
+
+            return {
+                "setup": "LIQ", "direction": direction,
+                "score": round(min(10, score), 1),
+                "hold_mode": "standard",
+                "sl_distance": round(sl_dist, 1),
+                "tp_distance": round(tp_dist, 1),
+                "reason": f"liq_cascade ${total:,.0f} (long=${long_liq:,.0f} short=${short_liq:,.0f}) → {direction.upper()}",
+            }
+        except Exception as e:
+            logger.debug(f"liquidation cascade check error: {e}")
+            return None
 
     # ══════════════════════════════════════
     # 헬퍼

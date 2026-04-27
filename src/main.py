@@ -399,8 +399,14 @@ class CryptoAnalyzer:
         # 같은 가격대 재진입 방지 (SL 청산 후 동일 가격대 재진입 차단)
         if self._unified_last_exit_reason and "sl" in self._unified_last_exit_reason:
             last_trade_price = self._unified_last_entry_price
-            if last_trade_price > 0 and abs(price - last_trade_price) / price < 0.003:
-                logger.info(f"[TRADE] 같은 가격대 재진입 차단 (${price:.0f} ≈ ${last_trade_price:.0f})")
+            # 연패 중이면 범위 확대: 1연패=0.5%, 2연패+=1%, 3연패+=1.5%
+            streak = self.risk_manager.get_streak()
+            block_pct = 0.003 + streak * 0.005  # 기본 0.3% + 연패×0.5%
+            if last_trade_price > 0 and abs(price - last_trade_price) / price < block_pct:
+                logger.info(
+                    f"[TRADE] 같은 가격대 재진입 차단 (${price:.0f} ≈ ${last_trade_price:.0f}, "
+                    f"범위 {block_pct*100:.1f}%, streak={streak})"
+                )
                 return
 
         # 페이퍼 트레이딩: 독립 가상 계좌
@@ -557,6 +563,7 @@ class CryptoAnalyzer:
         await self.risk_manager.record_trade_result(pnl_pct, pnl_usdt)
 
         self._unified_last_exit_reason = exit_reason
+        self._unified_last_trade_time = _t.time()  # 청산 시에도 갱신 (방향전환 쿨다운 적용)
 
         # 매매 후 추가 쿨다운 (RiskManager의 연패 쿨다운과 별도)
         cooldown_cfg = self.config.get("cooldown", {})
