@@ -572,6 +572,20 @@ class PositionManager:
                 f"size={pos.remaining_size:.4f}/{pos.size:.4f} | "
                 f"algo_debug={algo_debug}"
             )
+            # JSONL에도 디버그 기록 (Docker 로그 유실 대비)
+            from src.monitoring.trade_logger import _append_jsonl
+            _append_jsonl({
+                "type": "sl_failsafe_debug",
+                "direction": pos.direction,
+                "current_price": round(current_price, 1),
+                "sl_price": round(pos.current_sl, 1),
+                "entry_price": round(pos.entry_price, 1),
+                "hold_min": pos.hold_minutes,
+                "runner_mode": pos.runner_mode,
+                "remaining_size": round(pos.remaining_size, 6),
+                "original_size": round(pos.size, 6),
+                "algo_debug": algo_debug,
+            })
             await self._cancel_all_algos(pos)
             await self._full_close(pos, "sl_failsafe")
             return
