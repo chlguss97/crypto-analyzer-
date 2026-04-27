@@ -378,9 +378,9 @@ class PositionManager:
 
         # 🔒 SL 등록 검증 — OKX에 실제 등록됐는지 확인 (04-17: 0분 즉사 근본 수정)
         # set_protection 이 ID를 반환해도 OKX가 실제로 갖고 있는지 확신 못함
-        # → 0.5초 대기 후 pending algos 조회로 검증, 미발견 시 재등록 2회
+        # → 2초 대기 후 pending algos 조회로 검증, 미발견 시 재등록 (최대 3회)
         if algo_ids.get("sl"):
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(2.0)  # OKX 알고 처리 시간 확보 (0.5→2초)
             for verify_attempt in range(3):
                 try:
                     inst_id = self.executor.exchange.market(symbol)["id"]
@@ -396,19 +396,25 @@ class PositionManager:
                         logger.info(f"✅ SL 등록 검증 OK: id={algo_ids['sl']} (시도 {verify_attempt+1})")
                         break
                     else:
+                        # 디버깅: OKX pending 목록 전체 로깅
+                        pending_ids = [(p.get("algoClOrdId"), p.get("algoId"), p.get("state")) for p in pending[:5]]
                         logger.warning(
-                            f"⚠️  SL 등록 검증 실패 ({verify_attempt+1}/3) — OKX pending에 미발견. 재등록 시도"
+                            f"⚠️  SL 등록 검증 실패 ({verify_attempt+1}/3) — "
+                            f"찾는 ID={algo_ids['sl']} | OKX pending={pending_ids}"
                         )
                         new_sl = await self.executor.set_stop_loss(direction, filled_size, sl_price)
                         if new_sl:
                             algo_ids["sl"] = new_sl
-                            await asyncio.sleep(0.3)
+                            await asyncio.sleep(1.5)  # 재등록 후 충분히 대기 (0.3→1.5초)
                         else:
                             algo_ids["sl"] = None
                             break
                 except Exception as e:
-                    logger.debug(f"SL 검증 조회 예외 ({verify_attempt+1}): {e}")
-                    break
+                    logger.warning(f"SL 검증 조회 예외 ({verify_attempt+1}): {e}")
+                    if verify_attempt < 2:
+                        await asyncio.sleep(1.0)  # 예외 시에도 재시도
+                    else:
+                        break
 
         # 🚨 SL 등록 실패 시 진입을 즉시 되돌림 (보호장치 없는 포지션 금지)
         if not algo_ids.get("sl"):
@@ -541,9 +547,30 @@ class PositionManager:
             (pos.direction == "short" and current_price >= pos.current_sl)
         )
         if sl_breached:
-            logger.warning(
+            # 디버깅: OKX 알고 주문 상태 조회 (왜 서버사이드 SL이 미발동?)
+            algo_debug = {}
+            try:
+                inst_id = self.executor.exchange.market(symbol)["id"]
+                resp = await self.executor.exchange.private_get_trade_orders_algo_pending(
+                    {"instType": "SWAP", "instId": inst_id, "ordType": "trigger"}
+                )
+                pending = resp.get("data", []) if isinstance(resp, dict) else []
+                algo_debug["pending_count"] = len(pending)
+                algo_debug["pending_ids"] = [
+                    {"clOrdId": p.get("algoClOrdId"), "id": p.get("algoId"),
+                     "triggerPx": p.get("triggerPx"), "sz": p.get("sz"), "state": p.get("state")}
+                    for p in pending[:5]
+                ]
+                algo_debug["pos_sl_algo_id"] = pos.algo_ids.get("sl")
+            except Exception as e:
+                algo_debug["error"] = str(e)
+
+            logger.error(
                 f"🛑 SL failsafe 발동: {pos.direction.upper()} "
-                f"가격 ${current_price:.0f} vs SL ${pos.current_sl:.0f}"
+                f"가격 ${current_price:.0f} vs SL ${pos.current_sl:.0f} | "
+                f"보유 {pos.hold_minutes}분 | runner={pos.runner_mode} | "
+                f"size={pos.remaining_size:.4f}/{pos.size:.4f} | "
+                f"algo_debug={algo_debug}"
             )
             await self._cancel_all_algos(pos)
             await self._full_close(pos, "sl_failsafe")
@@ -821,6 +848,14 @@ class PositionManager:
         if algo_id:
             await self.executor.cancel_algo_order(algo_id)
             pos.algo_ids[tp_key] = None
+
+        # 🔒 기존 SL도 먼저 취소 — 부분청산 후 사이즈 불일치로 OKX가 SL 무효화/부분실행 방지
+        # 부분청산 → 새 사이즈로 SL 재등록은 호출자(_handle_tp_progression)에서 _move_sl로 처리
+        old_sl_id = pos.algo_ids.get("sl")
+        if old_sl_id:
+            await self.executor.cancel_algo_order(old_sl_id)
+            pos.algo_ids["sl"] = None
+            logger.info(f"🔒 TP{level} 부분청산 전 기존 SL 취소 (사이즈 불일치 방지)")
 
         # 부분 청산 (시장가 reduceOnly)
         size_before = pos.remaining_size
