@@ -65,3 +65,5 @@
 2026-04-27 04:10:38 | ENTRY | SETUP-MOM SHORT | $79,030.0 | SL $79,429.3 | 15x | margin $114 | score 6.0
 2026-04-27 04:53:11 | EXIT  | SHORT sl_failsafe | $79,030.0 -> $78,930.7 | +0.01% ($+0.99) | 9min | fee $0.79
 2026-04-27 04:53:14 | ENTRY | SETUP-PB LONG | $78,946.4 | SL $78,551.7 | 20x | margin $115 | score 7.5
+2026-04-27 05:11:54 | EXIT  | LONG sl_or_forced | $78,946.4 -> $78,550.7 | -0.10% ($-7.91) | 10min | fee $0.79
+2026-04-27 05:11:57 | ENTRY | SETUP-PB LONG | $78,553.1 | SL $78,162.2 | 15x | margin $110 | score 6.5

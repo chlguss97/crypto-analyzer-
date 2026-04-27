@@ -3,3 +3,8 @@
 2026-04-27 04:43:56 [WARNING] src.trading.position_manager: 거래소 포지션 발견 (봇 미추적): BTC/USDT:USDT short 2.000000 @ $79030.0
 2026-04-27 04:53:09 [ERROR] src.trading.position_manager: 🛑 SL failsafe 발동: SHORT 가격 $78957 vs SL $78951 | 보유 9분 | runner=True | size=0.0100/2.0000 | algo_debug={'pending_count': 0, 'pending_ids': [], 'pos_sl_algo_id': 'sl17772654756709188'}
 2026-04-27 04:53:09 [ERROR] src.trading.executor: 시장가 주문 실패 (1/3): okx {"code":"1","data":[{"clOrdId":"6b9ad766b55dBCDEcd317c1fc0404520","ordId":"","sCode":"51169","sMsg":"Order failed because you don't have any positions in this direction for this contract to reduce or close. ","subCode":"","tag":"6b9ad766b55dBCDE","ts":"1777265589798"}],"inTime":"1777265589798203","msg":"All operations failed","outTime":"1777265589799295"}
+2026-04-27 05:01:22 [WARNING] CryptoAnalyzer: 종료 시 미청산 포지션: BTC/USDT:USDT LONG @ $78946.4
+2026-04-27 05:01:40 [WARNING] src.trading.position_manager: 거래소 포지션 발견 (봇 미추적): BTC/USDT:USDT long 2.000000 @ $78946.4
+2026-04-27 05:11:51 [WARNING] src.trading.position_manager: 포지션 외부 종료 감지 (사이즈≈0) → 정리: BTC/USDT:USDT
+2026-04-27 05:11:54 [WARNING] src.trading.risk_manager: 손실 기록: -0.10% | 연패: 1
+2026-04-27 05:11:54 [WARNING] src.trading.risk_manager: 손실 기록: -0.10% | 연패: 2

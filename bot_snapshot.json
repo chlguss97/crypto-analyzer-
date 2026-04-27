@@ -1,25 +1,25 @@
 {
-  "ts": 1777265948,
-  "ts_iso": "2026-04-27T04:59:08.600425+00:00",
-  "balance": 227.22,
+  "ts": 1777266891,
+  "ts_iso": "2026-04-27T05:14:51.155345+00:00",
+  "balance": 215.58,
   "autotrading": "on",
-  "regime": "unknown",
+  "regime": "ranging",
   "trade_state": {},
   "positions": {
     "BTC/USDT:USDT": {
-      "trade_id": 47,
+      "trade_id": 49,
       "symbol": "BTC/USDT:USDT",
       "direction": "long",
-      "entry_price": 78946.4,
+      "entry_price": 78553.1,
       "size": 0.02,
       "remaining_size": 0.02,
-      "leverage": 20,
-      "sl_price": 78551.7,
-      "tp1_price": 79162.1,
-      "tp2_price": 79933.2,
-      "tp3_price": 80525.3,
-      "grade": "B+",
-      "entry_time": 1777265594000,
+      "leverage": 15,
+      "sl_price": 78162.2,
+      "tp1_price": 78800.1,
+      "tp2_price": 79536.9,
+      "tp3_price": 80126.1,
+      "grade": "B",
+      "entry_time": 1777266717000,
       "tp1_filled": 0,
       "tp2_filled": 0,
       "tp3_filled": 0,
@@ -28,12 +28,12 @@
       "trail_distance": 0.0,
       "manual_sl_override": 0,
       "manual_tp_override": 0,
-      "algo_ids": "{\"sl\": \"sl17772655922915454\", \"tp1\": \"tp117772655924188243\", \"tp2\": null, \"tp3\": null}",
-      "hold_minutes": 5
+      "algo_ids": "{\"sl\": \"sl17772667153941967\", \"tp1\": \"tp117772667155215872\", \"tp2\": null, \"tp3\": null}",
+      "hold_minutes": 2
     }
   },
-  "streak": 0,
-  "daily_pnl": 0.02,
+  "streak": 2,
+  "daily_pnl": -0.18,
   "paper": {
     "balance": 7493.95,
     "initial_balance": 7500.0,
@@ -49,16 +49,16 @@
   },
   "pending_algos": [
     {
-      "id": "tp117772655924188243",
+      "id": "tp117772667155215872",
       "type": "trigger",
-      "trigger": "79162.1",
+      "trigger": "78800.1",
       "side": "sell",
       "sz": "1"
     },
     {
-      "id": "sl17772655922915454",
+      "id": "sl17772667153941967",
       "type": "trigger",
-      "trigger": "78551.7",
+      "trigger": "78162.2",
       "side": "sell",
       "sz": "2"
     }
