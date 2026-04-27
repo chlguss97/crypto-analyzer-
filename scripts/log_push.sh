@@ -74,9 +74,22 @@ done
 # 최근 100건을 latest 로 (빠른 분석) — 모든 jsonl 파일 합산
 cat "$REPO_DIR"/data/logs/trades*.jsonl 2>/dev/null | tail -100 > "trade_history/trades_latest.jsonl" || true
 
-# 7-2. 봇 핵심 로그 마지막 500줄 (거래/에러 추적용)
+# 7-2. 주간 로그 파일 복사 (bot.log, trades.log, signals.log 주간 로테이션분)
 mkdir -p bot_logs
-# docker compose 자동 감지
+# bot.log (WARNING+) — 현재 파일 + 주간 로테이션 파일
+for f in "$REPO_DIR"/data/logs/bot.log*; do
+    [ -f "$f" ] && cp "$f" "bot_logs/$(basename "$f")"
+done
+# trades.log 주간 로테이션 파일
+for f in "$REPO_DIR"/data/logs/trades.log*; do
+    [ -f "$f" ] && cp "$f" "bot_logs/$(basename "$f")"
+done
+# signals.log 주간 로테이션 파일
+for f in "$REPO_DIR"/data/logs/signals.log*; do
+    [ -f "$f" ] && cp "$f" "bot_logs/$(basename "$f")"
+done
+
+# Docker 최근 로그 (거래/에러 핵심만)
 if docker compose version &>/dev/null; then
     DC_LP="docker compose"
 elif command -v docker-compose &>/dev/null; then
@@ -85,7 +98,7 @@ else
     DC_LP=""
 fi
 if [ -n "$DC_LP" ]; then
-    $DC_LP logs --tail 500 bot 2>&1 | grep -E "진입|청산|finalize|sl_hit|TP1|러너|ERROR|🚨|💀" > "bot_logs/recent_events.log" 2>/dev/null || true
+    $DC_LP logs --tail 500 bot 2>&1 | grep -E "진입|청산|finalize|sl_hit|sl_failsafe|TP1|러너|ERROR|WARNING|🚨|💀|algo_debug" > "bot_logs/recent_events.log" 2>/dev/null || true
 fi
 
 # 7-3. 봇 상태 스냅샷 (Claude 실시간 분석용)
