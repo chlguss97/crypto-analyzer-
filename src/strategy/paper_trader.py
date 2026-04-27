@@ -311,7 +311,7 @@ class PaperTrader:
             tp_dist = current_price * (tp1_margin_pct / leverage / 100)
 
         # 최소 SL 0.35%
-        min_sl = current_price * 0.0035
+        min_sl = current_price * 0.005  # 5m 노이즈 밖으로 (0.35%→0.5%)
         sl_dist = max(sl_dist, min_sl)
 
         tp1_dist = tp_dist

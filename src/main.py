@@ -451,7 +451,7 @@ class CryptoAnalyzer:
         if tp_dist <= 0:
             tp_dist = price * (tp1_margin_pct / leverage / 100)
 
-        min_sl = price * 0.0035
+        min_sl = price * 0.005  # 5m 노이즈 밖으로 (0.35%→0.5%)
         sl_dist = max(sl_dist, min_sl)
 
         tp1_dist = tp_dist
