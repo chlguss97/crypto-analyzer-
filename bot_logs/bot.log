@@ -81,3 +81,5 @@
 2026-04-27 06:31:50 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $1,253,742 (롱청산 $1,253,742 / 숏청산 $0) → SHORT 강세
 2026-04-27 06:32:05 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $1,251,188 (롱청산 $1,251,188 / 숏청산 $0) → SHORT 강세
 2026-04-27 15:05:38 [WARNING] src.data.ws_stream: WebSocket 끊김: sent 1011 (internal error) keepalive ping timeout; no close frame received → 5초 후 재연결 (시도 1)
+2026-04-27 15:19:14 [WARNING] src.data.ws_stream: WebSocket 끊김: sent 1011 (internal error) keepalive ping timeout; no close frame received → 5초 후 재연결 (시도 1)
+2026-04-27 15:22:43 [WARNING] src.data.ws_stream: WebSocket 끊김: sent 1011 (internal error) keepalive ping timeout; no close frame received → 5초 후 재연결 (시도 1)
