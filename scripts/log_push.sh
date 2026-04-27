@@ -67,9 +67,9 @@ find digests/ -name "20*.txt" -mtime +7 -delete 2>/dev/null || true
 
 # 7-1. 거래 영구 이력 (주간 jsonl 파일들) 복사 — Claude 가 직접 분석 가능하게
 mkdir -p trade_history
-# 주간 파일 + 레거시 단일 파일 모두 복사
+# 주간 파일 + 레거시 단일 파일 모두 복사 (cp --reflink=auto: atomic on btrfs, safe copy otherwise)
 for f in "$REPO_DIR"/data/logs/trades*.jsonl; do
-    [ -f "$f" ] && cp "$f" "trade_history/$(basename "$f")"
+    [ -f "$f" ] && cp -f "$f" "trade_history/$(basename "$f")"
 done
 # 최근 100건을 latest 로 (빠른 분석) — 모든 jsonl 파일 합산
 cat "$REPO_DIR"/data/logs/trades*.jsonl 2>/dev/null | tail -100 > "trade_history/trades_latest.jsonl" || true
@@ -89,7 +89,7 @@ for f in "$REPO_DIR"/data/logs/signals.log*; do
     [ -f "$f" ] && cp "$f" "bot_logs/$(basename "$f")"
 done
 
-# Docker 최근 로그 (거래/에러 핵심만)
+# Docker 최근 로그 (거래/에러 핵심만) — 주간 파일에 append (유실 방지)
 if docker compose version &>/dev/null; then
     DC_LP="docker compose"
 elif command -v docker-compose &>/dev/null; then
@@ -98,7 +98,19 @@ else
     DC_LP=""
 fi
 if [ -n "$DC_LP" ]; then
-    $DC_LP logs --tail 500 bot 2>&1 | grep -E "진입|청산|finalize|sl_hit|sl_failsafe|TP1|러너|ERROR|WARNING|🚨|💀|algo_debug" > "bot_logs/recent_events.log" 2>/dev/null || true
+    WEEK_TAG=$(date -u +"%Y-W%W")
+    EVENTS_FILE="bot_logs/events_${WEEK_TAG}.log"
+    # 이전 실행에서 기록한 마지막 타임스탬프 이후만 추가 (중복 방지)
+    LAST_TS=""
+    if [ -f "$EVENTS_FILE" ]; then
+        LAST_TS=$(tail -1 "$EVENTS_FILE" 2>/dev/null | grep -oP '^\S+ \S+' || true)
+    fi
+    $DC_LP logs --tail 2000 bot 2>&1 \
+        | grep -E "진입|청산|finalize|sl_hit|sl_failsafe|TP1|러너|ERROR|WARNING|🚨|💀|algo_debug|SL 등록|알고.*등록|포지션.*종료|게이트" \
+        | if [ -n "$LAST_TS" ]; then awk -v ts="$LAST_TS" '$1" "$2 > ts'; else cat; fi \
+        >> "$EVENTS_FILE" 2>/dev/null || true
+    # latest 심볼릭 (빠른 접근)
+    cp "$EVENTS_FILE" "bot_logs/recent_events.log" 2>/dev/null || true
 fi
 
 # 7-3. 봇 상태 스냅샷 (Claude 실시간 분석용)

@@ -9,9 +9,9 @@ LOG_DIR = Path(__file__).parent.parent.parent / "data" / "logs"
 
 
 def _week_tag() -> str:
-    """현재 ISO 주 태그: '2026-W18' (월요일 기준)"""
+    """현재 주 태그: '2026-W17' (strftime %W 기준 — .log 로테이션과 통일)"""
     now = datetime.now(timezone.utc)
-    return f"{now.isocalendar()[0]}-W{now.isocalendar()[1]:02d}"
+    return now.strftime("%Y-W%W")
 
 
 def _jsonl_path() -> Path:

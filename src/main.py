@@ -869,6 +869,25 @@ class CryptoAnalyzer:
                 snap_path.parent.mkdir(parents=True, exist_ok=True)
                 with open(snap_path, "w") as f:
                     _j.dump(snapshot, f, indent=2, default=str)
+
+                # 1시간마다 JSONL에도 상태 이력 기록 (과거 상태 조회 가능)
+                if not hasattr(self, "_last_snapshot_jsonl"):
+                    self._last_snapshot_jsonl = 0
+                if _time.time() - self._last_snapshot_jsonl >= 3600:
+                    self._last_snapshot_jsonl = _time.time()
+                    from src.monitoring.trade_logger import _append_jsonl
+                    _append_jsonl({
+                        "type": "hourly_snapshot",
+                        "balance": snapshot.get("balance", 0),
+                        "autotrading": snapshot.get("autotrading"),
+                        "regime": snapshot.get("regime"),
+                        "streak": snapshot.get("streak", 0),
+                        "daily_pnl": snapshot.get("daily_pnl", 0),
+                        "positions": len(snapshot.get("positions", {})),
+                        "pending_algos": len(snapshot.get("pending_algos", [])),
+                        "paper_balance": snapshot.get("paper", {}).get("balance", 0),
+                        "paper_total": snapshot.get("paper", {}).get("stats", {}).get("total", 0),
+                    })
             except Exception as e:
                 logger.debug(f"스냅샷 저장 실패: {e}")
 
