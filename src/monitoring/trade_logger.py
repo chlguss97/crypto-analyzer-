@@ -92,7 +92,7 @@ class TradeLogger:
     def log_exit(self, direction: str, exit_reason: str,
                  entry_price: float, exit_price: float,
                  pnl_pct: float, pnl_usdt: float,
-                 hold_min: int, fee: float):
+                 hold_min: int, fee: float, **extra):
         self.logger.info(
             f"EXIT  | {direction.upper()} {exit_reason} | "
             f"${entry_price:,.1f} -> ${exit_price:,.1f} | "
@@ -100,7 +100,7 @@ class TradeLogger:
             f"{hold_min}min | fee ${fee:.2f}"
         )
         # JSONL 영구 기록 (DB 손상 무관)
-        _append_jsonl({
+        record = {
             "type": "exit",
             "direction": direction,
             "exit_reason": exit_reason,
@@ -110,7 +110,12 @@ class TradeLogger:
             "pnl_usdt": round(float(pnl_usdt), 2),
             "hold_min": int(hold_min),
             "fee": round(float(fee), 2),
-        })
+        }
+        # 추가 필드 (grade, score, leverage, setup, regime 등)
+        for k, v in extra.items():
+            if v is not None:
+                record[k] = v
+        _append_jsonl(record)
 
     def log_partial_close(self, direction: str, reason: str,
                           close_pct: float, price: float):

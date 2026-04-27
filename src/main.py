@@ -37,6 +37,16 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
 )
+# WARNING 이상을 파일에도 영구 보존 (Docker 로그 유실 대비)
+from logging.handlers import RotatingFileHandler as _RFH
+from pathlib import Path as _P
+_log_dir = _P(__file__).parent.parent / "data" / "logs"
+_log_dir.mkdir(parents=True, exist_ok=True)
+_fh = _RFH(_log_dir / "bot.log", maxBytes=20 * 1024 * 1024, backupCount=5, encoding="utf-8")
+_fh.setLevel(logging.WARNING)
+_fh.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s", datefmt="%Y-%m-%d %H:%M:%S"))
+logging.getLogger().addHandler(_fh)
+
 logger = logging.getLogger("CryptoAnalyzer")
 
 

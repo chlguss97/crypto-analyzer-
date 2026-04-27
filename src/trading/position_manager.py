@@ -1463,7 +1463,11 @@ class PositionManager:
             try:
                 self.trade_logger.log_exit(
                     pos.direction, reason, pos.entry_price, exit_price,
-                    pnl_pct, pnl_usdt, pos.hold_minutes, pos.total_fee
+                    pnl_pct, pnl_usdt, pos.hold_minutes, pos.total_fee,
+                    grade=pos.grade, score=pos.score, leverage=pos.leverage,
+                    setup=pos.signals_snapshot.get("setup") if isinstance(pos.signals_snapshot, dict) else None,
+                    runner_mode=pos.runner_mode, remaining_size=round(pos.remaining_size, 6),
+                    original_size=round(pos.size, 6),
                 )
             except Exception as e:
                 logger.error(f"trade_logger.log_exit 실패: {e}")
