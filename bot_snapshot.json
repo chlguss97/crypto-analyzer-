@@ -1,27 +1,20 @@
 {
-  "ts": 1777247118,
-  "ts_iso": "2026-04-26T23:45:18.110156+00:00",
+  "ts": 1777247963,
+  "ts_iso": "2026-04-26T23:59:23.949706+00:00",
   "balance": 228.98,
   "autotrading": "on",
   "regime": "ranging",
   "trade_state": {
-    "setup": "MOM",
-    "direction": "long",
-    "score": 6.5,
+    "setup": null,
+    "direction": "neutral",
+    "score": 0,
     "trend": "up",
     "vol_band": "low",
     "session": "late",
     "regime": "ranging",
     "streak": 0,
-    "hold_mode": "quick",
-    "last_signal": {
-      "setup": "MOM",
-      "direction": "long",
-      "score": 6.5,
-      "reason": "momentum golden_cross 5m",
-      "hold_mode": "quick",
-      "ts": 1777247117
-    }
+    "hold_mode": "standard",
+    "last_signal": null
   },
   "positions": {},
   "streak": 0,
@@ -33,7 +26,7 @@
     "drawdown_pct": 2.15,
     "total_trades": 7,
     "win_rate": 28.6,
-    "daily_pnl_pct": -1.39,
+    "daily_pnl_pct": 0.0,
     "loss_streak": 3,
     "active_positions": 0,
     "shadow_missed": 0,
