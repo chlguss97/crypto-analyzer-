@@ -5,6 +5,7 @@ import time
 import json
 from src.data.storage import Database, RedisClient
 from src.trading.executor import OrderExecutor
+from src.monitoring.trade_logger import _append_jsonl
 from src.utils.helpers import load_config
 
 logger = logging.getLogger(__name__)
@@ -573,7 +574,6 @@ class PositionManager:
                 f"algo_debug={algo_debug}"
             )
             # JSONL에도 디버그 기록 (Docker 로그 유실 대비)
-            from src.monitoring.trade_logger import _append_jsonl
             _append_jsonl({
                 "type": "sl_failsafe_debug",
                 "direction": pos.direction,
