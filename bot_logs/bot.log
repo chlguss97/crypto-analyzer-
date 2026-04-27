@@ -8,3 +8,55 @@
 2026-04-27 05:11:51 [WARNING] src.trading.position_manager: 포지션 외부 종료 감지 (사이즈≈0) → 정리: BTC/USDT:USDT
 2026-04-27 05:11:54 [WARNING] src.trading.risk_manager: 손실 기록: -0.10% | 연패: 1
 2026-04-27 05:11:54 [WARNING] src.trading.risk_manager: 손실 기록: -0.10% | 연패: 2
+2026-04-27 05:15:22 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $653,330 (롱청산 $653,330 / 숏청산 $0) → SHORT 강세
+2026-04-27 05:15:23 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $656,526 (롱청산 $656,526 / 숏청산 $0) → SHORT 강세
+2026-04-27 05:15:24 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $1,044,207 (롱청산 $1,044,207 / 숏청산 $0) → SHORT 강세
+2026-04-27 05:15:27 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $1,106,546 (롱청산 $1,106,546 / 숏청산 $0) → SHORT 강세
+2026-04-27 05:15:28 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $1,111,455 (롱청산 $1,111,455 / 숏청산 $0) → SHORT 강세
+2026-04-27 05:15:29 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $1,200,044 (롱청산 $1,200,044 / 숏청산 $0) → SHORT 강세
+2026-04-27 05:15:32 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $1,203,939 (롱청산 $1,203,939 / 숏청산 $0) → SHORT 강세
+2026-04-27 05:15:33 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $1,218,662 (롱청산 $1,218,662 / 숏청산 $0) → SHORT 강세
+2026-04-27 05:15:36 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $1,236,266 (롱청산 $1,236,266 / 숏청산 $0) → SHORT 강세
+2026-04-27 05:15:37 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $1,274,432 (롱청산 $1,274,432 / 숏청산 $0) → SHORT 강세
+2026-04-27 05:15:38 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $1,324,040 (롱청산 $1,324,040 / 숏청산 $0) → SHORT 강세
+2026-04-27 05:15:39 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $1,372,086 (롱청산 $1,372,086 / 숏청산 $0) → SHORT 강세
+2026-04-27 05:15:43 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $1,377,927 (롱청산 $1,377,927 / 숏청산 $0) → SHORT 강세
+2026-04-27 05:15:48 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $1,378,550 (롱청산 $1,378,550 / 숏청산 $0) → SHORT 강세
+2026-04-27 05:15:50 [WARNING] src.trading.position_manager: 포지션 외부 종료 감지 (사이즈≈0) → 정리: BTC/USDT:USDT
+2026-04-27 05:15:52 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $1,343,491 (롱청산 $1,343,491 / 숏청산 $0) → SHORT 강세
+2026-04-27 05:15:52 [WARNING] src.trading.risk_manager: 손실 기록: -7.47% | 연패: 3
+2026-04-27 05:15:52 [WARNING] src.trading.risk_manager: 3연패 → 5분 쿨다운
+2026-04-27 05:15:52 [WARNING] src.trading.risk_manager: 손실 기록: -7.47% | 연패: 4
+2026-04-27 05:15:52 [WARNING] src.trading.risk_manager: 3연패 → 5분 쿨다운
+2026-04-27 05:15:52 [ERROR] src.trading.risk_manager: [RISK] 일일 손실 한도 -10% 도달: -15.13% → 당일 매매 중단
+2026-04-27 05:15:52 [ERROR] src.trading.risk_manager: [RISK] 주간 손실 한도 -20% 도달: -25.88% → 주간 매매 중단
+2026-04-27 05:15:54 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $1,421,654 (롱청산 $1,421,654 / 숏청산 $0) → SHORT 강세
+2026-04-27 05:15:57 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $1,419,926 (롱청산 $1,419,926 / 숏청산 $0) → SHORT 강세
+2026-04-27 05:16:00 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $1,420,004 (롱청산 $1,420,004 / 숏청산 $0) → SHORT 강세
+2026-04-27 05:16:02 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $1,443,349 (롱청산 $1,443,349 / 숏청산 $0) → SHORT 강세
+2026-04-27 05:16:04 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $1,495,996 (롱청산 $1,495,996 / 숏청산 $0) → SHORT 강세
+2026-04-27 05:16:05 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $1,561,281 (롱청산 $1,561,281 / 숏청산 $0) → SHORT 강세
+2026-04-27 05:16:07 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $1,597,118 (롱청산 $1,597,118 / 숏청산 $0) → SHORT 강세
+2026-04-27 05:16:25 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $687,573 (롱청산 $687,573 / 숏청산 $0) → SHORT 강세
+2026-04-27 05:16:26 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $698,379 (롱청산 $698,379 / 숏청산 $0) → SHORT 강세
+2026-04-27 05:16:28 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $1,244,855 (롱청산 $1,244,855 / 숏청산 $0) → SHORT 강세
+2026-04-27 05:16:29 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $1,220,989 (롱청산 $1,220,989 / 숏청산 $0) → SHORT 강세
+2026-04-27 05:16:30 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $1,480,488 (롱청산 $1,480,488 / 숏청산 $0) → SHORT 강세
+2026-04-27 05:16:31 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $1,615,103 (롱청산 $1,615,103 / 숏청산 $0) → SHORT 강세
+2026-04-27 05:16:32 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $1,788,586 (롱청산 $1,788,586 / 숏청산 $0) → SHORT 강세
+2026-04-27 05:16:33 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $1,801,898 (롱청산 $1,801,898 / 숏청산 $0) → SHORT 강세
+2026-04-27 05:16:35 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $1,806,790 (롱청산 $1,806,790 / 숏청산 $0) → SHORT 강세
+2026-04-27 05:20:12 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $2,991,350 (롱청산 $2,991,350 / 숏청산 $0) → SHORT 강세
+2026-04-27 05:20:13 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $3,136,730 (롱청산 $3,136,730 / 숏청산 $0) → SHORT 강세
+2026-04-27 05:20:14 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $3,214,973 (롱청산 $3,214,973 / 숏청산 $0) → SHORT 강세
+2026-04-27 05:20:15 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $3,219,393 (롱청산 $3,219,393 / 숏청산 $0) → SHORT 강세
+2026-04-27 05:20:20 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $3,219,625 (롱청산 $3,219,625 / 숏청산 $0) → SHORT 강세
+2026-04-27 05:20:23 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $3,260,324 (롱청산 $3,260,324 / 숏청산 $0) → SHORT 강세
+2026-04-27 05:20:24 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $3,260,557 (롱청산 $3,260,557 / 숏청산 $0) → SHORT 강세
+2026-04-27 05:22:20 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $534,625 (롱청산 $534,625 / 숏청산 $0) → SHORT 강세
+2026-04-27 05:22:21 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $534,780 (롱청산 $534,780 / 숏청산 $0) → SHORT 강세
+2026-04-27 05:22:50 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $538,036 (롱청산 $538,036 / 숏청산 $0) → SHORT 강세
+2026-04-27 05:23:04 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $545,630 (롱청산 $545,630 / 숏청산 $0) → SHORT 강세
+2026-04-27 05:23:05 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $572,745 (롱청산 $572,745 / 숏청산 $0) → SHORT 강세
+2026-04-27 05:23:06 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $580,492 (롱청산 $580,492 / 숏청산 $0) → SHORT 강세
+2026-04-27 05:23:07 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $583,590 (롱청산 $583,590 / 숏청산 $0) → SHORT 강세
