@@ -38,7 +38,9 @@ cd "$REPO_DIR"
 
 # 3. main 브랜치 백업 (작업 안전)
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
-git stash --include-untracked --quiet || true
+git stash --include-untracked --quiet 2>/dev/null || true
+# untracked 파일 충돌 방지 (data/*.json 등)
+git clean -fd data/ 2>/dev/null || true
 
 # 4. logs 브랜치로 전환 (없으면 fetch)
 git fetch origin logs --quiet 2>/dev/null || true
@@ -129,8 +131,8 @@ else
     echo "$(date '+%H:%M:%S') 푸시 완료: digests/${TIMESTAMP}.txt"
 fi
 
-# 9. 원래 브랜치 복귀
-git checkout "$CURRENT_BRANCH" --quiet
+# 9. 원래 브랜치 복귀 (실패 시 force checkout — logs 브랜치에 갇히는 것 방지)
+git checkout "$CURRENT_BRANCH" --quiet 2>/dev/null || git checkout -f "$CURRENT_BRANCH" --quiet
 git stash pop --quiet 2>/dev/null || true
 
 rm -f "$DIGEST_FILE"

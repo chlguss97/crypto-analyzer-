@@ -624,6 +624,14 @@ class PositionManager:
                     pos.tp1_filled = True
                     pos.algo_ids["tp1"] = None
 
+                    # 🔒 기존 SL 먼저 취소 — 서버 TP1이 체결되면 OKX가 기존 SL을
+                    # 자동 취소하거나 사이즈 불일치로 무효화할 수 있음.
+                    # 명시적으로 취소 후 새 사이즈(remaining)로 재등록.
+                    old_sl_id = pos.algo_ids.get("sl")
+                    if old_sl_id:
+                        await self.executor.cancel_algo_order(old_sl_id)
+                        pos.algo_ids["sl"] = None
+
                     fee_offset = pos.entry_price * 0.001
                     new_sl = (pos.entry_price + fee_offset) if pos.direction == "long" \
                         else (pos.entry_price - fee_offset)
