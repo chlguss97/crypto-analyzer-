@@ -1,21 +1,31 @@
 import json
 import logging
 import time
-from logging.handlers import RotatingFileHandler
+from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
 from datetime import datetime, timezone
 
 LOG_DIR = Path(__file__).parent.parent.parent / "data" / "logs"
-TRADES_JSONL = LOG_DIR / "trades.jsonl"  # 영구 거래 이력 (DB 손상 무관)
+
+
+def _week_tag() -> str:
+    """현재 ISO 주 태그: '2026-W18' (월요일 기준)"""
+    now = datetime.now(timezone.utc)
+    return f"{now.isocalendar()[0]}-W{now.isocalendar()[1]:02d}"
+
+
+def _jsonl_path() -> Path:
+    """주간 JSONL 파일: trades_2026-W18.jsonl"""
+    return LOG_DIR / f"trades_{_week_tag()}.jsonl"
 
 
 def _append_jsonl(record: dict):
-    """단일 JSON line 을 append — fsync 로 즉시 디스크 반영"""
+    """단일 JSON line 을 주간 파일에 append — fsync 로 즉시 디스크 반영"""
     try:
         LOG_DIR.mkdir(parents=True, exist_ok=True)
         record["ts"] = int(time.time())
         record["ts_iso"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
-        with open(TRADES_JSONL, "a", encoding="utf-8") as f:
+        with open(_jsonl_path(), "a", encoding="utf-8") as f:
             f.write(json.dumps(record, ensure_ascii=False) + "\n")
             f.flush()
             try:
@@ -28,7 +38,7 @@ def _append_jsonl(record: dict):
 
 
 class TradeLogger:
-    """매매 전용 로거 (파일 기록)"""
+    """매매 전용 로거 (주간 파일 영구 보존)"""
 
     def __init__(self):
         LOG_DIR.mkdir(parents=True, exist_ok=True)
@@ -36,30 +46,34 @@ class TradeLogger:
         self.logger.setLevel(logging.DEBUG)
 
         if not self.logger.handlers:
-            # 매매 로그 (INFO)
-            trade_handler = RotatingFileHandler(
+            # 매매 로그 (INFO) — 매주 월요일 로테이션, 영구 보존
+            trade_handler = TimedRotatingFileHandler(
                 LOG_DIR / "trades.log",
-                maxBytes=10 * 1024 * 1024,  # 10MB
-                backupCount=5,
+                when="W0",          # 월요일 기준
+                backupCount=520,    # 10년치 보존
                 encoding="utf-8",
+                utc=True,
             )
             trade_handler.setLevel(logging.INFO)
             trade_handler.setFormatter(
                 logging.Formatter("%(asctime)s | %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
             )
+            trade_handler.suffix = "%Y-W%W"  # trades.log.2026-W18
             self.logger.addHandler(trade_handler)
 
-            # 시그널 상세 로그 (DEBUG)
-            signal_handler = RotatingFileHandler(
+            # 시그널 상세 로그 (DEBUG) — 매주 월요일 로테이션
+            signal_handler = TimedRotatingFileHandler(
                 LOG_DIR / "signals.log",
-                maxBytes=10 * 1024 * 1024,
-                backupCount=3,
+                when="W0",
+                backupCount=520,
                 encoding="utf-8",
+                utc=True,
             )
             signal_handler.setLevel(logging.DEBUG)
             signal_handler.setFormatter(
                 logging.Formatter("%(asctime)s | %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
             )
+            signal_handler.suffix = "%Y-W%W"
             self.logger.addHandler(signal_handler)
 
     def log_entry(self, direction: str, grade: str, score: float,

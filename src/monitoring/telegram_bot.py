@@ -312,27 +312,29 @@ class TelegramNotifier:
     async def _cmd_stats(self):
         """오늘 매매 통계"""
         try:
-            import json
-            trades_file = "/app/data/logs/trades.jsonl"
+            import json, glob
             today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
             real_today = []
             paper_today = []
-            try:
-                with open(trades_file) as f:
-                    for line in f:
-                        line = line.strip()
-                        if not line:
-                            continue
-                        d = json.loads(line)
-                        if d.get("ts_iso", "")[:10] != today_str:
-                            continue
-                        if d.get("type") == "exit":
-                            real_today.append(d)
-                        elif d.get("type") == "paper_exit":
-                            paper_today.append(d)
-            except FileNotFoundError:
-                pass
+            # 주간 파일 + 레거시 단일 파일 모두 탐색
+            jsonl_files = sorted(glob.glob("/app/data/logs/trades*.jsonl"))
+            for trades_file in jsonl_files:
+                try:
+                    with open(trades_file) as f:
+                        for line in f:
+                            line = line.strip()
+                            if not line:
+                                continue
+                            d = json.loads(line)
+                            if d.get("ts_iso", "")[:10] != today_str:
+                                continue
+                            if d.get("type") == "exit":
+                                real_today.append(d)
+                            elif d.get("type") == "paper_exit":
+                                paper_today.append(d)
+                except FileNotFoundError:
+                    pass
 
             # Real
             r_w = sum(1 for t in real_today if t["pnl_usdt"] > 0)
@@ -366,21 +368,23 @@ class TelegramNotifier:
     async def _cmd_trades(self):
         """최근 5건 매매 내역"""
         try:
-            import json
-            trades_file = "/app/data/logs/trades.jsonl"
+            import json, glob
             recent = []
-            try:
-                with open(trades_file) as f:
-                    for line in f:
-                        line = line.strip()
-                        if not line:
-                            continue
-                        d = json.loads(line)
-                        if d.get("type") == "exit":
-                            recent.append(d)
-                recent = recent[-5:]
-            except FileNotFoundError:
-                pass
+            # 주간 파일 + 레거시 단일 파일 모두 탐색 (시간순 정렬)
+            jsonl_files = sorted(glob.glob("/app/data/logs/trades*.jsonl"))
+            for trades_file in jsonl_files:
+                try:
+                    with open(trades_file) as f:
+                        for line in f:
+                            line = line.strip()
+                            if not line:
+                                continue
+                            d = json.loads(line)
+                            if d.get("type") == "exit":
+                                recent.append(d)
+                except FileNotFoundError:
+                    pass
+            recent = recent[-5:]
 
             if not recent:
                 await self._send("\U0001f4cb 매매 내역 없음")

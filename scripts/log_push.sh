@@ -65,14 +65,14 @@ cp "$DIGEST_FILE" "digests/latest.txt"
 # 7. 오래된 디지스트 정리 (7일 초과)
 find digests/ -name "20*.txt" -mtime +7 -delete 2>/dev/null || true
 
-# 7-1. 거래 영구 이력 (trades.jsonl) 복사 — Claude 가 직접 분석 가능하게
+# 7-1. 거래 영구 이력 (주간 jsonl 파일들) 복사 — Claude 가 직접 분석 가능하게
 mkdir -p trade_history
-TRADES_SRC="$REPO_DIR/data/logs/trades.jsonl"
-if [ -f "$TRADES_SRC" ]; then
-    cp "$TRADES_SRC" "trade_history/trades.jsonl"
-    # 마지막 100건만 latest 로 (빠른 분석)
-    tail -100 "$TRADES_SRC" > "trade_history/trades_latest.jsonl" 2>/dev/null || true
-fi
+# 주간 파일 + 레거시 단일 파일 모두 복사
+for f in "$REPO_DIR"/data/logs/trades*.jsonl; do
+    [ -f "$f" ] && cp "$f" "trade_history/$(basename "$f")"
+done
+# 최근 100건을 latest 로 (빠른 분석) — 모든 jsonl 파일 합산
+cat "$REPO_DIR"/data/logs/trades*.jsonl 2>/dev/null | tail -100 > "trade_history/trades_latest.jsonl" || true
 
 # 7-2. 봇 핵심 로그 마지막 500줄 (거래/에러 추적용)
 mkdir -p bot_logs
