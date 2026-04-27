@@ -1,6 +1,6 @@
 {
-  "ts": 1777277654,
-  "ts_iso": "2026-04-27T08:14:14.104146+00:00",
+  "ts": 1777278591,
+  "ts_iso": "2026-04-27T08:29:51.391653+00:00",
   "balance": 210.51,
   "autotrading": "on",
   "regime": "unknown",
@@ -15,7 +15,7 @@
     "drawdown_pct": 5.34,
     "total_trades": 9,
     "win_rate": 22.2,
-    "daily_pnl_pct": -3.15,
+    "daily_pnl_pct": 0.0,
     "loss_streak": 5,
     "active_positions": 0,
     "shadow_missed": 0,
