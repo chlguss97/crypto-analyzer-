@@ -288,6 +288,19 @@ class PaperTrader:
             if pos.symbol == "BTC-USDT-SWAP" and pos.direction == direction:
                 return None
 
+        # 모멘텀 게이트: 급락 중 Long / 급등 중 Short 차단
+        try:
+            vel = await self.redis.hgetall("rt:velocity:BTC-USDT-SWAP") if self.redis else {}
+            if vel:
+                move_60s = float(vel.get("move_60s", 0))
+                move_30s = float(vel.get("move_30s", 0))
+                if direction == "long" and (move_60s < -150 or move_30s < -100):
+                    return None
+                if direction == "short" and (move_60s > 150 or move_30s > 100):
+                    return None
+        except Exception:
+            pass
+
         # ── 사이징 (실전과 동일) ──
         hold_mode = signal_result.get("hold_mode", "standard")
         hm_cfg = self.config.get("hold_modes", {}).get(hold_mode, {})

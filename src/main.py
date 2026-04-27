@@ -396,6 +396,41 @@ class CryptoAnalyzer:
         if price <= 0:
             return
 
+        # 모멘텀 게이트: "지금 떨어지는데 롱 치지 마" (그 반대도)
+        try:
+            vel = await self.redis.hgetall("rt:velocity:BTC-USDT-SWAP")
+            if vel:
+                move_60s = float(vel.get("move_60s", 0))
+                move_30s = float(vel.get("move_30s", 0))
+                range_60s = float(vel.get("range_60s", 0))
+                # 60초간 $150+ 한 방향으로 움직이면 반대 진입 차단
+                # ($150 ≈ 5m ATR, 명확한 방향성)
+                MOMENTUM_BLOCK = 150
+                if direction == "long" and move_60s < -MOMENTUM_BLOCK:
+                    logger.info(
+                        f"[TRADE] 모멘텀 게이트: 60초간 ${move_60s:.0f} 하락 중 → LONG 차단"
+                    )
+                    return
+                if direction == "short" and move_60s > MOMENTUM_BLOCK:
+                    logger.info(
+                        f"[TRADE] 모멘텀 게이트: 60초간 +${move_60s:.0f} 상승 중 → SHORT 차단"
+                    )
+                    return
+                # 30초간 $100+ 급변동이면 더 민감하게 차단
+                MOMENTUM_BLOCK_30S = 100
+                if direction == "long" and move_30s < -MOMENTUM_BLOCK_30S:
+                    logger.info(
+                        f"[TRADE] 모멘텀 게이트(30s): ${move_30s:.0f} 하락 → LONG 차단"
+                    )
+                    return
+                if direction == "short" and move_30s > MOMENTUM_BLOCK_30S:
+                    logger.info(
+                        f"[TRADE] 모멘텀 게이트(30s): +${move_30s:.0f} 상승 → SHORT 차단"
+                    )
+                    return
+        except Exception:
+            pass  # velocity 데이터 없으면 게이트 미적용
+
         # 같은 가격대 재진입 방지 (SL 청산 후 동일 가격대 재진입 차단)
         if self._unified_last_exit_reason and "sl" in self._unified_last_exit_reason:
             last_trade_price = self._unified_last_entry_price
