@@ -1,36 +1,66 @@
 {
-  "ts": 1777257858,
-  "ts_iso": "2026-04-27T02:44:18.942196+00:00",
-  "balance": 228.98,
+  "ts": 1777265221,
+  "ts_iso": "2026-04-27T04:47:01.249911+00:00",
+  "balance": 228.79,
   "autotrading": "on",
-  "regime": "trending_up",
-  "trade_state": {
-    "setup": null,
-    "direction": "neutral",
-    "score": 0,
-    "trend": "up",
-    "vol_band": "low",
-    "session": "asia",
-    "regime": "trending_up",
-    "streak": 0,
-    "hold_mode": "standard",
-    "last_signal": null
+  "regime": "unknown",
+  "trade_state": {},
+  "positions": {
+    "BTC/USDT:USDT": {
+      "trade_id": 45,
+      "symbol": "BTC/USDT:USDT",
+      "direction": "short",
+      "entry_price": 79030.0,
+      "size": 2.0,
+      "remaining_size": 0.02,
+      "leverage": 15,
+      "sl_price": 79429.3,
+      "tp1_price": 78910.6,
+      "tp2_price": 78243.8,
+      "tp3_price": 77848.6,
+      "grade": "B",
+      "entry_time": 1777265036000,
+      "tp1_filled": 0,
+      "tp2_filled": 0,
+      "tp3_filled": 0,
+      "runner_mode": 0,
+      "best_price": 0.0,
+      "trail_distance": 0.0,
+      "manual_sl_override": 0,
+      "manual_tp_override": 0,
+      "algo_ids": "{\"sl\": \"sl17772650377212178\", \"tp1\": \"tp117772650379174452\", \"tp2\": null, \"tp3\": null}",
+      "hold_minutes": 3
+    }
   },
-  "positions": {},
   "streak": 0,
   "daily_pnl": 0.0,
   "paper": {
-    "balance": 7509.88,
+    "balance": 7493.95,
     "initial_balance": 7500.0,
-    "total_return_pct": 0.13,
-    "drawdown_pct": 2.15,
-    "total_trades": 7,
-    "win_rate": 28.6,
+    "total_return_pct": -0.08,
+    "drawdown_pct": 2.36,
+    "total_trades": 8,
+    "win_rate": 25.0,
     "daily_pnl_pct": 0.0,
-    "loss_streak": 3,
+    "loss_streak": 4,
     "active_positions": 0,
     "shadow_missed": 0,
     "shadow_correct": 0
   },
-  "pending_algos": []
+  "pending_algos": [
+    {
+      "id": "tp117772650379174452",
+      "type": "trigger",
+      "trigger": "78910.6",
+      "side": "buy",
+      "sz": "1"
+    },
+    {
+      "id": "sl17772650377212178",
+      "type": "trigger",
+      "trigger": "79429.3",
+      "side": "buy",
+      "sz": "2"
+    }
+  ]
 }
