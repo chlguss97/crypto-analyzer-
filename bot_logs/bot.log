@@ -83,3 +83,4 @@
 2026-04-27 15:05:38 [WARNING] src.data.ws_stream: WebSocket 끊김: sent 1011 (internal error) keepalive ping timeout; no close frame received → 5초 후 재연결 (시도 1)
 2026-04-27 15:19:14 [WARNING] src.data.ws_stream: WebSocket 끊김: sent 1011 (internal error) keepalive ping timeout; no close frame received → 5초 후 재연결 (시도 1)
 2026-04-27 15:22:43 [WARNING] src.data.ws_stream: WebSocket 끊김: sent 1011 (internal error) keepalive ping timeout; no close frame received → 5초 후 재연결 (시도 1)
+2026-04-27 19:06:12 [WARNING] src.data.ws_stream: WebSocket 끊김: no close frame received or sent → 5초 후 재연결 (시도 1)
