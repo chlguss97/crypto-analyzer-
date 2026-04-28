@@ -246,6 +246,12 @@ class CryptoAnalyzer:
         if not candidate:
             return
 
+        # 동일 캔들 중복 시그널 방지 (같은 5m 캔들에서 반복 감지 차단)
+        dedup_key = (candidate["type"], candidate["direction"], int(candidate["price"] * 10))
+        if dedup_key == getattr(self, "_last_dedup_key", None):
+            return
+        self._last_dedup_key = dedup_key
+
         self._last_candidate = candidate
         direction = candidate["direction"]
         ctype = candidate["type"]
@@ -548,7 +554,9 @@ class CryptoAnalyzer:
         from src.monitoring.trade_logger import _append_jsonl
         while self._running:
             try:
-                price_str = await self.redis.get("bn:price:BTCUSDT")
+                price_str = await self.redis.get("rt:price:BTC-USDT-SWAP")
+                if not price_str:
+                    price_str = await self.redis.get("bn:price:BTCUSDT")
                 if not price_str:
                     await asyncio.sleep(5)
                     continue
@@ -629,7 +637,7 @@ class CryptoAnalyzer:
             except asyncio.CancelledError:
                 raise
             except Exception as e:
-                logger.debug(f"shadow check 에러: {e}")
+                logger.error(f"shadow check 에러: {e}", exc_info=True)
 
             await asyncio.sleep(self.config.get("polling", {}).get("shadow_check_sec", 5))
 
@@ -642,7 +650,7 @@ class CryptoAnalyzer:
                 labeled = await self.db.get_labeled_signals(self.ml_engine.window_size)
                 self.ml_engine.check_and_train(labeled)
             except Exception as e:
-                logger.debug(f"ML retrain 에러: {e}")
+                logger.error(f"ML retrain 에러: {e}", exc_info=True)
             await asyncio.sleep(300)
 
     # ── 기존 주기적 루프들 ──

@@ -111,7 +111,17 @@ class BinanceStream:
             try:
                 async with websockets.connect(url, ping_interval=20) as ws:
                     self._reconnect_count = 0
-                    logger.info(f"Binance WS 연결 성공: {SYMBOL}")
+                    # 재연결 시 CVD/마이크로 버퍼 리셋 (stale 데이터 방지)
+                    self._cvd_5m = 0.0
+                    self._cvd_15m = 0.0
+                    self._cvd_1h = 0.0
+                    self._cvd_reset_5m = 0
+                    self._cvd_reset_15m = 0
+                    self._cvd_reset_1h = 0
+                    self._trades.clear()
+                    self._cvd_snapshots.clear()
+                    self._last_micro_flush = 0
+                    logger.info(f"Binance WS 연결 성공: {SYMBOL} (버퍼 리셋)")
                     async for message in ws:
                         if not self._running:
                             break
@@ -121,7 +131,7 @@ class BinanceStream:
                         except json.JSONDecodeError:
                             continue
                         except Exception as e:
-                            logger.debug(f"Binance WS 처리 에러: {e}")
+                            logger.error(f"Binance WS 처리 에러: {e}")
             except asyncio.CancelledError:
                 raise
             except Exception as e:
@@ -150,16 +160,15 @@ class BinanceStream:
         """체결 → CVD 누적 + 대형 체결 감지"""
         price = float(t.get("p", 0))
         qty = float(t.get("q", 0))
-        is_buyer_maker = t.get("m", False)  # True = 매도 체결 (seller aggressor)
+        is_buyer_maker = t.get("m", False)
         ts = int(t.get("T", 0))
 
         if price <= 0 or qty <= 0:
             return
 
         size_usd = price * qty
-        # Binance: m=True → seller is maker → buyer aggressed → "buy" volume
-        # m=False → buyer is maker → seller aggressed → "sell" volume
-        # NOTE: Binance aggTrade m 필드는 OKX와 반대! m=True = taker sell
+        # Binance: m=True → buyer is maker → seller aggressed → taker SELL
+        # m=False → seller is maker → buyer aggressed → taker BUY
         side = "sell" if is_buyer_maker else "buy"
         delta = qty if side == "buy" else -qty
 
@@ -561,4 +570,4 @@ class BinanceStream:
             await self.redis.set("rt:micro:momentum_quality", str(round(mom_quality, 2)), ttl=15)
 
         except Exception as e:
-            logger.debug(f"마이크로스트럭처 집계 에러: {e}")
+            logger.error(f"마이크로스트럭처 집계 에러: {e}", exc_info=True)

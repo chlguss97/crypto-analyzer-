@@ -587,6 +587,7 @@ class PaperTrader:
             flow_result=signal_result,  # FlowML 학습용 원본 보존
             setup=setup, best_price=current_price,
         )
+        pos.remaining_size = size_btc
         self.positions[trade_id] = pos
 
         # 진입 시 같은 방향 카운터 업데이트
