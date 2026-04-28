@@ -129,11 +129,9 @@ class CryptoAnalyzer:
         self.position_manager.risk_manager = self.risk_manager
         await self.position_manager.sync_positions()
 
-        # 캔들 백필
+        # 캔들 백필 (backfill_all이 전체 TF 처리)
         logger.info("캔들 백필 시작...")
         await self.candle_collector.backfill_all()
-        for tf in ["5m", "1m"]:
-            await self.candle_collector.backfill(tf, days=7)
         logger.info("캔들 백필 완료")
 
         # PaperTrader

@@ -1,12 +1,15 @@
 # Commit Log
 
 > 자동 생성 — `scripts/update_commit_log.sh` (매 커밋 후 실행)
-> Updated: 2026-04-28 14:24:03    
-> Total commits: 234 (2026-04-03 → 2026-04-28)
+> Updated: 2026-04-28 16:01:59    
+> Total commits: 237 (2026-04-03 → 2026-04-28)
 
 Claude 가 질문/변경 작업 시 이 파일을 참고해서 과거 변경 이력 컨텍스트를 확보합니다. 수동 편집 금지 — 다음 커밋 시 덮어써집니다.
 
 ## 2026-04-28
+- `5c3a699` fix: Adverse Selection load_config 매초 호출 → 1회 캐싱
+- `12382cb` fix: 대시보드/텔레그램/페이퍼 v2 동기화
+- `9b294f1` refactor: SPEC v2 전면 개편 — CandidateDetector + ML Meta-Label
 - `adab444` feat: maker 강제 + ranging 차단 — 수수료/횡보 손실 근절
 
 ## 2026-04-27

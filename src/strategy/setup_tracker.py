@@ -29,6 +29,11 @@ MIN_TRADES_FOR_DISABLE = 10
 MIN_WIN_RATE = 0.35  # 35%
 
 SETUP_NAMES = {
+    # v2 CandidateDetector
+    "momentum": "Momentum Ignition",
+    "breakout": "Volatility Breakout",
+    "cascade":  "Liquidation Cascade",
+    # 레거시 (기존 데이터 호환)
     "LVL": "Level Bounce",
     "MOM": "Momentum",
     "PB":  "Pullback",

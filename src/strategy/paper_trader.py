@@ -64,7 +64,7 @@ class PaperPosition:
     hold_mode: str = "standard"
     signals_snapshot: dict = field(default_factory=dict)
     flow_result: dict = field(default_factory=dict)  # FlowML 학습용 원본
-    setup: str = "LVL"
+    setup: str = "momentum"
     tp1_hit: bool = False
     tp2_hit: bool = False
     best_price: float = 0.0    # 트레일링용

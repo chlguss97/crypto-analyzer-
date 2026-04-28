@@ -203,29 +203,6 @@ class Database:
         row = await cursor.fetchone()
         return row[0] if row and row[0] else None
 
-    # ── OI / 펀딩비 ──
-
-    async def insert_oi_funding(self, data: dict):
-        """OI/펀딩비 데이터 삽입"""
-        await self._db.execute(
-            """INSERT OR REPLACE INTO oi_funding
-               (symbol, timestamp, open_interest, funding_rate,
-                long_short_ratio_account, long_short_ratio_position)
-               VALUES (:symbol, :timestamp, :open_interest, :funding_rate,
-                       :long_short_ratio_account, :long_short_ratio_position)""",
-            data,
-        )
-        await self._db.commit()
-
-    async def get_oi_funding(self, symbol: str, limit: int = 100) -> list[dict]:
-        cursor = await self._db.execute(
-            """SELECT * FROM oi_funding
-               WHERE symbol=? ORDER BY timestamp DESC LIMIT ?""",
-            (symbol, limit),
-        )
-        rows = await cursor.fetchall()
-        return [dict(r) for r in reversed(rows)]
-
     # ── 트레이드 ──
 
     async def insert_trade(self, trade: dict) -> int:
