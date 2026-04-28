@@ -133,7 +133,9 @@ class BinanceStream:
     def stop(self):
         self._running = False
 
-    async def _handle(self, data: dict):
+    async def _handle(self, raw: dict):
+        # Binance combined stream: {"stream":"...","data":{...}}
+        data = raw.get("data", raw)
         event = data.get("e", "")
         if event == "aggTrade":
             await self._on_agg_trade(data)
