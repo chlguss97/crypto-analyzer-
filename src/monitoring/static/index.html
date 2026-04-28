@@ -1695,27 +1695,29 @@ async function updateSignalsTable() {
     return;
   }
   tbody.innerHTML = data.signals.map(s => {
-    const time = s.ts ? new Date(s.ts).toLocaleString('ko',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'}) : '--';
+    const time = s.ts ? new Date(s.ts * 1000).toLocaleString('ko',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'}) : '--';
     const dir = (s.direction||'--').toUpperCase();
     const dirColor = s.direction==='long'?'var(--green)':s.direction==='short'?'var(--red)':'var(--text-muted)';
-    const str = s.strength != null ? s.strength.toFixed(1) : (s.score != null ? s.score.toFixed(1) : '--');
-    const mlDecision = s.ml_decision || s.ml || '--';
-    const mlColor = mlDecision==='Go'?'var(--green)':mlDecision==='NoGo'?'var(--red)':'var(--text-muted)';
-    const pwin = s.ml_prob != null ? (s.ml_prob*100).toFixed(0)+'%' : '--';
-    const entry = s.entry_price ? '$'+fmt(s.entry_price,0) : '--';
-    const label = s.label || '--';
-    const labelColor = label==='win'?'var(--green)':label==='loss'?'var(--red)':'var(--text-muted)';
-    const pnl = s.pnl_pct != null ? (s.pnl_pct>=0?'+':'')+s.pnl_pct.toFixed(2)+'%' : '--';
+    const str = s.strength != null ? Number(s.strength).toFixed(1) : '--';
+    const mlGo = s.ml_go;
+    const mlDecision = mlGo === 1 ? 'Go' : mlGo === 0 ? 'NoGo' : '--';
+    const mlColor = mlGo===1?'var(--green)':mlGo===0?'var(--red)':'var(--text-muted)';
+    const pwin = s.ml_prob != null && s.ml_prob > 0 ? (s.ml_prob*100).toFixed(0)+'%' : '--';
+    const entry = s.price ? '$'+fmt(s.price,0) : '--';
+    const lbl = s.label;
+    const labelText = lbl === 1 ? 'Win' : lbl === 0 ? 'Loss' : '--';
+    const labelColor = lbl===1?'var(--green)':lbl===0?'var(--red)':'var(--text-muted)';
+    const pnl = s.pnl_pct != null && s.pnl_pct !== 0 ? (s.pnl_pct>=0?'+':'')+Number(s.pnl_pct).toFixed(2)+'%' : '--';
     const pnlColor = s.pnl_pct>0?'var(--green)':s.pnl_pct<0?'var(--red)':'var(--text-muted)';
     return `<tr>
       <td style="color:var(--text-secondary);font-size:11px;">${time}</td>
-      <td style="font-weight:600;font-size:11px;">${s.type||s.candidate||'--'}</td>
+      <td style="font-weight:600;font-size:11px;">${s.candidate_type||'--'}</td>
       <td style="color:${dirColor};font-weight:700;">${dir}</td>
       <td>${str}</td>
       <td style="color:${mlColor};font-weight:600;">${mlDecision}</td>
       <td>${pwin}</td>
       <td>${entry}</td>
-      <td style="color:${labelColor};font-weight:600;">${label}</td>
+      <td style="color:${labelColor};font-weight:600;">${labelText}</td>
       <td style="color:${pnlColor};font-weight:600;">${pnl}</td>
     </tr>`;
   }).join('');

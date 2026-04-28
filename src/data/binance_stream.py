@@ -20,8 +20,6 @@ Binance BTCUSDT 실시간 데이터 스트림 + 마이크로스트럭처 집계.
   rt:micro:vwap              — VWAP + deviation (JSON)
   rt:micro:delta_div         — 델타 다이버전스 (-1/0/+1)
   rt:micro:momentum_quality  — 모멘텀 품질 (0~5)
-  rt:micro:liq_momentum      — 청산 가속 (-1~+1)
-
 기존 Redis 키:
   flow:combined:cvd_5m/15m/1h — CVD
   flow:combined:whale_bias    — 고래 편향
