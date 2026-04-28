@@ -33,11 +33,11 @@ from src.utils.helpers import load_config
 
 logger = logging.getLogger(__name__)
 
-# 백테스트 비용 설정
-TAKER_FEE = 0.0005       # 0.05%
+# 백테스트 비용 설정 (04-28: maker 강제 정책)
+TAKER_FEE = 0.0002       # maker 0.02% (SL 긴급만 taker인데 백테스트는 maker 가정)
 MAKER_FEE = 0.0002       # 0.02%
-SLIPPAGE = 0.0005         # 0.05%
-ROUND_TRIP_COST = 0.001   # 왕복 0.10% (Taker 기준)
+SLIPPAGE = 0.0003         # 0.03% (post-only는 슬리피지 거의 없음)
+ROUND_TRIP_COST = 0.001   # 왕복 0.10% (보수적 유지)
 
 
 @dataclass

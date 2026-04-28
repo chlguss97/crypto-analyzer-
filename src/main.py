@@ -344,6 +344,13 @@ class CryptoAnalyzer:
         direction = result["direction"]
         score = result["score"]
 
+        # 04-28: RANGING 레짐 진입 차단 — 횡보장 6전6패 근절
+        if regime_now == "ranging":
+            if now - getattr(self, "_last_ranging_log", 0) >= 60:
+                self._last_ranging_log = now
+                logger.info(f"[TRADE] 레짐 게이트: RANGING → {setup} {direction.upper()} 진입 차단")
+            return
+
         # 최소 점수 체크
         MIN_ENTRY_SCORE = 5.0
         if score < MIN_ENTRY_SCORE:
@@ -510,9 +517,9 @@ class CryptoAnalyzer:
             tp2 = price - tp2_dist
             tp3 = price - tp3_dist
 
-        # 수수료 필터
-        taker_fee = self.config.get("fees", {}).get("taker", 0.0005)
-        fee_cost = taker_fee * 2 * leverage * 100
+        # 수수료 필터 (04-28: maker 강제 → maker 기준으로 계산)
+        maker_fee = self.config.get("fees", {}).get("maker", 0.0002)
+        fee_cost = maker_fee * 2 * leverage * 100
         tp1_gain = tp1_dist / price * leverage * 100
         if tp1_gain <= fee_cost:
             logger.info(f"[TRADE] TP1({tp1_gain:.1f}%) <= 수수료({fee_cost:.1f}%) → 차단")

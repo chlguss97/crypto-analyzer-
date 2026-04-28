@@ -5,6 +5,33 @@
 
 ---
 
+## 2026-04-28
+
+### Maker 강제 + Ranging 차단 — 수수료/횡보장 손실 근절
+
+거래 분석 결과: 페이퍼 수수료 $502 > PnL, ranging 6전6패(-$440). 두 근본 원인 동시 제거.
+
+**1. 전 주문 Maker(post-only) 강제** (수수료 60% 절감)
+- `executor.py` — 진입: post-only 5회 추격, market 폴백 **완전 제거**. 미체결 시 진입 포기
+- `executor.py` — `_limit_order`도 postOnly=True 강제
+- `executor.py` — 청산: SL/긴급만 market 허용, TP/시간청산은 post-only only
+- `executor.py` — SL 알고 주문도 limit-on-trigger (sl_failsafe가 백업)
+- `paper_trader.py` — 수수료 계산 전부 maker 기준 통일
+- `main.py` — 수수료 필터 taker→maker 기준
+- `backtest/simulator.py` — 백테스트 비용도 maker 기준
+
+**2. RANGING 레짐 진입 차단**
+- `main.py` — 레짐 게이트 추가: ranging이면 모든 셋업 진입 차단
+- `paper_trader.py` — 동일 게이트 추가
+
+**효과 (페이퍼 11건 기준):**
+- 수수료 절감: $305 → $233 (-24%)
+- ranging 6건 제거: -$440 손실 제거
+- 남은 5건: +$159 순수익
+- 총 개선: +$512
+
+---
+
 ## 2026-04-27
 
 ### 전수검사 — CRITICAL 3 + HIGH 9 + MEDIUM 5건 수정

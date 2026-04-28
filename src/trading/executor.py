@@ -13,8 +13,8 @@ LIMIT_TIMEOUT_SEC = 30  # 120→30초: 미체결 시 빠르게 시장가 전환 
 MAX_SLIPPAGE_PCT = 0.1
 
 # 04-16: 수수료 절감 — maker 0.02% vs taker 0.05% → 전 주문 limit post-only 우선
-POST_ONLY_TIMEOUT_SEC = 5        # post-only 체결 대기 (5초 → 총 최대 15초)
-POST_ONLY_MAX_RETRIES = 3        # 가격 추격 시도 횟수
+POST_ONLY_TIMEOUT_SEC = 8        # post-only 체결 대기 (넉넉하게)
+POST_ONLY_MAX_RETRIES = 5        # 가격 추격 시도 횟수 (5회까지 — market 폴백 없음)
 
 
 class OrderExecutor:
@@ -190,8 +190,9 @@ class OrderExecutor:
 
     async def _post_only_entry(self, side: str, size: float, pos_side: str) -> dict | None:
         """
-        Post-only limit 진입 (maker 수수료). 호가 추격 3회 → 실패 시 market 폴백.
-        진입 지연 수 초까지 감수해서 fee 60% 절감 (0.05% → 0.02%).
+        Post-only limit 진입 (maker 수수료 강제).
+        호가 추격 5회 → 실패 시 진입 포기 (market 폴백 없음).
+        수수료 > 수익 구조 근절: maker 0.02% 아니면 안 치는 게 이득.
         """
         contracts = self._btc_to_contracts(size)
         for attempt in range(1, POST_ONLY_MAX_RETRIES + 1):
@@ -201,16 +202,16 @@ class OrderExecutor:
                 best_bid = float(ticker.get("bid") or 0)
                 best_ask = float(ticker.get("ask") or 0)
             except Exception as e:
-                logger.warning(f"ticker 조회 실패 → market 폴백: {e}")
-                return await self._market_order(side, size, pos_side)
+                logger.warning(f"ticker 조회 실패 → 진입 포기 (maker 강제): {e}")
+                return None
 
             if best_bid <= 0 or best_ask <= 0:
-                logger.warning("best bid/ask 0 → market 폴백")
-                return await self._market_order(side, size, pos_side)
+                logger.warning("best bid/ask 0 → 진입 포기")
+                return None
 
-            # maker: 첫 시도를 가장 공격적(시장가 근처)으로, 이후 보수적으로
+            # maker: 매 시도마다 호가 새로 조회 + 점진적 양보
             # BTC $78k 기준 1$ = 0.0013% — 스프레드 수준
-            offset = 1.0 * (attempt - 1)  # 시도1: 0$, 시도2: +1$, 시도3: +2$
+            offset = 1.0 * (attempt - 1)  # 시도1: 0$, 시도2: +1$, ... 시도5: +4$
             if side == "buy":
                 price = round(best_bid - offset, 1)
             else:
@@ -231,20 +232,20 @@ class OrderExecutor:
                 )
                 order_id = order.get("id")
                 logger.info(
-                    f"post-only 진입 시도 {attempt}/{POST_ONLY_MAX_RETRIES}: "
+                    f"post-only ��입 시도 {attempt}/{POST_ONLY_MAX_RETRIES}: "
                     f"{side.upper()} {size} @ ${price} id={order_id}"
                 )
 
-                # 체결 대기 (짧게)
+                # 체결 대기
                 filled = await self._wait_for_fill_fast(order_id, POST_ONLY_TIMEOUT_SEC)
                 if filled:
                     logger.info(
-                        f"✅ post-only 진입 체결: {side.upper()} @ "
+                        f"post-only 진입 체결: {side.upper()} @ "
                         f"${filled.get('average') or filled.get('price')} (maker 0.02%)"
                     )
                     return filled
 
-                # 미체결 → 취소 후 가격 추격
+                # 미체결 → 취��� 후 가격 추���
                 try:
                     await self.exchange.cancel_order(order_id, self.symbol)
                 except Exception:
@@ -253,16 +254,16 @@ class OrderExecutor:
 
             except Exception as e:
                 err_str = str(e)
-                # OKX 51121: post-only reject (크로싱) — 가격 다시 조정해서 재시도
+                # OKX 51121: post-only reject (크로싱) — 가격 다시 조정해서 재��도
                 if "51121" in err_str or "post only" in err_str.lower():
                     logger.debug(f"post-only 거부 (크로싱) → 재시도")
                     continue
                 logger.error(f"post-only 주문 에러 ({attempt}): {e}")
                 await asyncio.sleep(0.5)
 
-        # 모든 추격 실패 → market 폴백 (시그널 손실보다 taker 가 나음)
-        logger.warning("post-only 추격 실패 → market 폴백 (taker 0.05%)")
-        return await self._market_order(side, size, pos_side)
+        # 모든 추격 실패 → 진입 포기 (taker 수수료 > 기대수익이면 안 치는 게 이득)
+        logger.warning("post-only 5회 추격 실패 → 진입 포기 (maker 강제 정책)")
+        return None
 
     async def _wait_for_fill_fast(self, order_id: str, timeout: int) -> dict | None:
         """체결 대기 (500ms 폴링 — post-only 용)"""
@@ -282,7 +283,7 @@ class OrderExecutor:
 
     async def _limit_order(self, side: str, size: float, price: float,
                            pos_side: str) -> dict | None:
-        """지정가 주문 (타임아웃 + 부분체결 처리). size BTC → contracts."""
+        """지정가 주문 (post-only 강제 + 타임아웃 + 부분체결). market 폴백 없음."""
         contracts = self._btc_to_contracts(size)
         for attempt in range(1, MAX_RETRIES + 1):
             try:
@@ -292,10 +293,14 @@ class OrderExecutor:
                     side=side,
                     amount=contracts,
                     price=price,
-                    params={"tdMode": "isolated", "posSide": pos_side},
+                    params={
+                        "tdMode": "isolated",
+                        "posSide": pos_side,
+                        "postOnly": True,  # maker 수수료 강제
+                    },
                 )
                 order_id = order.get("id")
-                logger.info(f"지정가 주문 제출: {side.upper()} {size} @ ${price} (ID: {order_id})")
+                logger.info(f"지정가(post-only) 제출: {side.upper()} {size} @ ${price} (ID: {order_id})")
 
                 # 타임아웃 대기
                 filled_order = await self._wait_for_fill(order_id, LIMIT_TIMEOUT_SEC)
@@ -306,18 +311,23 @@ class OrderExecutor:
                 return await self._handle_unfilled(order_id, size)
 
             except Exception as e:
+                err_str = str(e)
+                if "51121" in err_str or "post only" in err_str.lower():
+                    # post-only 거부 → 가격 조정 후 재시도
+                    if side == "buy":
+                        price *= 0.9995  # 더 낮게
+                    else:
+                        price *= 1.0005  # 더 높게
+                    logger.debug(f"post-only 거부 → 가격 조정 재시도 ({attempt})")
+                    await asyncio.sleep(RETRY_DELAY)
+                    continue
                 logger.error(f"지정가 주문 실패 ({attempt}/{MAX_RETRIES}): {e}")
                 if attempt < MAX_RETRIES:
-                    # 가격 0.05% 조정 후 재시도
-                    if side == "buy":
-                        price *= 1.0005
-                    else:
-                        price *= 0.9995
                     await asyncio.sleep(RETRY_DELAY)
 
-        # 04-15: 리밋 실패 → 시장가 폴백 (시그널 손실 방지). 04-16: reduce_only 구분.
-        logger.warning("지정가 주문 미체결 → 시장가 폴백")
-        return await self._market_order(side, size, pos_side)
+        # market 폴백 없음 — maker 강제 정책
+        logger.warning("지정가(post-only) 미체결 → 진입 포기 (maker 강제 정책)")
+        return None
 
     # ── 이전 _market_order → 04-16: reduce_only 인자 추가됨 (위 정의 참조) ──
 
@@ -391,13 +401,10 @@ class OrderExecutor:
         algo_id = self._gen_algo_id(prefix)
 
         # prefix 로 TP/SL/러너SL 구분 → orderPx 결정
-        is_limit_trigger = prefix.startswith("tp") or prefix == "rsl"
-        if is_limit_trigger:
-            # TP / 러너SL: limit-on-trigger (maker 0.02%)
-            order_px = str(round(trigger_price, 1))
-        else:
-            # 최초 SL: market-on-trigger (안전 우선, taker 0.05%)
-            order_px = "-1"
+        # 04-28: 전 주문 maker 강제 — SL도 limit-on-trigger
+        # SL 미체결 위험은 sl_failsafe(폴링)가 백업
+        is_limit_trigger = True  # 모든 알고를 limit-on-trigger (maker)
+        order_px = str(round(trigger_price, 1))
 
         try:
             await self.exchange.create_order(
@@ -592,28 +599,30 @@ class OrderExecutor:
     async def close_position(self, direction: str, size: float,
                              reason: str = "manual") -> dict | None:
         """
-        포지션 청산 — 04-16: post-only limit 우선 (maker 0.02%) → 실패 시 market 폴백.
-        긴급 청산 사유(sl_failsafe, kill_switch 등)는 즉시 market 으로 처리.
+        포지션 청산 — maker 강제 정책.
+        SL/긴급만 market 허용 (손실 확대 방지), 나머지는 post-only only.
         """
         side = "sell" if direction == "long" else "buy"
         pos_side = "long" if direction == "long" else "short"
 
-        # 긴급 사유 → 지연 없이 market 으로 (손실 확대 방지 우선)
+        # 긴급 사유 → market (SL은 체결이 최우선, 수수료 < 미체결 손실)
         URGENT_REASONS = (
             "sl_failsafe", "sl_hit", "kill_switch", "kill_switch_dashboard",
-            "manual_sl_failed", "emergency", "trail_sl",
+            "manual_sl_failed", "emergency",
         )
         is_urgent = any(u in reason for u in URGENT_REASONS)
 
-        if not is_urgent:
-            # post-only limit 청산 시도
-            order = await self._post_only_close(side, size, pos_side, reason)
-            if order:
-                return order
-            logger.warning(f"post-only 청산 실패 → market 폴백 ({reason})")
+        if is_urgent:
+            return await self._market_order(side, size, pos_side, reduce_only=True)
 
-        # market 폴백 (또는 긴급)
-        return await self._market_order(side, size, pos_side, reduce_only=True)
+        # 일반 청산 (TP, time_exit, trail 등): post-only 강제
+        order = await self._post_only_close(side, size, pos_side, reason)
+        if order:
+            return order
+
+        # post-only 실패해도 market 폴백 없음 — 다음 사이클에서 재시도
+        logger.warning(f"post-only 청산 실패 → 다음 사이클 재시도 ({reason})")
+        return None
 
     async def _post_only_close(self, side: str, size: float, pos_side: str,
                                reason: str) -> dict | None:

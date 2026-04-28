@@ -288,6 +288,12 @@ class PaperTrader:
             if pos.symbol == "BTC-USDT-SWAP" and pos.direction == direction:
                 return None
 
+        # 04-28: RANGING 레짐 진입 차단 — 횡보장 전패 근절
+        regime = self._get_regime()
+        if regime == "ranging":
+            logger.debug(f"[PAPER] 레짐 게이트: RANGING → {setup} {direction.upper()} 차단")
+            return None
+
         # 모멘텀 게이트: 급락 중 Long / 급등 중 Short 차단
         try:
             vel = await self.redis.hgetall("rt:velocity:BTC-USDT-SWAP") if self.redis else {}
@@ -342,8 +348,8 @@ class PaperTrader:
             tp2 = current_price - tp2_dist
             tp3 = current_price - tp3_dist
 
-        # 수수료 필터
-        fee_cost = self.FEE_TAKER * 2 * leverage * 100
+        # 수수료 필터 (04-28: maker 강제 정책)
+        fee_cost = self.FEE_MAKER * 2 * leverage * 100
         tp1_gain = tp1_dist / current_price * leverage * 100
         if tp1_gain <= fee_cost:
             return None
@@ -546,11 +552,8 @@ class PaperTrader:
         """가상 포지션 청산 → 잔고 반영 + DB + ML"""
         # PnL 계산 (수수료 포함)
         raw_pnl_pct = pos.unrealized_pnl_pct(exit_price)
-        # 진입: maker, 청산: sl은 taker, 나머지 maker
-        if "sl" in reason:
-            fee_pct = (self.FEE_MAKER + self.FEE_TAKER) * pos.leverage * 100
-        else:
-            fee_pct = self.FEE_MAKER * 2 * pos.leverage * 100
+        # 04-28: 전 주문 maker 강제 — 진입/청산 모두 maker
+        fee_pct = self.FEE_MAKER * 2 * pos.leverage * 100
         net_pnl_pct = raw_pnl_pct - fee_pct
         pnl_usdt = pos.margin * net_pnl_pct / 100
 
@@ -580,12 +583,9 @@ class PaperTrader:
 
         # ── DB 업데이트 ──
         exit_time = int(time.time() * 1000)
-        # fee_total: 실제 적용된 수수료와 일치시킴
+        # fee_total: 양쪽 maker (04-28 강제 정책)
         notional = pos.margin * pos.leverage
-        if "sl" in reason:
-            fee_total = notional * (self.FEE_MAKER + self.FEE_TAKER)  # 진입maker + 청산taker
-        else:
-            fee_total = notional * self.FEE_MAKER * 2  # 양쪽 maker
+        fee_total = notional * self.FEE_MAKER * 2
         try:
             await self.db.update_trade_exit(pos.trade_id, {
                 "exit_price": exit_price,
