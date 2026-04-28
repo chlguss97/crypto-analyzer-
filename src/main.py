@@ -114,7 +114,8 @@ class CryptoAnalyzer:
         await self.telegram.initialize()
         await self.executor.initialize()
 
-        # ML 상태
+        # ML 상태 + Phase 전환 알림 콜백
+        self.ml_engine.on_phase_change = self._on_ml_phase_change
         logger.info(f"ML: Phase {self.ml_engine.phase}, labeled={self.ml_engine.total_labeled}")
 
         # 잔고 + 리스크
@@ -476,6 +477,28 @@ class CryptoAnalyzer:
             return True
 
         return False
+
+    # ── ML Phase 전환 알림 ──
+
+    async def _on_ml_phase_change(self, old_phase: str, new_phase: str, details: str):
+        """ML Phase 전환 시 텔레그램 알림"""
+        icons = {"A": "\U0001f7e1", "B": "\U0001f7e2", "B+": "\U0001f4a1"}
+        icon = icons.get(new_phase, "\u26a0\ufe0f")
+        msg = (
+            f"{icon} <b>ML Phase 전환: {old_phase} → {new_phase}</b>\n\n"
+            f"{details}\n\n"
+        )
+        if new_phase == "B":
+            msg += "ML이 이제 Go/NoGo 결정을 합니다."
+        elif new_phase == "B+":
+            msg += "마이크로스트럭처 피처가 학습에 추가되었습니다."
+        elif new_phase == "A":
+            msg += "ML 성능 부족 → 룰 기반으로 복귀합니다."
+
+        try:
+            await self.telegram._send(msg)
+        except Exception:
+            pass
 
     # ── 거래 결과 콜백 ──
 

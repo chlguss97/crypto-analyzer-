@@ -78,6 +78,9 @@ class MLDecisionEngine:
         self.go_threshold = ml_cfg.get("go_threshold", 0.55)
         self.expanded_features_at = ml_cfg.get("expanded_features_at", 500)
 
+        # 알림 콜백 (텔레그램 등 — main.py에서 설정)
+        self.on_phase_change = None  # async def(old_phase, new_phase, details_str)
+
         self.model = None
         self.scaler = None
         self.trained = False
@@ -158,7 +161,16 @@ class MLDecisionEngine:
         Args:
             labeled_signals: DB에서 가져온 [{"features": json, "label": 0|1, "entry_executed": 0|1}, ...]
         """
+        prev_labeled = self.total_labeled
         self.total_labeled = len(labeled_signals)
+
+        # 마일스톤 알림 (100, 200, 500, 1000건)
+        for ms in [100, 200, 500, 1000]:
+            if prev_labeled < ms <= self.total_labeled:
+                self._notify_phase_change(
+                    self.phase, self.phase,
+                    f"마일스톤: {ms}건 라벨 도달! (총 {self.total_labeled}건)"
+                )
 
         # Phase A → B 전환 체크
         if self.total_labeled >= self.min_samples and self.phase == "A":
@@ -261,14 +273,18 @@ class MLDecisionEngine:
             )
             if self.consecutive_bad_oos >= 2:
                 logger.error("[ML] OOS 2연속 미달 → Phase A 복귀")
+                old_phase = self.phase
                 self.phase = "A"
                 self.trained = False
                 self.model = None
                 self.scaler = None
+                self._notify_phase_change(old_phase, "A",
+                    f"OOS {oos_acc:.1%} 2연속 미달 → 룰 기반 복귀")
             return
 
         # 모델 교체
         self.consecutive_bad_oos = 0
+        old_phase = self.phase
         self.model = model
         self.scaler = scaler
         self.trained = True
@@ -282,6 +298,16 @@ class MLDecisionEngine:
         sorted_idx = np.argsort(importances)[::-1]
         top5 = [(self.feature_names[i], round(importances[i], 3)) for i in sorted_idx[:5]]
         logger.info(f"[ML] Top 5 피처: {top5}")
+
+        # Phase 전환 알림
+        if old_phase != "B":
+            self._notify_phase_change(old_phase, "B",
+                f"OOS {oos_acc:.1%} | {len(self.feature_names)}피처 | Top: {top5[0][0]}")
+
+        # 피처 확장 알림
+        if len(self.feature_names) > len(CORE_FEATURES) and old_phase == "B":
+            self._notify_phase_change("B", "B+",
+                f"피처 {len(CORE_FEATURES)}→{len(self.feature_names)} 확장 | OOS {oos_acc:.1%}")
 
         self._save()
 
@@ -319,6 +345,20 @@ class MLDecisionEngine:
             "recent_nogo_miss": round(nogo_miss_rate, 1),
             "consecutive_bad_oos": self.consecutive_bad_oos,
         }
+
+    def _notify_phase_change(self, old_phase: str, new_phase: str, details: str):
+        """Phase 전환 알림 (텔레그램 등)"""
+        logger.warning(f"[ML] Phase 전환: {old_phase} → {new_phase} | {details}")
+        if self.on_phase_change:
+            import asyncio
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    asyncio.ensure_future(self.on_phase_change(old_phase, new_phase, details))
+                else:
+                    loop.run_until_complete(self.on_phase_change(old_phase, new_phase, details))
+            except Exception as e:
+                logger.debug(f"Phase 알림 전송 실패: {e}")
 
     # ════════════════════════════════════════
     #  저장 / 로드
