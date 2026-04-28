@@ -672,7 +672,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
   <div class="tab-content" id="tab-ml">
     <style>@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}</style>
 
-    <!-- FlowEngine Status Bar -->
+    <!-- CandidateDetector v2 Status Bar -->
     <div class="card" style="margin-bottom:14px;padding:16px 22px;">
       <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;">
         <div style="display:flex;align-items:center;gap:10px;">
@@ -900,16 +900,6 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
       </div>
     </div>
 
-    <!-- News / Event Filter -->
-    <div class="card" style="margin-bottom:24px;">
-      <div class="card-header"><div style="display:flex;align-items:center;"><span class="card-title">Economic Events Filter</span><span class="help" data-tip="FOMC, CPI, NFP 등 주요 경제 이벤트 시간대에 매매 자동 차단.&#10;급변동으로 인한 손실 방지를 위함.">?</span></div></div>
-      <div id="newsStatus" style="padding:12px;border-radius:6px;background:var(--bg-surface);font-size:13px;font-weight:600;text-align:center;margin-bottom:14px;">
-        Loading...
-      </div>
-      <div style="font-size:11px;font-weight:700;color:var(--text-muted);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.8px;">Upcoming Events (next 7 days)</div>
-      <div id="upcomingEvents" style="font-size:12px;color:var(--text-secondary);">--</div>
-    </div>
-
     <!-- Bot System Status -->
     <div class="card" style="margin-bottom:24px;">
       <div class="card-header"><div style="display:flex;align-items:center;"><span class="card-title">System Status</span><span class="help" data-tip="봇 프로세스 상태, 마지막 하트비트, ML 활성화 여부 등 시스템 정보.">?</span></div></div>
@@ -1034,10 +1024,10 @@ async function updateSignals() {
 
   // 현재 시그널 or 마지막 시그널 (30초 이내)
   const ls = data.last_signal;
-  const hasLive = (data.candidate || data.setup) != null;
+  const hasLive = data.candidate != null;
   const hasLast = ls != null;
-  const score = hasLive ? (data.strength||data.score) : (hasLast ? (ls.strength||ls.score) : 0);
-  const setup = hasLive ? (data.candidate||data.setup) : (hasLast ? (ls.candidate||ls.setup) : null);
+  const score = hasLive ? (data.strength||0) : (hasLast ? (ls.strength||0) : 0);
+  const setup = hasLive ? data.candidate : (hasLast ? ls.candidate : null);
   const dir = hasLive ? data.direction : (hasLast ? ls.direction : 'neutral');
 
   const scoreEl = document.getElementById('infoSignalScore');
@@ -1093,7 +1083,7 @@ function switchTab(tabName, btn) {
   // Refresh data for the active tab
   if (tabName === 'paper') updatePaperTab();
   else if (tabName === 'ml') updateEngineTab();
-  else if (tabName === 'risk') { updateRiskState(); updateNews(); updateSystemStatus(); }
+  else if (tabName === 'risk') { updateRiskState(); updateSystemStatus(); }
 }
 
 // ── Unit state ──
@@ -1483,46 +1473,16 @@ async function updateRiskState() {
   document.getElementById('riskBlocked').style.display = (data.daily_blocked || data.weekly_blocked) ? 'block' : 'none';
 }
 
-// ── News Filter ──
-async function updateNews() {
-  const data = await api('/api/news');
-  if (!data) return;
-
-  const statusEl = document.getElementById('newsStatus');
-  if (data.blocked) {
-    statusEl.textContent = data.reason || 'Event blackout active';
-    statusEl.style.background = 'var(--red)';
-    statusEl.style.color = 'white';
-  } else {
-    statusEl.textContent = 'No active blackout';
-    statusEl.style.background = 'var(--bg-surface)';
-    statusEl.style.color = 'var(--green)';
-  }
-
-  const upEl = document.getElementById('upcomingEvents');
-  const upcoming = data.upcoming || [];
-  if (upcoming.length === 0) {
-    upEl.textContent = '예정된 이벤트 없음';
-  } else {
-    upEl.innerHTML = upcoming.slice(0, 5).map(e => {
-      const days = Math.floor(e.minutes_until / 1440);
-      const hours = Math.floor((e.minutes_until % 1440) / 60);
-      const time = days > 0 ? `${days}d ${hours}h` : `${hours}h`;
-      return `<div style="margin-bottom:4px;"><b>${e.name}</b> -- ${time} later (+/-${e.buffer_min}min blackout)</div>`;
-    }).join('');
-  }
-}
-
 // ── Engine State (Trading tab card) ──
 async function updateEngineState() {
   const data = await api('/api/engine/state');
   if (!data) return;
 
-  document.getElementById('flowSignal').textContent = data.candidate || data.setup || 'none';
+  document.getElementById('flowSignal').textContent = data.candidate || 'none';
   const dirEl = document.getElementById('flowDir');
   dirEl.textContent = (data.direction||'--').toUpperCase();
   dirEl.style.color = data.direction==='long'?'var(--green)':data.direction==='short'?'var(--red)':'var(--text-muted)';
-  document.getElementById('flowScore').textContent = ((data.strength!=null?data.strength:data.score)||0).toFixed(1);
+  document.getElementById('flowScore').textContent = (data.strength||0).toFixed(1);
   const streakEl = document.getElementById('flowTrend');
   streakEl.textContent = (data.trend||'--').toUpperCase();
   streakEl.style.color = data.trend==='up'?'var(--green)':data.trend==='down'?'var(--red)':'var(--text-muted)';
@@ -1778,7 +1738,6 @@ updatePaperStats();
 updateRegime();
 updateEngineState();
 updateRiskState();
-updateNews();
 updateSystemStatus();
 
 // Periodic refresh
@@ -1788,7 +1747,6 @@ setInterval(updateRiskState, 10000);
 setInterval(updateEngineTab, 15000);
 setInterval(updatePaperStats, 15000);
 setInterval(updateRegime, 15000);
-setInterval(updateNews, 60000);
 setInterval(updateSystemStatus, 5000);
 
 // ── Language Toggle ──
