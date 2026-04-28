@@ -1,13 +1,39 @@
 {
-  "ts": 1777334391,
-  "ts_iso": "2026-04-27T23:59:51.647028+00:00",
-  "balance": 210.51,
+  "ts": 1777335299,
+  "ts_iso": "2026-04-28T00:14:59.404964+00:00",
+  "balance": 210.57,
   "autotrading": "on",
-  "regime": "unknown",
+  "regime": "ranging",
   "trade_state": {},
-  "positions": {},
-  "streak": 4,
-  "daily_pnl": -15.13,
+  "positions": {
+    "BTC/USDT:USDT": {
+      "trade_id": 51,
+      "symbol": "BTC/USDT:USDT",
+      "direction": "short",
+      "entry_price": 77295.7,
+      "size": 0.02,
+      "remaining_size": 0.02,
+      "leverage": 20,
+      "sl_price": 77682.1,
+      "tp1_price": 77102.8,
+      "tp2_price": 76329.4,
+      "tp3_price": 75749.7,
+      "grade": "B+",
+      "entry_time": 1777335023000,
+      "tp1_filled": 0,
+      "tp2_filled": 0,
+      "tp3_filled": 0,
+      "runner_mode": 0,
+      "best_price": 0.0,
+      "trail_distance": 0.0,
+      "manual_sl_override": 0,
+      "manual_tp_override": 0,
+      "algo_ids": "{\"sl\": \"sl17773350210204730\", \"tp1\": \"tp117773350211481605\", \"tp2\": null, \"tp3\": null}",
+      "hold_minutes": 4
+    }
+  },
+  "streak": 0,
+  "daily_pnl": 0.0,
   "paper": {
     "balance": 7265.1,
     "initial_balance": 7500.0,
@@ -17,9 +43,24 @@
     "win_rate": 22.2,
     "daily_pnl_pct": 0.0,
     "loss_streak": 5,
-    "active_positions": 0,
+    "active_positions": 1,
     "shadow_missed": 0,
     "shadow_correct": 0
   },
-  "pending_algos": []
+  "pending_algos": [
+    {
+      "id": "tp117773350211481605",
+      "type": "trigger",
+      "trigger": "77102.8",
+      "side": "buy",
+      "sz": "1"
+    },
+    {
+      "id": "sl17773350210204730",
+      "type": "trigger",
+      "trigger": "77682.1",
+      "side": "buy",
+      "sz": "2"
+    }
+  ]
 }
