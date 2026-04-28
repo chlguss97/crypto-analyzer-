@@ -584,7 +584,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
       </div>
       <div style="text-align:center;">
         <div class="big-num" id="flowStructure" style="font-size:20px;color:var(--text-muted);">--</div>
-        <span class="big-sub">Volatility</span>
+        <span class="big-sub">Daily P&L</span>
       </div>
       <div style="text-align:center;">
         <div class="big-num" id="flowStreak" style="font-size:20px;color:var(--text-muted);">0</div>
@@ -618,13 +618,13 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
       <div class="card">
         <div class="card-header"><div style="display:flex;align-items:center;"><span class="card-title" data-i18n="signal.title">Signal Analysis</span><span class="help" data-tip="CandidateDetector v2 시그널 분석 결과입니다.">?</span></div></div>
         <div class="big-num neutral" id="infoSignalScore">--</div>
-        <div class="big-sub">Score / 10</div>
+        <div class="big-sub">Strength</div>
         <div style="margin-top: 18px;">
-          <div class="metric"><span class="metric-label">Setup</span><span class="metric-value" id="infoGrade">--</span></div>
+          <div class="metric"><span class="metric-label">Candidate</span><span class="metric-value" id="infoGrade">--</span></div>
           <div class="metric"><span class="metric-label">Direction</span><span class="metric-value" id="infoDirection">--</span></div>
-          <div class="metric"><span class="metric-label">Trend</span><span class="metric-value" id="infoLong">--</span></div>
+          <div class="metric"><span class="metric-label">ML Phase</span><span class="metric-value" id="infoLong">--</span></div>
           <div class="metric"><span class="metric-label">Regime</span><span class="metric-value" id="infoShort">--</span></div>
-          <div class="metric"><span class="metric-label">Volatility</span><span class="metric-value" id="infoBonus">--</span></div>
+          <div class="metric"><span class="metric-label">P(Win)</span><span class="metric-value" id="infoBonus">--</span></div>
         </div>
       </div>
 
@@ -876,15 +876,15 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
 
     <!-- Real Trading Risk State -->
     <div class="card" style="margin-bottom:24px;">
-      <div class="card-header"><div style="display:flex;align-items:center;"><span class="card-title">Real Trading Risk Limits</span><span class="help" data-tip="실거래 손실 한도 모니터링.&#10;&#8226; 일일 -10% 도달 시 -> 당일 매매 자동 중단&#10;&#8226; 주간 -20% 도달 시 -> 주간 매매 자동 중단&#10;3연패: 5분 쿨다운 / 5연패: 30분 쿨다운">?</span></div></div>
+      <div class="card-header"><div style="display:flex;align-items:center;"><span class="card-title">Real Trading Risk Limits (v2)</span><span class="help" data-tip="SPEC v2 손실 한도&#10;&#8226; 일일 -5% → 당일 매매 중단&#10;&#8226; 주간 -10% → 주간 매매 중단&#10;&#8226; DD -12% → 봇 정지&#10;&#8226; 5연패 → 1시간 쿨다운&#10;&#8226; +3% → 마진 축소, +5% → 추가 진입 차단">?</span></div></div>
       <div class="grid" style="grid-template-columns: repeat(4, 1fr); gap: 12px;">
         <div style="text-align:center;">
           <div class="big-num" id="riskDailyPnl" style="font-size:28px;">0%</div>
-          <span class="big-sub">Today's P&L (Stop -10%)</span>
+          <span class="big-sub">Today's P&L (Stop -5%)</span>
         </div>
         <div style="text-align:center;">
           <div class="big-num" id="riskWeeklyPnl" style="font-size:28px;">0%</div>
-          <span class="big-sub">This Week (Stop -20%)</span>
+          <span class="big-sub">This Week (Stop -10%)</span>
         </div>
         <div style="text-align:center;">
           <div class="big-num" id="riskStreak" style="font-size:28px;">0</div>
@@ -1042,9 +1042,10 @@ async function updateSignals() {
   dirEl.textContent = dir.toUpperCase();
   dirEl.className = 'metric-value ' + (dir === 'long' ? 'positive' : dir === 'short' ? 'negative' : 'neutral');
 
-  document.getElementById('infoLong').textContent = data.trend || '--';
+  document.getElementById('infoLong').textContent = data.ml_phase || '--';
   document.getElementById('infoShort').textContent = data.regime || '--';
-  document.getElementById('infoBonus').textContent = data.vol_band || '--';
+  const prob = data.ml_prob;
+  document.getElementById('infoBonus').textContent = (prob != null && prob >= 0) ? (prob * 100).toFixed(0) + '%' : '--';
 }
 
 async function updateTrades() {
@@ -1494,7 +1495,8 @@ async function updateEngineState() {
   mlEl.textContent = mlProb ? `${mlPhase} ${mlProb}` : mlPhase;
   mlEl.style.color = mlPhase === 'B' ? 'var(--green)' : mlPhase === 'A' ? 'var(--yellow)' : 'var(--text-muted)';
 
-  document.getElementById('flowStructure').textContent = (data.vol_band || '--').toUpperCase();
+  const dp = data.daily_pnl || 0;
+  document.getElementById('flowStructure').textContent = (dp >= 0 ? '+' : '') + dp.toFixed(1) + '%';
   const fstreakEl = document.getElementById('flowStreak');
   fstreakEl.textContent = data.streak || 0;
   fstreakEl.style.color = (data.streak||0)>=3?'var(--red)':'var(--text-primary)';

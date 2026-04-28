@@ -1,12 +1,13 @@
 # Commit Log
 
 > 자동 생성 — `scripts/update_commit_log.sh` (매 커밋 후 실행)
-> Updated: 2026-04-28 16:09:28    
-> Total commits: 238 (2026-04-03 → 2026-04-28)
+> Updated: 2026-04-28 16:13:57    
+> Total commits: 239 (2026-04-03 → 2026-04-28)
 
 Claude 가 질문/변경 작업 시 이 파일을 참고해서 과거 변경 이력 컨텍스트를 확보합니다. 수동 편집 금지 — 다음 커밋 시 덮어써집니다.
 
 ## 2026-04-28
+- `e510e1c` fix: 프론트엔드 레거시 완전 제거
 - `bbf3369` fix: 레거시 잔재 전수 정리 — dead code/중복 백필/옛 셋업명
 - `5c3a699` fix: Adverse Selection load_config 매초 호출 → 1회 캐싱
 - `12382cb` fix: 대시보드/텔레그램/페이퍼 v2 동기화
