@@ -18025,3 +18025,45 @@ Traceback (most recent call last):
     if df_1m is not None and len(df_1m) >= 21:
        ^^^^^
 NameError: name 'df_1m' is not defined
+2026-04-28 21:45:06 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 81, in detect
+    mom["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 21:45:09 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 81, in detect
+    mom["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 21:45:11 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 81, in detect
+    mom["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
