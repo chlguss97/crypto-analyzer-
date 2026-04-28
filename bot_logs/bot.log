@@ -3546,3 +3546,4 @@ Traceback (most recent call last):
        ^^^^^
 NameError: name 'df_1m' is not defined
 2026-04-28 09:18:00 [WARNING] src.data.ws_stream: WebSocket 끊김: no close frame received or sent → 5초 후 재연결 (시도 1)
+2026-04-28 09:31:35 [WARNING] src.data.ws_stream: WebSocket 끊김: no close frame received or sent → 5초 후 재연결 (시도 1)
