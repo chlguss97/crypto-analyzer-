@@ -1,12 +1,13 @@
 # Commit Log
 
 > 자동 생성 — `scripts/update_commit_log.sh` (매 커밋 후 실행)
-> Updated: 2026-04-28 17:19:28    
-> Total commits: 245 (2026-04-03 → 2026-04-28)
+> Updated: 2026-04-28 17:24:42    
+> Total commits: 246 (2026-04-03 → 2026-04-28)
 
 Claude 가 질문/변경 작업 시 이 파일을 참고해서 과거 변경 이력 컨텍스트를 확보합니다. 수동 편집 금지 — 다음 커밋 시 덮어써집니다.
 
 ## 2026-04-28
+- `d79e607` fix: signals 테이블 JS 필드명 4건 수정 + dead doc 제거
 - `73a25e2` refactor: 레거시 파일명 제거 — flow_engine→candidate_detector, flow_ml→ml_engine
 - `65ab33c` fix: CRITICAL — PaperPosition 생성자 필수 필드 누락 (grade/score/entry_time)
 - `18052e3` feat: ML Phase 전환 + 마일스톤 텔레그램 즉시 알림

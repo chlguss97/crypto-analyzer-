@@ -211,11 +211,6 @@ class CryptoAnalyzer:
         if now - self._last_trade_time < min_interval:
             return
 
-        # 학습 중 차단
-        learning = (await self.redis.get("sys:learning")) == "1"
-        if learning:
-            return
-
         # ── 캔들 로드 ──
         candles_1m = await self.db.get_candles(self.symbol, "1m", limit=100)
         candles_5m = await self.db.get_candles(self.symbol, "5m", limit=100)
@@ -603,13 +598,13 @@ class CryptoAnalyzer:
                         barrier = "sl"
                         pnl = -sl_pct
                     elif elapsed >= max_hold:
-                        label = 0
                         barrier = "time"
-                        # 시간 초과 시 현재 PnL 계산
+                        # 시간 초과 시 현재 PnL로 라벨 결정 (수익이면 1, 손실이면 0)
                         if sig_dir == "long":
                             pnl = (price - sig_price) / sig_price * leverage * 100
                         else:
                             pnl = (sig_price - price) / sig_price * leverage * 100
+                        label = 1 if pnl > 0 else 0
 
                     if label >= 0:
                         await self.db.update_signal_label(

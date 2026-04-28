@@ -858,15 +858,11 @@ class PositionManager:
                     pos.last_new_high_time = _t.time()
             return
 
-        # 실시간 ATR 캐싱 (Redis에서 5초마다 갱신)
+        # ATR 캐싱 — rt:atr는 미사용(v2), 가격 기반 0.2% 폴백 사용
         now = _t.time()
         if now - getattr(self, '_atr_cache_ts', 0) > 5:
             try:
-                atr_str = await self.redis.get("rt:atr:BTC-USDT-SWAP")
-                if atr_str:
-                    self._cached_atr = float(atr_str)
-                else:
-                    self._cached_atr = current_price * 0.002  # 0.2% 폴백
+                self._cached_atr = current_price * 0.002  # 0.2% ≈ 5m ATR 근사
             except Exception:
                 self._cached_atr = current_price * 0.002
             self._atr_cache_ts = now

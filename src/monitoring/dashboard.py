@@ -431,15 +431,12 @@ async def get_market():
     """실시간 시장 데이터 (Redis 기반)"""
     await _ensure_initialized()
     ticker = await redis.hgetall("rt:ticker:BTC-USDT-SWAP")
-    oi = await redis.get("rt:oi:BTC-USDT-SWAP")
-    funding = await redis.get("rt:funding:BTC-USDT-SWAP")
-    ls_ratio = await redis.get("rt:ls_ratio:BTC-USDT-SWAP")
 
     return {
         "ticker": ticker or {},
-        "open_interest": float(oi) if oi else None,
-        "funding_rate": float(funding) if funding else None,
-        "long_short_ratio": float(ls_ratio) if ls_ratio else None,
+        "open_interest": None,   # OI collector 미사용 (v2)
+        "funding_rate": None,
+        "long_short_ratio": None,
     }
 
 
