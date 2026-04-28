@@ -6,7 +6,7 @@ CandidateDetector v1 — 단순 후보 감지 + 피처 추출
   B. Volatility Breakout — BB 스퀴즈→돌파 (Bollinger, Turtle Trading)
   C. Liquidation Cascade — $500K+ 청산 폭주 (crypto 고유)
 
-후보 감지만 담당. 진입 결정은 ML(flow_ml.py)이 함.
+후보 감지만 담당. 진입 결정은 ML(ml_engine.py)이 함.
 """
 
 import json

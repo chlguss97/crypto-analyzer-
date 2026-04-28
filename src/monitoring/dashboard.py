@@ -566,7 +566,7 @@ async def get_setup_tracker():
 async def get_flow_ml_stats():
     """MLDecisionEngine 모델 통계"""
     try:
-        from src.strategy.flow_ml import MLDecisionEngine as FlowML
+        from src.strategy.ml_engine import MLDecisionEngine as FlowML
         ml = FlowML()
         return ml.get_stats()
     except Exception as e:
@@ -708,7 +708,7 @@ async def get_engine_overview():
     # ML 상태
     ml_stats = {}
     try:
-        from src.strategy.flow_ml import MLDecisionEngine as FlowML
+        from src.strategy.ml_engine import MLDecisionEngine as FlowML
         ml_stats = FlowML().get_stats()
     except Exception:
         pass

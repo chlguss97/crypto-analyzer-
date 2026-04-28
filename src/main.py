@@ -29,8 +29,8 @@ from src.data.binance_stream import BinanceStream
 from src.engine.base import BaseIndicator  # to_dataframe 유틸
 
 # ── 새 구조 ──
-from src.strategy.flow_engine import CandidateDetector
-from src.strategy.flow_ml import MLDecisionEngine
+from src.strategy.candidate_detector import CandidateDetector
+from src.strategy.ml_engine import MLDecisionEngine
 from src.trading.leverage import LeverageCalculator
 from src.trading.risk_manager import RiskManager
 from src.trading.executor import OrderExecutor
