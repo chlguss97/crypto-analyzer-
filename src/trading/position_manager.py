@@ -543,7 +543,12 @@ class PositionManager:
     async def _process_position(self, symbol: str, pos: "Position", current_price: float):
         """단일 포지션 처리 — lock 안에서 호출됨"""
         # 0. Adverse Selection — 진입 후 90초 내 구조적 역행 감지
-        as_cfg = load_config().get("adverse_selection", {})
+        if not hasattr(self, '_as_cfg'):
+            try:
+                self._as_cfg = load_config().get("adverse_selection", {})
+            except Exception:
+                self._as_cfg = {}
+        as_cfg = self._as_cfg
         if as_cfg.get("enabled", False) and not pos.runner_mode:
             elapsed = pos.hold_minutes * 60  # 초 단위
             window = as_cfg.get("window_sec", 90)
