@@ -763,11 +763,11 @@ class PaperTrader:
         except Exception as e:
             logger.error(f"[PAPER] DB update_trade_exit 실패 (ID:{pos.trade_id}): {e}")
 
-        # ── ML 학습 (FlowML — flow_result 원본 전달) ──
+        # ── ML 결과 기록 ──
         regime = self._get_regime()
-        if self.flow_ml and pos.flow_result:
-            # net_pnl_pct는 이미 수수료 차감됨 → fee_pct=0 (이중공제 방지)
-            self.flow_ml.record_trade(pos.flow_result, net_pnl_pct, 0)
+        if self.flow_ml:
+            label = 1 if net_pnl_pct > 0 else 0
+            self.flow_ml.record_decision_result(True, label)
 
         # 시그널 기여도 추적
         if self.signal_tracker:
@@ -890,9 +890,8 @@ class PaperTrader:
 
         if potential > 1.0:
             self._stats["shadow_missed"] += 1
-            if self.flow_ml and s.flow_result:
-                # FlowML.record_trade(flow_result, pnl_pct, fee_pct)
-                self.flow_ml.record_trade(s.flow_result, potential * 0.5, 0)
+            if self.flow_ml:
+                self.flow_ml.record_decision_result(False, 1)  # 놓친 수익 기회
             logger.info(
                 f"[PAPER-SHADOW] 놓친 기회: {s.direction.upper()} "
                 f"잠재 PnL: {potential:+.1f}% 점수 {s.score:.1f}"

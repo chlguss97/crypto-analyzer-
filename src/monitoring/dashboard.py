@@ -221,12 +221,12 @@ async def get_position():
 @app.get("/api/signals")
 async def get_signals():
     await _ensure_initialized()
-    """FlowEngine 최신 상태 (sys:trade_state)"""
+    """CandidateDetector + ML Meta-Label 최신 상태 (sys:trade_state)"""
     trade_state = await redis.get_json("sys:trade_state")
     if not trade_state:
-        trade_state = {"setup": None, "direction": "neutral", "score": 0,
-                       "trend": "neutral", "regime": "ranging", "vol_band": "mid",
-                       "session": "unknown", "streak": 0}
+        trade_state = {"candidate": None, "direction": "neutral", "strength": 0,
+                       "ml_phase": "cold", "ml_prob": 0.0,
+                       "regime": "ranging", "streak": 0, "daily_pnl": 0.0}
     return trade_state
 
 
@@ -564,13 +564,13 @@ async def get_setup_tracker():
 
 @app.get("/api/ml/flow-stats")
 async def get_flow_ml_stats():
-    """FlowML 모델 통계"""
+    """MLDecisionEngine 모델 통계"""
     try:
-        from src.strategy.flow_ml import FlowML
+        from src.strategy.flow_ml import MLDecisionEngine as FlowML
         ml = FlowML()
         return ml.get_stats()
     except Exception as e:
-        return {"trained": False, "samples": 0, "error": str(e)}
+        return {"trained": False, "total_labeled": 0, "error": str(e)}
 
 
 @app.get("/api/risk/state")
@@ -587,21 +587,22 @@ async def get_risk_state():
         "weekly_pnl_pct": float(weekly),
         "streak": int(streak),
         "cooldown_remaining_min": max(0, (int(cooldown) - int(_t.time())) // 60),
-        "daily_limit": -10.0,
-        "weekly_limit": -20.0,
-        "daily_blocked": float(daily) <= -10.0,
-        "weekly_blocked": float(weekly) <= -20.0,
+        "daily_limit": -5.0,
+        "weekly_limit": -10.0,
+        "daily_blocked": float(daily) <= -5.0,
+        "weekly_blocked": float(weekly) <= -10.0,
     }
 
 
 @app.get("/api/engine/state")
 async def get_engine_state():
-    """FlowEngine v1 실시간 상태"""
+    """CandidateDetector + ML Meta-Label 실시간 상태"""
     await _ensure_initialized()
     state = await redis.get_json("sys:trade_state")
     if not state:
-        state = {"setup": None, "direction": "neutral", "score": 0,
-                 "trend": "neutral", "regime": "ranging", "streak": 0}
+        state = {"candidate": None, "direction": "neutral", "strength": 0,
+                 "ml_phase": "cold", "ml_prob": 0.0,
+                 "regime": "ranging", "streak": 0, "daily_pnl": 0.0}
     return state
 
 
@@ -635,8 +636,9 @@ async def get_engine_overview():
 
     # 2) engine state
     engine_state = await redis.get_json("sys:trade_state") or {
-        "setup": None, "direction": "neutral", "score": 0,
-        "trend": "neutral", "structure": "unknown", "streak": 0,
+        "candidate": None, "direction": "neutral", "strength": 0,
+        "ml_phase": "cold", "ml_prob": 0.0,
+        "regime": "ranging", "streak": 0, "daily_pnl": 0.0,
     }
 
     # 3) SetupTracker 요약
@@ -706,7 +708,7 @@ async def get_engine_overview():
     # ML 상태
     ml_stats = {}
     try:
-        from src.strategy.flow_ml import FlowML
+        from src.strategy.flow_ml import MLDecisionEngine as FlowML
         ml_stats = FlowML().get_stats()
     except Exception:
         pass
@@ -720,3 +722,17 @@ async def get_engine_overview():
         "ml": ml_stats,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
+
+
+@app.get("/api/signals-db")
+async def get_signals_db():
+    """signals 테이블 최근 50건 조회"""
+    await _ensure_initialized()
+    try:
+        cursor = await db._db.execute(
+            "SELECT * FROM signals ORDER BY ts DESC LIMIT 50"
+        )
+        rows = await cursor.fetchall()
+        return {"signals": [dict(r) for r in rows], "count": len(rows)}
+    except Exception as e:
+        return {"signals": [], "count": 0, "error": str(e)}

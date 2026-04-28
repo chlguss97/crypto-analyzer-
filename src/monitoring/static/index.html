@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CryptoAnalyzer v1.0</title>
+<title>CryptoAnalyzer v2</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -521,7 +521,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
       </label>
       <span class="auto-status" id="autoStatus" style="color:var(--text-muted)">OFF</span>
       <div style="width:1px;height:24px;background:var(--border);margin:0 8px;"></div>
-      <span style="font-size:12px;color:var(--green);font-weight:600;">FlowEngine v1</span>
+      <span style="font-size:12px;color:var(--green);font-weight:600;">CandidateDetector v2</span>
       <div style="flex:1"></div>
       <button class="btn-close-pos" onclick="closeAllPositions()">Close All Positions</button>
       <button class="btn-close-pos" onclick="closeLong()">Close Long</button>
@@ -556,15 +556,15 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
   </div>
 
 
-  <!-- FlowEngine Status -->
+  <!-- CandidateDetector v2 Status -->
   <div class="card" style="margin-bottom:24px;">
     <div class="card-header">
-      <div style="display:flex;align-items:center;"><span class="card-title">FlowEngine Status</span><span class="help" data-tip="오더플로우 엔진 상태&#10;&#8226; Signal: 현재 시그널 (FLOW / none)&#10;&#8226; Direction: 진입 방향&#10;&#8226; Score: 확신도 (0~10)&#10;&#8226; Trend: HTF 추세 (1d/4h)&#10;&#8226; Flow: CVD 방향&#10;&#8226; Streak: 연패">?</span></div>
+      <div style="display:flex;align-items:center;"><span class="card-title">CandidateDetector v2 Status</span><span class="help" data-tip="CandidateDetector v2 상태&#10;&#8226; Candidate: 현재 감지된 셋업&#10;&#8226; Direction: 진입 방향&#10;&#8226; Strength: 확신도 (0~10)&#10;&#8226; Trend: HTF 추세&#10;&#8226; ML: Phase + P(Win)&#10;&#8226; Streak: 연패">?</span></div>
     </div>
-    <div class="grid" style="grid-template-columns: repeat(6, 1fr); gap: 12px; margin-bottom:12px;">
+    <div class="grid" style="grid-template-columns: repeat(7, 1fr); gap: 12px; margin-bottom:12px;">
       <div style="text-align:center;">
         <div class="big-num" id="flowSignal" style="font-size:24px;">--</div>
-        <span class="big-sub">Signal</span>
+        <span class="big-sub">Candidate</span>
       </div>
       <div style="text-align:center;">
         <div class="big-num" id="flowDir" style="font-size:24px;">--</div>
@@ -572,11 +572,15 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
       </div>
       <div style="text-align:center;">
         <div class="big-num" id="flowScore" style="font-size:24px;">--</div>
-        <span class="big-sub">Score</span>
+        <span class="big-sub">Strength</span>
       </div>
       <div style="text-align:center;">
         <div class="big-num" id="flowTrend" style="font-size:24px;">--</div>
         <span class="big-sub">Trend</span>
+      </div>
+      <div style="text-align:center;">
+        <div class="big-num" id="flowML" style="font-size:20px;color:var(--text-muted);">--</div>
+        <span class="big-sub">ML</span>
       </div>
       <div style="text-align:center;">
         <div class="big-num" id="flowStructure" style="font-size:20px;color:var(--text-muted);">--</div>
@@ -612,7 +616,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
     <!-- Row 1: Signal + Market -->
     <div class="grid" style="grid-template-columns: 1fr 1fr;">
       <div class="card">
-        <div class="card-header"><div style="display:flex;align-items:center;"><span class="card-title" data-i18n="signal.title">Signal Analysis</span><span class="help" data-tip="FlowEngine 시그널 분석 결과입니다.">?</span></div></div>
+        <div class="card-header"><div style="display:flex;align-items:center;"><span class="card-title" data-i18n="signal.title">Signal Analysis</span><span class="help" data-tip="CandidateDetector v2 시그널 분석 결과입니다.">?</span></div></div>
         <div class="big-num neutral" id="infoSignalScore">--</div>
         <div class="big-sub">Score / 10</div>
         <div style="margin-top: 18px;">
@@ -673,7 +677,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
       <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;">
         <div style="display:flex;align-items:center;gap:10px;">
           <div id="enginePulse" style="width:10px;height:10px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);animation:pulse 2s infinite;"></div>
-          <span style="font-size:14px;font-weight:600;">FlowEngine v1</span>
+          <span style="font-size:14px;font-weight:600;">CandidateDetector v2</span>
         </div>
         <div style="width:1px;height:24px;background:var(--border);"></div>
         <div style="display:flex;align-items:center;gap:8px;">
@@ -682,7 +686,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
         </div>
         <div style="width:1px;height:24px;background:var(--border);"></div>
         <div style="display:flex;align-items:center;gap:8px;">
-          <span style="font-size:12px;color:var(--text-muted);font-weight:600;">Active Setup:</span>
+          <span style="font-size:12px;color:var(--text-muted);font-weight:600;">Candidate:</span>
           <span id="engineActiveSetup" style="font-size:14px;font-weight:600;color:var(--text-primary);">--</span>
         </div>
         <div style="width:1px;height:24px;background:var(--border);"></div>
@@ -718,13 +722,13 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
 
     <!-- Setup Performance -->
     <div class="card" style="margin-bottom:14px;">
-      <div class="card-header"><div style="display:flex;align-items:center;"><span class="card-title">Flow Performance</span><span class="help" data-tip="FlowEngine 실매매 성과.&#10;10건 이상 + 승률 35% 미만 -> 자동 비활성화.&#10;감지 vs 실행 비율 추적.">?</span></div></div>
+      <div class="card-header"><div style="display:flex;align-items:center;"><span class="card-title">Candidate Performance</span><span class="help" data-tip="CandidateDetector v2 실매매 성과.&#10;10건 이상 + 승률 35% 미만 -> 자동 비활성화.&#10;감지 vs 실행 비율 추적.">?</span></div></div>
       <div id="setupTrackerContent" style="font-size:12px;color:var(--text-muted);">데이터 수집 중...</div>
     </div>
 
     <!-- Setup x Regime Heatmap -->
     <div class="card" style="margin-bottom:14px;">
-      <div class="card-header"><div style="display:flex;align-items:center;"><span class="card-title">Flow x Regime Heatmap</span><span class="help" data-tip="FlowEngine이 어떤 레짐에서 승률이 높은지.&#10;초록=50%+, 노랑=35~50%, 빨강=35% 미만.">?</span></div></div>
+      <div class="card-header"><div style="display:flex;align-items:center;"><span class="card-title">Candidate x Regime Heatmap</span><span class="help" data-tip="CandidateDetector가 어떤 레짐에서 승률이 높은지.&#10;초록=50%+, 노랑=35~50%, 빨강=35% 미만.">?</span></div></div>
       <div id="heatmapContent" style="overflow-x:auto;">
         <table class="trade-table" style="font-size:11px;">
           <thead>
@@ -737,14 +741,30 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
       </div>
     </div>
 
-    <!-- FlowML Status -->
+    <!-- ML Status (v2) -->
     <div class="card" style="margin-bottom:14px;">
-      <div class="card-header"><div style="display:flex;align-items:center;"><span class="card-title">FlowML (Machine Learning)</span><span class="help" data-tip="FlowEngine 전용 ML. 과거 거래 패턴 학습 -> 진입 점수 보정.&#10;학습 데이터 30건+ 시 자동 활성화.&#10;OOS = 미래 데이터 검증 정확도 (높을수록 좋음).">?</span></div></div>
-      <div id="flowMlContent" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;text-align:center;">
-        <div><div class="big-num" id="mlTrained" style="font-size:20px;color:var(--text-muted);">--</div><span class="big-sub">Status</span></div>
-        <div><div class="big-num" id="mlSamples" style="font-size:20px;">0</div><span class="big-sub">Samples</span></div>
-        <div><div class="big-num" id="mlOOS" style="font-size:20px;">--</div><span class="big-sub">OOS Accuracy</span></div>
-        <div><div class="big-num" id="mlRecentWR" style="font-size:20px;">--</div><span class="big-sub">Recent WR</span></div>
+      <div class="card-header"><div style="display:flex;align-items:center;"><span class="card-title">ML Gate (v2)</span><span class="help" data-tip="CandidateDetector v2 ML Gate.&#10;Phase A = 수집 (Go threshold 0), Phase B = 필터링 (P(Win) 기반 Go/NoGo).&#10;Go Accuracy = Go 판정 중 실제 승 비율.&#10;NoGo Miss = NoGo 했는데 실제 승이었던 비율.">?</span></div></div>
+      <div id="flowMlContent" style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;text-align:center;">
+        <div><div class="big-num" id="mlTrained" style="font-size:20px;color:var(--text-muted);">--</div><span class="big-sub">Phase</span></div>
+        <div><div class="big-num" id="mlSamples" style="font-size:20px;">0</div><span class="big-sub">Labeled Signals</span></div>
+        <div><div class="big-num" id="mlOOS" style="font-size:20px;">--</div><span class="big-sub">Go Threshold</span></div>
+        <div><div class="big-num" id="mlRecentWR" style="font-size:20px;">--</div><span class="big-sub">Go Accuracy</span></div>
+        <div><div class="big-num" id="mlNoGoMiss" style="font-size:20px;">--</div><span class="big-sub">NoGo Miss Rate</span></div>
+      </div>
+    </div>
+
+    <!-- Signals (Recent 20) -->
+    <div class="card" style="margin-bottom:14px;">
+      <div class="card-header"><div style="display:flex;align-items:center;"><span class="card-title">Signals (Recent 20)</span><span class="help" data-tip="최근 감지된 시그널 목록.&#10;ML Phase, P(Win), 라벨(실제 결과), PnL% 포함.">?</span></div></div>
+      <div class="card-body" style="overflow-x:auto">
+        <table class="trade-table">
+          <thead><tr>
+            <th>Time</th><th>Type</th><th>Dir</th><th>Str</th><th>ML</th><th>P(Win)</th><th>Entry</th><th>Label</th><th>PnL%</th>
+          </tr></thead>
+          <tbody id="signalsBody">
+            <tr><td colspan="9" style="text-align:center;color:var(--text-muted);padding:28px;">No signals yet</td></tr>
+          </tbody>
+        </table>
       </div>
     </div>
 
@@ -896,7 +916,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
       <div class="metric"><span class="metric-label">Bot Status</span><span class="metric-value" id="botStatusDetail">--</span></div>
       <div class="metric"><span class="metric-label">Last Heartbeat</span><span class="metric-value" id="lastHeartbeat">--</span></div>
       <div class="metric"><span class="metric-label">Auto Trading</span><span class="metric-value" id="autoTradingStatus">--</span></div>
-      <div class="metric"><span class="metric-label">Engine</span><span class="metric-value" style="color:var(--green);">FlowEngine v1</span></div>
+      <div class="metric"><span class="metric-label">Engine</span><span class="metric-value" style="color:var(--green);">CandidateDetector v2</span></div>
     </div>
 
   </div><!-- /tab-risk -->
@@ -1014,10 +1034,10 @@ async function updateSignals() {
 
   // 현재 시그널 or 마지막 시그널 (30초 이내)
   const ls = data.last_signal;
-  const hasLive = data.setup != null;
+  const hasLive = (data.candidate || data.setup) != null;
   const hasLast = ls != null;
-  const score = hasLive ? data.score : (hasLast ? ls.score : 0);
-  const setup = hasLive ? data.setup : (hasLast ? ls.setup : null);
+  const score = hasLive ? (data.strength||data.score) : (hasLast ? (ls.strength||ls.score) : 0);
+  const setup = hasLive ? (data.candidate||data.setup) : (hasLast ? (ls.candidate||ls.setup) : null);
   const dir = hasLive ? data.direction : (hasLast ? ls.direction : 'neutral');
 
   const scoreEl = document.getElementById('infoSignalScore');
@@ -1286,7 +1306,7 @@ const REGIME_LABELS = {
   'trending_up': 'TRENDING UP', 'trending_down': 'TRENDING DOWN',
   'ranging': 'RANGING', 'volatile': 'VOLATILE'
 };
-const SETUP_COLORS = {'LVL':'var(--green)','MOM':'var(--accent)','PB':'var(--blue)','BRK':'var(--yellow)','DIV':'#c084fc','SES':'#f97316'};
+const SETUP_COLORS = {'LVL':'var(--green)','MOM':'var(--accent)','PB':'var(--blue)','BRK':'var(--yellow)','DIV':'#c084fc','SES':'#f97316','momentum':'var(--accent)','breakout':'var(--yellow)','cascade':'#c084fc','pullback':'var(--blue)','level':'var(--green)'};
 
 async function updateEngineTab() {
   const data = await api('/api/engine/overview');
@@ -1300,8 +1320,9 @@ async function updateEngineTab() {
   document.getElementById('engineRegimeLabel').style.color = regimeColor;
 
   const es = data.engine || {};
-  document.getElementById('engineActiveSetup').textContent = es.setup ? es.setup : 'None';
-  document.getElementById('engineActiveSetup').style.color = es.setup ? 'var(--accent)' : 'var(--text-muted)';
+  const activeCand = es.candidate || es.setup || null;
+  document.getElementById('engineActiveSetup').textContent = activeCand ? activeCand : 'None';
+  document.getElementById('engineActiveSetup').style.color = activeCand ? 'var(--accent)' : 'var(--text-muted)';
   const dir = (es.direction||'--').toUpperCase();
   const dirEl = document.getElementById('engineDirection');
   dirEl.textContent = dir;
@@ -1382,25 +1403,33 @@ async function updateEngineTab() {
     `;
   }
 
-  // FlowML status
+  // ML Gate v2 status
   const ml = data.ml || {};
   const trainedEl = document.getElementById('mlTrained');
-  if (ml.trained) {
-    trainedEl.textContent = 'ACTIVE';
-    trainedEl.style.color = 'var(--green)';
-  } else {
-    trainedEl.textContent = ml.samples >= 30 ? 'TRAINING' : `${ml.samples||0}/30`;
-    trainedEl.style.color = ml.samples >= 30 ? 'var(--yellow)' : 'var(--text-muted)';
-  }
-  document.getElementById('mlSamples').textContent = ml.samples || 0;
-  const oos = (ml.oos_accuracy||0)*100;
+  const phase = ml.phase || (ml.trained ? 'B' : 'A');
+  trainedEl.textContent = 'Phase ' + phase;
+  trainedEl.style.color = phase === 'B' ? 'var(--green)' : 'var(--yellow)';
+
+  document.getElementById('mlSamples').textContent = ml.labeled_signals || ml.samples || 0;
+
+  const goThresh = ml.go_threshold != null ? ml.go_threshold : (ml.trained ? 0.5 : 0);
   const oosEl = document.getElementById('mlOOS');
-  oosEl.textContent = ml.trained ? oos.toFixed(1)+'%' : '--';
-  oosEl.style.color = oos>=55?'var(--green)':oos>=45?'var(--yellow)':'var(--red)';
-  const rwr = (ml.recent_wr||0)*100;
+  oosEl.textContent = goThresh.toFixed(2);
+  oosEl.style.color = goThresh > 0 ? 'var(--green)' : 'var(--text-muted)';
+  const goAcc = ml.go_accuracy != null ? (ml.go_accuracy*100) : (ml.recent_wr ? (ml.recent_wr*100) : 0);
   const rwrEl = document.getElementById('mlRecentWR');
-  rwrEl.textContent = ml.recent_trades>0 ? rwr.toFixed(0)+'%' : '--';
-  rwrEl.style.color = rwr>=50?'var(--green)':rwr>=35?'var(--yellow)':'var(--red)';
+  rwrEl.textContent = (ml.go_accuracy != null || (ml.recent_trades||0)>0) ? goAcc.toFixed(0)+'%' : '--';
+  rwrEl.style.color = goAcc>=50?'var(--green)':goAcc>=35?'var(--yellow)':'var(--red)';
+
+  const nogoMiss = ml.nogo_miss_rate != null ? (ml.nogo_miss_rate*100) : 0;
+  const nogoEl = document.getElementById('mlNoGoMiss');
+  if (nogoEl) {
+    nogoEl.textContent = ml.nogo_miss_rate != null ? nogoMiss.toFixed(0)+'%' : '--';
+    nogoEl.style.color = nogoMiss<=20?'var(--green)':nogoMiss<=40?'var(--yellow)':'var(--red)';
+  }
+
+  // Fetch and populate signals table
+  updateSignalsTable();
 }
 
 // ── System Status (Risk tab) ──
@@ -1489,14 +1518,22 @@ async function updateEngineState() {
   const data = await api('/api/engine/state');
   if (!data) return;
 
-  document.getElementById('flowSignal').textContent = data.setup || 'none';
+  document.getElementById('flowSignal').textContent = data.candidate || data.setup || 'none';
   const dirEl = document.getElementById('flowDir');
   dirEl.textContent = (data.direction||'--').toUpperCase();
   dirEl.style.color = data.direction==='long'?'var(--green)':data.direction==='short'?'var(--red)':'var(--text-muted)';
-  document.getElementById('flowScore').textContent = (data.score||0).toFixed(1);
+  document.getElementById('flowScore').textContent = ((data.strength!=null?data.strength:data.score)||0).toFixed(1);
   const streakEl = document.getElementById('flowTrend');
   streakEl.textContent = (data.trend||'--').toUpperCase();
   streakEl.style.color = data.trend==='up'?'var(--green)':data.trend==='down'?'var(--red)':'var(--text-muted)';
+
+  // ML field: Phase + P(Win)
+  const mlPhase = data.ml_phase || '--';
+  const mlProb = data.ml_prob != null ? (data.ml_prob * 100).toFixed(0) + '%' : '';
+  const mlEl = document.getElementById('flowML');
+  mlEl.textContent = mlProb ? `${mlPhase} ${mlProb}` : mlPhase;
+  mlEl.style.color = mlPhase === 'B' ? 'var(--green)' : mlPhase === 'A' ? 'var(--yellow)' : 'var(--text-muted)';
+
   document.getElementById('flowStructure').textContent = (data.vol_band || '--').toUpperCase();
   const fstreakEl = document.getElementById('flowStreak');
   fstreakEl.textContent = data.streak || 0;
@@ -1684,6 +1721,42 @@ async function updatePaperStats() {
       <div class="metric" style="padding:4px 0"><span class="metric-label">Hold</span><span class="metric-value">${holdMin}m</span></div>
     </div>`;
   }).join('') + '</div>';
+}
+
+// ── Signals Table (Engine tab) ──
+async function updateSignalsTable() {
+  const data = await api('/api/signals-db?limit=20');
+  const tbody = document.getElementById('signalsBody');
+  if (!tbody) return;
+  if (!data || !data.signals || data.signals.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--text-muted);padding:28px;">No signals yet</td></tr>';
+    return;
+  }
+  tbody.innerHTML = data.signals.map(s => {
+    const time = s.ts ? new Date(s.ts).toLocaleString('ko',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'}) : '--';
+    const dir = (s.direction||'--').toUpperCase();
+    const dirColor = s.direction==='long'?'var(--green)':s.direction==='short'?'var(--red)':'var(--text-muted)';
+    const str = s.strength != null ? s.strength.toFixed(1) : (s.score != null ? s.score.toFixed(1) : '--');
+    const mlDecision = s.ml_decision || s.ml || '--';
+    const mlColor = mlDecision==='Go'?'var(--green)':mlDecision==='NoGo'?'var(--red)':'var(--text-muted)';
+    const pwin = s.ml_prob != null ? (s.ml_prob*100).toFixed(0)+'%' : '--';
+    const entry = s.entry_price ? '$'+fmt(s.entry_price,0) : '--';
+    const label = s.label || '--';
+    const labelColor = label==='win'?'var(--green)':label==='loss'?'var(--red)':'var(--text-muted)';
+    const pnl = s.pnl_pct != null ? (s.pnl_pct>=0?'+':'')+s.pnl_pct.toFixed(2)+'%' : '--';
+    const pnlColor = s.pnl_pct>0?'var(--green)':s.pnl_pct<0?'var(--red)':'var(--text-muted)';
+    return `<tr>
+      <td style="color:var(--text-secondary);font-size:11px;">${time}</td>
+      <td style="font-weight:600;font-size:11px;">${s.type||s.candidate||'--'}</td>
+      <td style="color:${dirColor};font-weight:700;">${dir}</td>
+      <td>${str}</td>
+      <td style="color:${mlColor};font-weight:600;">${mlDecision}</td>
+      <td>${pwin}</td>
+      <td>${entry}</td>
+      <td style="color:${labelColor};font-weight:600;">${label}</td>
+      <td style="color:${pnlColor};font-weight:600;">${pnl}</td>
+    </tr>`;
+  }).join('');
 }
 
 // ── Refresh ──

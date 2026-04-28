@@ -125,7 +125,7 @@ class TelegramNotifier:
 
         elif cmd == "/help":
             await self._send(
-                "<b>FlowEngine v1 Commands</b>\n\n"
+                "<b>CryptoAnalyzer v2 Commands</b>\n\n"
                 "\U0001f7e2 /on — Autotrading ON\n"
                 "\U0001f534 /off — Autotrading OFF\n"
                 "\U0001f4ca /status — Bot Status\n"
@@ -282,7 +282,7 @@ class TelegramNotifier:
             price_str = await self.redis.get("rt:price:BTC-USDT-SWAP") if self.redis else None
             price = float(price_str) if price_str else 0
 
-            # FlowEngine 상태
+            # v2 상태
             state = await self.redis.get_json("sys:trade_state") if self.redis else None
 
             # 거래량
@@ -290,17 +290,20 @@ class TelegramNotifier:
             range_60s = float(vel.get("range_60s", 0)) if vel else 0
             move_60s = float(vel.get("move_60s", 0)) if vel else 0
 
-            trend = state.get("trend", "?") if state else "?"
+            candidate = state.get("candidate", "?") if state else "?"
             direction = state.get("direction", "?") if state else "?"
-            score = state.get("score", 0) if state else 0
+            strength = state.get("strength", 0) if state else 0
+            ml_phase = state.get("ml_phase", "?") if state else "?"
+            regime = state.get("regime", "?") if state else "?"
 
-            trend_icon = "\U0001f7e2" if trend == "up" else "\U0001f534" if trend == "down" else "\u26aa"
+            regime_icon = "\U0001f7e2" if "trend" in str(regime) else "\U0001f534" if regime == "ranging" else "\u26aa"
 
             text = (
                 f"\U0001f310 <b>Market Overview</b>\n\n"
                 f"BTC: <b>${price:,.1f}</b>\n"
-                f"Trend: {trend_icon} {trend.upper()}\n"
-                f"Flow: {direction.upper()} (score {score:.1f})\n"
+                f"Regime: {regime_icon} {regime}\n"
+                f"Last: {candidate} {direction.upper()} (str {strength:.1f})\n"
+                f"ML: Phase {ml_phase}\n"
                 f"\n"
                 f"60s Range: ${range_60s:,.0f}\n"
                 f"60s Move: ${move_60s:+,.0f}"
