@@ -276,16 +276,29 @@ class CryptoAnalyzer:
         signal_record["ml_go"] = 1 if go else 0
         signal_record["ml_prob"] = round(prob, 4) if prob >= 0 else 0.0
 
+        # JSONL 기록 (모든 후보 — Go/NoGo 무관)
+        from src.monitoring.trade_logger import _append_jsonl
+        _append_jsonl({
+            "type": "candidate",
+            "candidate_type": ctype,
+            "direction": direction,
+            "strength": round(strength, 2),
+            "price": round(candidate["price"], 1),
+            "ml_go": 1 if go else 0,
+            "ml_prob": round(prob, 4) if prob >= 0 else -1,
+            "ml_phase": self.ml_engine.phase,
+            "regime": regime_now,
+            "daily_pnl": round(daily_pnl, 2),
+            "features_summary": {
+                "cvd_matches": features.get("cvd_matches", 0),
+                "vol_ratio": features.get("vol_ratio", 0),
+                "adx": features.get("adx", 0),
+            },
+        })
+
         if not go:
             signal_record["reject_reason"] = "ml_nogo"
             sig_id = await self.db.insert_signal(signal_record)
-            # Shadow 추적은 periodic_shadow_check에서 처리
-            if now - getattr(self, "_last_nogo_log", 0) >= 30:
-                self._last_nogo_log = now
-                logger.info(
-                    f"[EVAL] NoGo: {ctype} {direction} str={strength:.1f} "
-                    f"P={prob:.2f} regime={regime_now}"
-                )
             return
 
         # ── 수익 보호 ──
@@ -513,6 +526,7 @@ class CryptoAnalyzer:
 
     async def periodic_shadow_check(self):
         """미진입 후보의 Triple Barrier 라벨링"""
+        from src.monitoring.trade_logger import _append_jsonl
         while self._running:
             try:
                 price_str = await self.redis.get("bn:price:BTCUSDT")
@@ -578,8 +592,20 @@ class CryptoAnalyzer:
                         await self.db.update_signal_label(
                             sig["id"], label, barrier, round(pnl, 2), int(now)
                         )
-                        # ML 결과 기록 (NoGo 결정의 사후 검증)
                         self.ml_engine.record_decision_result(False, label)
+                        # JSONL 기록 (shadow 결과)
+                        _append_jsonl({
+                            "type": "shadow_result",
+                            "signal_id": sig["id"],
+                            "candidate_type": ctype,
+                            "direction": sig_dir,
+                            "label": label,
+                            "barrier": barrier,
+                            "pnl_pct": round(pnl, 2),
+                            "entry_price": round(sig_price, 1),
+                            "exit_price": round(price, 1),
+                            "elapsed_sec": round(elapsed, 0),
+                        })
 
             except asyncio.CancelledError:
                 raise
