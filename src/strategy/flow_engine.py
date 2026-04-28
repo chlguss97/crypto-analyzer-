@@ -78,21 +78,21 @@ class CandidateDetector:
 
         mom = self._check_momentum_ignition(df_5m, price, atr, vol_20avg)
         if mom:
-            mom["features_raw"] = self._build_raw_features(
+            mom["features_raw"] = await self._build_raw_features(
                 df_5m, df_15m, df_1h, df_4h, df_1d, price, atr, atr_pct, flow, vol_20avg, mom["direction"]
             )
             candidates.append(mom)
 
         brk = self._check_volatility_breakout(df_5m, price, atr, vol_20avg)
         if brk:
-            brk["features_raw"] = self._build_raw_features(
+            brk["features_raw"] = await self._build_raw_features(
                 df_5m, df_15m, df_1h, df_4h, df_1d, price, atr, atr_pct, flow, vol_20avg, brk["direction"]
             )
             candidates.append(brk)
 
         cas = await self._check_liquidation_cascade(df_5m, price, atr, flow)
         if cas:
-            cas["features_raw"] = self._build_raw_features(
+            cas["features_raw"] = await self._build_raw_features(
                 df_5m, df_15m, df_1h, df_4h, df_1d, price, atr, atr_pct, flow, vol_20avg, cas["direction"]
             )
             candidates.append(cas)
@@ -249,8 +249,8 @@ class CandidateDetector:
     #  피처 추출
     # ════════════════════════════════════════
 
-    def _build_raw_features(self, df_5m, df_15m, df_1h, df_4h, df_1d,
-                            price, atr, atr_pct, flow, vol_20avg, direction) -> dict:
+    async def _build_raw_features(self, df_5m, df_15m, df_1h, df_4h, df_1d,
+                                  price, atr, atr_pct, flow, vol_20avg, direction) -> dict:
         """ML용 피처 원시 데이터 구축 (8개 핵심 + 확장용)"""
         closes_5m = df_5m["close"].astype(float)
 
@@ -358,15 +358,19 @@ class CandidateDetector:
             "whale_bias": round(whale_bias, 4),
             "liq_pressure": liq_pressure,
             "atr_pct": round(atr_pct, 4),
-            "bb_width_pctl": 0.0,  # breakout에서 개별 설정
+            "bb_width_pctl": 0.0,
             "vol_trend": vol_trend,
-            "regime_score": adx,  # ADX를 레짐 대용으로 사용
-            "di_spread": 0.0,  # 별도 계산 필요 시
+            "regime_score": adx,
+            "di_spread": 0.0,
             "hour_cos": round(hour_cos, 4),
             "candle_body_ratio": round(avg_body_ratio, 4),
             "price_vs_ema50": round(price_vs_ema50, 4),
             "vol_ratio_1m": round(vol_ratio_1m, 2),
         })
+
+        # ── 마이크로스트럭처 피처 (Redis에서 실시간 읽기) ──
+        micro = await self._get_micro_features() if self.redis else {}
+        features.update(micro)
 
         return features
 
@@ -444,6 +448,57 @@ class CandidateDetector:
             elif p < ema20 * 0.999:
                 return "down"
         return "neutral"
+
+    async def _get_micro_features(self) -> dict:
+        """Redis에서 마이크로스트럭처 피처 읽기 (binance_stream이 2초마다 갱신)"""
+        micro = {}
+        if not self.redis:
+            return micro
+        try:
+            # 단순 숫자 키
+            for key, name, default in [
+                ("rt:micro:trade_rate", "micro_trade_rate", 0.0),
+                ("rt:micro:trade_burst", "micro_burst", 1.0),
+                ("rt:micro:bs_ratio_5s", "micro_bs_5s", 0.5),
+                ("rt:micro:bs_ratio_30s", "micro_bs_30s", 0.5),
+                ("rt:micro:bs_ratio_60s", "micro_bs_60s", 0.5),
+                ("rt:micro:delta_accel", "micro_delta_accel", 0.0),
+                ("rt:micro:price_impact", "micro_price_impact", 0.0),
+                ("rt:micro:delta_div", "micro_delta_div", 0),
+                ("rt:micro:momentum_quality", "micro_momentum_quality", 0.0),
+            ]:
+                val = await self.redis.get(key)
+                micro[name] = float(val) if val else default
+
+            # JSON 키
+            absorption_str = await self.redis.get("rt:micro:absorption")
+            if absorption_str:
+                ab = json.loads(absorption_str)
+                micro["micro_absorption_score"] = float(ab.get("score", 0))
+                micro["micro_absorption_dir"] = 1 if ab.get("direction") == "long" else (-1 if ab.get("direction") == "short" else 0)
+            else:
+                micro["micro_absorption_score"] = 0.0
+                micro["micro_absorption_dir"] = 0
+
+            cluster_str = await self.redis.get("rt:micro:whale_cluster")
+            if cluster_str:
+                cl = json.loads(cluster_str)
+                micro["micro_whale_cluster"] = float(cl.get("score", 0))
+                micro["micro_whale_streak"] = int(cl.get("max_streak", 0))
+            else:
+                micro["micro_whale_cluster"] = 0.0
+                micro["micro_whale_streak"] = 0
+
+            vwap_str = await self.redis.get("rt:micro:vwap")
+            if vwap_str:
+                vw = json.loads(vwap_str)
+                micro["micro_vwap_dev"] = float(vw.get("deviation_pct", 0))
+            else:
+                micro["micro_vwap_dev"] = 0.0
+
+        except Exception as e:
+            logger.debug(f"micro features read error: {e}")
+        return micro
 
     async def _get_flow_data(self) -> dict:
         """CVD + 고래 + 청산 데이터 조회"""

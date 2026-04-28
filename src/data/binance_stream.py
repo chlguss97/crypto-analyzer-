@@ -1,21 +1,31 @@
 """
-Binance BTCUSDT 실시간 데이터 스트림 — OKX 보완용 (인증 불필요).
+Binance BTCUSDT 실시간 데이터 스트림 + 마이크로스트럭처 집계.
 
 수집 항목:
-  1. aggTrades → CVD (OKX + Binance 합산 = 시장 전체 플로우)
+  1. aggTrades → CVD + 마이크로스트럭처 15종 피처
   2. aggTrades → 대형 체결 감지 ($50k+)
-  3. ticker → Binance 가격 (OKX 대비 프리미엄 추적)
+  3. ticker → Binance 가격
+  4. kline → DB 직접 저장
 
-Redis 키:
-  bn:cvd:5m:BTCUSDT          — Binance 5분 CVD (진행 중)
-  bn:cvd:15m:BTCUSDT         — Binance 15분 CVD (진행 중)
-  bn:cvd:1h:BTCUSDT          — Binance 1시간 CVD (진행 중)
-  bn:whale:BTCUSDT           — 최근 대형 체결 리스트 (JSON)
-  bn:price:BTCUSDT           — Binance 현재가
-  flow:combined:cvd_5m       — OKX + Binance 합산 CVD 5분
-  flow:combined:cvd_15m      — OKX + Binance 합산 CVD 15분
-  flow:combined:cvd_1h       — OKX + Binance 합산 CVD 1시간
-  flow:combined:whale_bias   — 대형 체결 방향 편향 (-1~+1)
+마이크로스트럭처 Redis 키 (rt:micro:*):
+  rt:micro:trade_rate        — 10초 체결 건수/초
+  rt:micro:bs_ratio_5s       — 5초 buy ratio (0~1)
+  rt:micro:bs_ratio_30s      — 30초 buy ratio
+  rt:micro:bs_ratio_60s      — 60초 buy ratio
+  rt:micro:absorption        — 흡수 스코어 (JSON: score, direction)
+  rt:micro:whale_cluster     — 고래 클러스터 (JSON: score, direction, count)
+  rt:micro:delta_accel       — CVD 가속도 (-2~+2)
+  rt:micro:trade_burst       — 체결 폭발 비율 (1.0=평소)
+  rt:micro:price_impact      — 가격 충격 계수
+  rt:micro:vwap              — VWAP + deviation (JSON)
+  rt:micro:delta_div         — 델타 다이버전스 (-1/0/+1)
+  rt:micro:momentum_quality  — 모멘텀 품질 (0~5)
+  rt:micro:liq_momentum      — 청산 가속 (-1~+1)
+
+기존 Redis 키:
+  flow:combined:cvd_5m/15m/1h — CVD
+  flow:combined:whale_bias    — 고래 편향
+  bn:price:BTCUSDT            — 가격
 """
 
 import asyncio
@@ -53,6 +63,23 @@ class BinanceStream:
 
         # 대형 체결 추적
         self._whales: deque = deque(maxlen=200)  # (ts, side, size_usd, price)
+
+        # ── 마이크로스트럭처 버퍼 ──
+        # 체결 이력 (최근 120초, 개별 체결 기록)
+        self._trades: deque = deque(maxlen=50000)  # (ts, side, qty, price, size_usd)
+        # CVD 스냅샷 (5초 간격, 가속도 계산용)
+        self._cvd_snapshots: deque = deque(maxlen=30)  # (ts, cvd_5m)
+        self._last_cvd_snap = 0
+        # VWAP 데이터 (5분 윈도우)
+        self._vwap_vol_sum = 0.0    # sum(price * qty)
+        self._vwap_qty_sum = 0.0    # sum(qty)
+        self._vwap_reset = 0
+        # 가격 추적 (흡수/가격충격용)
+        self._price_30s_ago = 0.0
+        self._last_price_snap = 0
+        self._price_history: deque = deque(maxlen=60)  # (ts, price)
+        # 마이크로 Redis 갱신 주기
+        self._last_micro_flush = 0
 
         # 통계
         self._trade_count = 0
@@ -142,9 +169,33 @@ class BinanceStream:
         self._cvd_15m = max(-MAX_CVD, min(MAX_CVD, self._cvd_15m + delta))
         self._cvd_1h = max(-MAX_CVD, min(MAX_CVD, self._cvd_1h + delta))
 
+        # ── 마이크로스트럭처 데이터 수집 ──
+        now_f = time.time()
+        self._trades.append((now_f, side, qty, price, size_usd))
+        self._price_history.append((now_f, price))
+
+        # VWAP 누적 (5분 윈도우)
+        now_sec = int(now_f)
+        if now_sec // 300 != self._vwap_reset:
+            self._vwap_reset = now_sec // 300
+            self._vwap_vol_sum = 0.0
+            self._vwap_qty_sum = 0.0
+        self._vwap_vol_sum += price * qty
+        self._vwap_qty_sum += qty
+
+        # CVD 스냅샷 (5초 간격 — 가속도 계산용)
+        if now_f - self._last_cvd_snap >= 5:
+            self._cvd_snapshots.append((now_f, self._cvd_5m))
+            self._last_cvd_snap = now_f
+
         # Redis 저장 (매 체결마다는 과부하 → 100체결마다 or 대형 체결 시)
         self._trade_count += 1
         flush = self._trade_count % 100 == 0 or size_usd >= WHALE_THRESHOLD_USD
+
+        # 마이크로스트럭처 Redis 갱신 (2초마다)
+        if now_f - self._last_micro_flush >= 2:
+            self._last_micro_flush = now_f
+            await self._flush_microstructure(price)
 
         if flush:
             await self.redis.set("bn:cvd:5m:BTCUSDT", str(round(self._cvd_5m, 4)), ttl=400)
@@ -342,3 +393,172 @@ class BinanceStream:
             await self.redis.set("flow:combined:cvd_1h", str(round(combined_1h, 4)), ttl=4800)
         except Exception as e:
             logger.debug(f"합산 CVD 계산 실패: {e}")
+
+    # ══════════════════════════════════════════════════
+    #  마이크로스트럭처 집계 — 프롭 트레이더의 눈
+    # ══════════════════════════════════════════════════
+
+    async def _flush_microstructure(self, current_price: float):
+        """2초마다 호출 — 체결 이력에서 15종 마이크로 피처 계산 → Redis"""
+        now = time.time()
+        try:
+            # ── 1. Trade Rate (10초 체결건수/초) ──
+            cutoff_10s = now - 10
+            trades_10s = [(t, s, q, p, u) for t, s, q, p, u in self._trades if t >= cutoff_10s]
+            trade_rate = len(trades_10s) / 10.0
+            await self.redis.set("rt:micro:trade_rate", str(round(trade_rate, 1)), ttl=15)
+
+            # ── 2. Trade Burst (10초 / 60초 비율) ──
+            cutoff_60s = now - 60
+            trades_60s = [(t, s, q, p, u) for t, s, q, p, u in self._trades if t >= cutoff_60s]
+            rate_60s = len(trades_60s) / 60.0 if trades_60s else 1.0
+            burst = trade_rate / max(rate_60s, 0.1)
+            await self.redis.set("rt:micro:trade_burst", str(round(burst, 2)), ttl=15)
+
+            # ── 3. Buy/Sell Ratio 다중 윈도우 (5s / 30s / 60s) ──
+            for window_sec, key_suffix in [(5, "5s"), (30, "30s"), (60, "60s")]:
+                cutoff = now - window_sec
+                win_trades = [(s, q) for t, s, q, p, u in self._trades if t >= cutoff]
+                buy_vol = sum(q for s, q in win_trades if s == "buy")
+                sell_vol = sum(q for s, q in win_trades if s == "sell")
+                total = buy_vol + sell_vol
+                ratio = buy_vol / total if total > 0 else 0.5
+                await self.redis.set(f"rt:micro:bs_ratio_{key_suffix}", str(round(ratio, 4)), ttl=15)
+
+            # ── 4. Absorption Score (30초) ──
+            # 매도량 > 매수량 1.5배인데 가격이 안 빠짐 = 매도 흡수 (롱 시그널)
+            cutoff_30s = now - 30
+            trades_30s = [(s, q, u) for t, s, q, p, u in self._trades if t >= cutoff_30s]
+            buy_vol_30 = sum(q for s, q, u in trades_30s if s == "buy")
+            sell_vol_30 = sum(q for s, q, u in trades_30s if s == "sell")
+
+            price_30s_ago = 0
+            for t, p in self._price_history:
+                if t >= cutoff_30s:
+                    price_30s_ago = p
+                    break
+            if price_30s_ago == 0 and self._price_history:
+                price_30s_ago = self._price_history[0][1]
+
+            price_change_30s = abs(current_price - price_30s_ago) if price_30s_ago > 0 else 999
+            atr_proxy = current_price * 0.002  # 0.2% = ~$156 at $78k
+
+            absorption_score = 0.0
+            absorption_dir = "neutral"
+            if sell_vol_30 > buy_vol_30 * 1.5 and price_change_30s < atr_proxy * 0.3:
+                # 매도 압도인데 가격 안 빠짐 → 매수 흡수
+                absorption_score = sell_vol_30 / max(price_change_30s + 0.01, 1) * 0.001
+                absorption_dir = "long"
+            elif buy_vol_30 > sell_vol_30 * 1.5 and price_change_30s < atr_proxy * 0.3:
+                # 매수 압도인데 가격 안 올라감 → 매도 흡수
+                absorption_score = buy_vol_30 / max(price_change_30s + 0.01, 1) * 0.001
+                absorption_dir = "short"
+            absorption_score = min(5.0, absorption_score)
+
+            await self.redis.set("rt:micro:absorption", json.dumps({
+                "score": round(absorption_score, 2),
+                "direction": absorption_dir,
+            }), ttl=15)
+
+            # ── 5. Large Trade Clustering (60초, $50K+) ──
+            cutoff_60 = now - 60
+            recent_whales = [(t, s, sz) for t, s, sz, _ in self._whales if t >= cutoff_60]
+            if len(recent_whales) >= 2:
+                # 같은 방향 연속 건수
+                max_streak = 0
+                cur_streak = 1
+                cur_dir = recent_whales[0][1]
+                for i in range(1, len(recent_whales)):
+                    if recent_whales[i][1] == cur_dir:
+                        cur_streak += 1
+                    else:
+                        max_streak = max(max_streak, cur_streak)
+                        cur_streak = 1
+                        cur_dir = recent_whales[i][1]
+                max_streak = max(max_streak, cur_streak)
+                avg_size = sum(sz for _, _, sz in recent_whales) / len(recent_whales)
+                cluster_score = max_streak * (avg_size / 100_000)
+                cluster_dir = max(set(s for _, s, _ in recent_whales), key=lambda x: sum(1 for _, s2, _ in recent_whales if s2 == x))
+            else:
+                cluster_score = 0.0
+                cluster_dir = "neutral"
+                max_streak = 0
+
+            await self.redis.set("rt:micro:whale_cluster", json.dumps({
+                "score": round(min(10.0, cluster_score), 2),
+                "direction": cluster_dir,
+                "count": len(recent_whales),
+                "max_streak": max_streak,
+            }), ttl=15)
+
+            # ── 6. Delta Acceleration (CVD 가속도) ──
+            delta_accel = 0.0
+            if len(self._cvd_snapshots) >= 4:
+                snaps = list(self._cvd_snapshots)[-6:]
+                if len(snaps) >= 3:
+                    # 최근 3개 간격의 변화율 → 기울기의 기울기
+                    deltas = [snaps[i+1][1] - snaps[i][1] for i in range(len(snaps)-1)]
+                    if len(deltas) >= 2:
+                        accel = deltas[-1] - deltas[0]
+                        # 정규화 (-2 ~ +2)
+                        delta_accel = max(-2.0, min(2.0, accel / max(abs(deltas[0]) + 1, 1)))
+            await self.redis.set("rt:micro:delta_accel", str(round(delta_accel, 3)), ttl=15)
+
+            # ── 7. Price Impact (60초, $1 가격변동 / $거래량) ──
+            total_vol_60 = sum(u for _, _, _, _, u in trades_60s) if trades_60s else 0
+            prices_60 = [p for t, _, _, p, _ in self._trades if t >= cutoff_60s]
+            if len(prices_60) >= 2 and total_vol_60 > 0:
+                price_range_60 = max(prices_60) - min(prices_60)
+                impact = price_range_60 / (total_vol_60 / 1_000_000)  # $ per $1M volume
+                impact = min(500.0, impact)  # cap
+            else:
+                impact = 0.0
+            await self.redis.set("rt:micro:price_impact", str(round(impact, 1)), ttl=15)
+
+            # ── 8. VWAP + Deviation ──
+            vwap = self._vwap_vol_sum / self._vwap_qty_sum if self._vwap_qty_sum > 0 else current_price
+            vwap_dev = (current_price - vwap) / vwap * 100 if vwap > 0 else 0
+            await self.redis.set("rt:micro:vwap", json.dumps({
+                "vwap": round(vwap, 1),
+                "deviation_pct": round(vwap_dev, 4),
+                "price": round(current_price, 1),
+            }), ttl=30)
+
+            # ── 9. Delta Divergence (5분 CVD vs 가격) ──
+            delta_div = 0
+            if len(prices_60) >= 10:
+                # 최근 5분 가격 고점/저점 vs CVD
+                price_high = max(prices_60)
+                price_low = min(prices_60)
+                is_price_high = current_price >= price_high * 0.999
+                is_price_low = current_price <= price_low * 1.001
+
+                if len(self._cvd_snapshots) >= 3:
+                    cvd_vals = [v for _, v in list(self._cvd_snapshots)[-12:]]
+                    cvd_max = max(cvd_vals) if cvd_vals else 0
+                    cvd_min = min(cvd_vals) if cvd_vals else 0
+                    is_cvd_high = self._cvd_5m >= cvd_max * 0.95
+                    is_cvd_low = self._cvd_5m <= cvd_min * 0.95
+
+                    if is_price_high and not is_cvd_high:
+                        delta_div = -1  # bearish divergence
+                    elif is_price_low and not is_cvd_low:
+                        delta_div = 1   # bullish divergence
+
+            await self.redis.set("rt:micro:delta_div", str(delta_div), ttl=15)
+
+            # ── 10. Momentum Quality (종합) ──
+            # body_ratio × vol_ratio × delta_alignment
+            bs_60 = buy_vol_30 / max(buy_vol_30 + sell_vol_30, 1e-10)  # 0~1
+            delta_alignment = 1.0
+            if bs_60 > 0.6:
+                delta_alignment = 1.5 if self._cvd_5m > 0 else 0.5
+            elif bs_60 < 0.4:
+                delta_alignment = 1.5 if self._cvd_5m < 0 else 0.5
+
+            mom_quality = burst * (abs(bs_60 - 0.5) * 4) * delta_alignment
+            mom_quality = min(5.0, mom_quality)
+            await self.redis.set("rt:micro:momentum_quality", str(round(mom_quality, 2)), ttl=15)
+
+        except Exception as e:
+            logger.debug(f"마이크로스트럭처 집계 에러: {e}")

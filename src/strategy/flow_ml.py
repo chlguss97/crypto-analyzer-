@@ -48,6 +48,17 @@ EXTENDED_FEATURES = CORE_FEATURES + [
     "candle_body_ratio",
     "price_vs_ema50",
     "vol_ratio_1m",
+    # 마이크로스트럭처 (binance_stream 2초 갱신)
+    "micro_trade_rate",
+    "micro_burst",
+    "micro_bs_30s",
+    "micro_absorption_score",
+    "micro_whale_cluster",
+    "micro_delta_accel",
+    "micro_price_impact",
+    "micro_vwap_dev",
+    "micro_delta_div",
+    "micro_momentum_quality",
 ]
 
 
