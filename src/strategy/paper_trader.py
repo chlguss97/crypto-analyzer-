@@ -67,7 +67,13 @@ class PaperPosition:
     setup: str = "momentum"
     tp1_hit: bool = False
     tp2_hit: bool = False
+    runner_mode: bool = False   # TP1 후 러너 모드
     best_price: float = 0.0    # 트레일링용
+    last_new_high_time: float = 0.0
+    remaining_size: float = 0.0  # 초기값은 size_btc로 설정
+    realized_pnl_usdt: float = 0.0  # TP1 부분청산 실현 손익
+    time_1h_done: bool = False
+    time_2h_done: bool = False
 
     def unrealized_pnl_pct(self, current_price: float) -> float:
         """미실현 마진 수익률 %"""
@@ -348,6 +354,9 @@ class PaperTrader:
                 flow_result=candidate.get("features_raw", {}),
                 signals_snapshot=candidate.get("features_raw", {}),
             )
+            pos.remaining_size = size_btc
+            pos.best_price = current_price
+            pos.last_new_high_time = now
             self.positions[trade_id] = pos
             self._last_trade_time = now
             self._last_dir = direction
@@ -650,81 +659,165 @@ class PaperTrader:
             await self._update_redis_state()
 
     def _check_exit(self, pos: PaperPosition, price: float) -> str | None:
-        """청산 조건 체크"""
-        # SL
+        """청산 조건 — 실전 position_manager와 동일 구조"""
+        now = time.time()
+        hold_min = pos.hold_minutes()
+
+        # ── 0. Adverse Selection (진입 후 90초) ──
+        as_cfg = self.config.get("adverse_selection", {})
+        if as_cfg.get("enabled", False) and not pos.runner_mode:
+            elapsed_sec = hold_min * 60
+            window = as_cfg.get("window_sec", 90)
+            if elapsed_sec <= window:
+                margin_pct = pos.unrealized_pnl_pct(price)
+                threshold = -as_cfg.get("margin_threshold_pct", 2.5)
+                if margin_pct <= threshold:
+                    return "adverse_selection"
+
+        # ── 1. SL ──
         if pos.direction == "long" and price <= pos.sl_price:
             return "sl_hit"
         if pos.direction == "short" and price >= pos.sl_price:
             return "sl_hit"
 
-        # TP1 → 반익본절
+        # ── 2. TP1 → 50% 부분청산 + 본절 + 러너 모드 ──
         if not pos.tp1_hit:
-            if pos.direction == "long" and price >= pos.tp1_price:
+            tp1_hit = (pos.direction == "long" and price >= pos.tp1_price) or \
+                      (pos.direction == "short" and price <= pos.tp1_price)
+            if tp1_hit:
                 pos.tp1_hit = True
-                pos.sl_price = pos.entry_price  # 본절 이동
-                logger.info(f"[PAPER] TP1 도달 → SL 본절 이동 (ID:{pos.trade_id})")
-            if pos.direction == "short" and price <= pos.tp1_price:
-                pos.tp1_hit = True
-                pos.sl_price = pos.entry_price
-                logger.info(f"[PAPER] TP1 도달 → SL 본절 이동 (ID:{pos.trade_id})")
+                pos.runner_mode = True
+                pos.best_price = price
+                pos.last_new_high_time = now
 
-        # TP2 → 기록
-        if not pos.tp2_hit:
-            if pos.direction == "long" and price >= pos.tp2_price:
-                pos.tp2_hit = True
-                logger.info(f"[PAPER] TP2 도달 (ID:{pos.trade_id})")
-            if pos.direction == "short" and price <= pos.tp2_price:
-                pos.tp2_hit = True
-                logger.info(f"[PAPER] TP2 도달 (ID:{pos.trade_id})")
+                # 50% 부분청산 실현 PnL
+                close_pct = self.config.get("trailing", {}).get("tp1_close_pct", 0.5)
+                partial_size = pos.size_btc * close_pct
+                raw_pnl = pos.unrealized_pnl_pct(price)
+                fee_pct = self.FEE_MAKER * 2 * pos.leverage * 100
+                net_pnl = raw_pnl - fee_pct
+                pos.realized_pnl_usdt += pos.margin * close_pct * net_pnl / 100
+                pos.remaining_size = pos.size_btc - partial_size
 
-        # TP3 → 전량 청산
+                # SL → 본절 (진입가 + 수수료)
+                fee_offset = pos.entry_price * (self.FEE_MAKER * 2)
+                if pos.direction == "long":
+                    pos.sl_price = pos.entry_price + fee_offset
+                else:
+                    pos.sl_price = pos.entry_price - fee_offset
+
+                logger.info(
+                    f"[PAPER] TP1 50% 청산: {pos.direction.upper()} "
+                    f"+{net_pnl:.1f}% (${pos.realized_pnl_usdt:+.2f}) "
+                    f"| 러너 {pos.remaining_size:.4f} BTC | SL→본절 ${pos.sl_price:.0f}"
+                )
+
+        # ── 3. TP3 → 전량 청산 ──
         if pos.direction == "long" and price >= pos.tp3_price:
             return "tp3_hit"
         if pos.direction == "short" and price <= pos.tp3_price:
             return "tp3_hit"
 
-        # 트레일링 (TP1 이후)
-        if pos.tp1_hit:
-            trail_cfg = self.config.get("trailing", {})
-            trail_margin_pct = trail_cfg.get("trail_margin_pct", 4.0)
-            trail_dist = pos.entry_price * (trail_margin_pct / pos.leverage / 100)
-
+        # ── 4. 러너 트레일링 (실전 동일 — 동적 거리 + R-lock + 시간감쇠) ──
+        if pos.runner_mode:
+            # 신고/신저 갱신
             if pos.direction == "long":
-                pos.best_price = max(pos.best_price, price)
-                trail_sl = pos.best_price - trail_dist
-                if trail_sl > pos.sl_price:
-                    pos.sl_price = round(trail_sl, 1)
+                if price > pos.best_price:
+                    pos.best_price = price
+                    pos.last_new_high_time = now
             else:
                 if pos.best_price <= 0 or price < pos.best_price:
                     pos.best_price = price
-                trail_sl = pos.best_price + trail_dist
-                if trail_sl < pos.sl_price:
-                    pos.sl_price = round(trail_sl, 1)
+                    pos.last_new_high_time = now
 
-        # 시간 청산
-        hold_min = pos.hold_minutes()
+            # 동적 트레일 거리 계산
+            profit = abs(pos.best_price - pos.entry_price)
+            atr_proxy = price * 0.002  # 0.2%
+
+            # 시간 감쇠: 보유 시간이 길수록 트레일 좁힘
+            if hold_min < 15:
+                giveback = 0.35
+            elif hold_min < 30:
+                giveback = 0.25
+            else:
+                giveback = 0.15
+
+            # 정체 감지: 10분 이상 신고가 없으면 giveback 절반
+            stale_min = (now - pos.last_new_high_time) / 60
+            if stale_min > 10:
+                giveback *= 0.5
+
+            trail_dist = max(atr_proxy * 1.5, profit * giveback)
+            trail_dist = min(trail_dist, price * 0.008)  # cap 0.8%
+            trail_dist = max(trail_dist, price * 0.001)  # floor 0.1%
+
+            # R-lock: 큰 수익 보호
+            sl_dist_orig = abs(pos.entry_price - pos.sl_price) if not pos.tp1_hit else abs(pos.entry_price * 0.005)
+            r_val = sl_dist_orig if sl_dist_orig > 0 else atr_proxy
+            if profit >= 3 * r_val:
+                min_sl_lock = pos.entry_price + 2 * r_val if pos.direction == "long" else pos.entry_price - 2 * r_val
+            elif profit >= 2 * r_val:
+                min_sl_lock = pos.entry_price + 1 * r_val if pos.direction == "long" else pos.entry_price - 1 * r_val
+            else:
+                min_sl_lock = pos.sl_price
+
+            # 새 SL 계산
+            if pos.direction == "long":
+                new_sl = pos.best_price - trail_dist
+                new_sl = max(new_sl, min_sl_lock)
+                if new_sl > pos.sl_price:
+                    pos.sl_price = round(new_sl, 1)
+            else:
+                new_sl = pos.best_price + trail_dist
+                new_sl = min(new_sl, min_sl_lock)
+                if new_sl < pos.sl_price:
+                    pos.sl_price = round(new_sl, 1)
+
+        # ── 5. 시간 청산 (실전 동일 — 단계별) ──
+        if not pos.runner_mode:
+            # 1h: TP1 미도달 + PnL < 3% → 청산
+            if hold_min >= 60 and not pos.time_1h_done:
+                pos.time_1h_done = True
+                pnl = pos.unrealized_pnl_pct(price)
+                if pnl < 3.0:
+                    return "time_exit_1h"
+
+            # 2h: TP1 미도달 → 청산
+            if hold_min >= 120 and not pos.time_2h_done:
+                pos.time_2h_done = True
+                return "time_exit_2h"
+        else:
+            # 러너 모드: 6h 강제 청산
+            if hold_min >= 360:
+                return "time_exit_6h"
+            # 8h 하드 리밋
+            if hold_min >= 480:
+                return "time_exit_8h"
+
+        # hold_mode 최대 보유 시간 (안전망)
         hm_cfg = self.config.get("hold_modes", {}).get(pos.hold_mode, {})
         max_hold = hm_cfg.get("max_hold_min", 60)
-
-        if hold_min >= max_hold:
+        if hold_min >= max_hold and not pos.runner_mode:
             return "time_exit"
-
-        # 중간 시간 체크 (50% 시간 경과 + 손실 중)
-        if hold_min >= max_hold * 0.5:
-            pnl = pos.unrealized_pnl_pct(price)
-            if pnl < 0:  # 손실일 때만 (breakeven은 유지)
-                return f"time_exit_{int(hold_min)}m"
 
         return None
 
     async def _close_position(self, pos: PaperPosition, exit_price: float, reason: str):
         """가상 포지션 청산 → 잔고 반영 + DB + ML"""
         # PnL 계산 (수수료 포함)
+        # 러너 모드면 남은 사이즈 비율로 미실현 PnL 계산
+        remaining_ratio = pos.remaining_size / pos.size_btc if pos.size_btc > 0 else 1.0
         raw_pnl_pct = pos.unrealized_pnl_pct(exit_price)
-        # 04-28: 전 주문 maker 강제 — 진입/청산 모두 maker
         fee_pct = self.FEE_MAKER * 2 * pos.leverage * 100
         net_pnl_pct = raw_pnl_pct - fee_pct
-        pnl_usdt = pos.margin * net_pnl_pct / 100
+
+        # 남은 부분의 PnL + TP1 부분청산 실현 PnL
+        remaining_pnl_usdt = pos.margin * remaining_ratio * net_pnl_pct / 100
+        pnl_usdt = remaining_pnl_usdt + pos.realized_pnl_usdt
+
+        # 전체 마진 대비 순수익률 재계산
+        if pos.margin > 0:
+            net_pnl_pct = pnl_usdt / pos.margin * 100
 
         # ── 잔고 반영 ──
         self.balance += pnl_usdt

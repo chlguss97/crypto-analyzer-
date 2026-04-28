@@ -37,27 +37,81 @@ class RiskManager:
         }
 
     async def initialize(self, balance: float):
-        """초기 잔고로 상태 초기화"""
+        """초기 잔고로 상태 초기화 — Redis 우선, 없으면 파일 백업에서 복원"""
         self._state["peak_balance"] = balance
         self._state["current_balance"] = balance
 
+        # Redis에서 복원 시도
         streak = await self.redis.get("risk:streak")
-        if streak:
-            self._state["streak"] = int(streak)
         daily_pnl = await self.redis.get("risk:daily_pnl")
-        if daily_pnl:
-            self._state["daily_pnl_pct"] = float(daily_pnl)
-        weekly_pnl = await self.redis.get("risk:weekly_pnl")
-        if weekly_pnl:
-            self._state["weekly_pnl_pct"] = float(weekly_pnl)
-        cooldown = await self.redis.get("risk:cooldown_until")
-        if cooldown:
-            self._state["cooldown_until"] = int(cooldown)
+
+        if streak or daily_pnl:
+            # Redis에 데이터 있음
+            if streak:
+                self._state["streak"] = int(streak)
+            if daily_pnl:
+                self._state["daily_pnl_pct"] = float(daily_pnl)
+            weekly_pnl = await self.redis.get("risk:weekly_pnl")
+            if weekly_pnl:
+                self._state["weekly_pnl_pct"] = float(weekly_pnl)
+            cooldown = await self.redis.get("risk:cooldown_until")
+            if cooldown:
+                self._state["cooldown_until"] = int(cooldown)
+            logger.info(f"리스크 상태 Redis 복원: streak={self._state['streak']} daily={self._state['daily_pnl_pct']:.2f}%")
+        else:
+            # Redis 비어있음 → 파일 백업에서 복원
+            backup = self._load_backup()
+            if backup:
+                self._state["streak"] = backup.get("streak", 0)
+                self._state["daily_pnl_pct"] = backup.get("daily_pnl_pct", 0.0)
+                self._state["weekly_pnl_pct"] = backup.get("weekly_pnl_pct", 0.0)
+                self._state["cooldown_until"] = backup.get("cooldown_until", 0)
+                logger.warning(f"Redis 비어있음 → 파일 백업 복원: streak={self._state['streak']} daily={self._state['daily_pnl_pct']:.2f}%")
+                # Redis에도 동기화
+                await self.redis.set("risk:streak", str(self._state["streak"]))
+                await self.redis.set("risk:daily_pnl", str(self._state["daily_pnl_pct"]))
+                await self.redis.set("risk:weekly_pnl", str(self._state["weekly_pnl_pct"]))
 
         logger.info(
             f"리스크 매니저 초기화: 잔고 ${balance:.2f} | "
             f"연패 {self._state['streak']} | 일일 P&L {self._state['daily_pnl_pct']:.2f}%"
         )
+
+    def _save_backup(self):
+        """파일 백업 — Redis 유실 대비"""
+        try:
+            import json
+            from pathlib import Path
+            backup_path = Path(__file__).parent.parent.parent / "data" / "risk_state.json"
+            backup_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(backup_path, "w") as f:
+                json.dump({
+                    "streak": self._state["streak"],
+                    "daily_pnl_pct": round(self._state["daily_pnl_pct"], 4),
+                    "weekly_pnl_pct": round(self._state["weekly_pnl_pct"], 4),
+                    "cooldown_until": self._state["cooldown_until"],
+                    "ts": int(time.time()),
+                }, f)
+        except Exception:
+            pass  # 백업 실패가 매매를 막지 않음
+
+    def _load_backup(self) -> dict | None:
+        """파일 백업에서 복원"""
+        try:
+            import json
+            from pathlib import Path
+            backup_path = Path(__file__).parent.parent.parent / "data" / "risk_state.json"
+            if not backup_path.exists():
+                return None
+            with open(backup_path) as f:
+                data = json.load(f)
+            # 24시간 이상 된 백업은 무시 (stale)
+            if time.time() - data.get("ts", 0) > 86400:
+                logger.info("리스크 백업 24시간 초과 → 무시")
+                return None
+            return data
+        except Exception:
+            return None
 
     async def get_risk_state(self, open_positions: list = None) -> dict:
         """현재 리스크 상태 조회 — 30초마다 OKX 실잔고 재동기화"""
@@ -142,19 +196,20 @@ class RiskManager:
             self._state["streak"] = 0
             logger.info(f"수익 기록: {pnl_pct:+.2f}% | 연패 리셋")
 
-        # Redis 동기화
+        # Redis + 파일 동기화 (Redis 재시작 시 파일에서 복원)
         await self.redis.set("risk:streak", str(self._state["streak"]))
         await self.redis.set("risk:daily_pnl", str(round(self._state["daily_pnl_pct"], 4)))
         await self.redis.set("risk:weekly_pnl", str(round(self._state["weekly_pnl_pct"], 4)))
         await self.redis.set("risk:cooldown_until", str(self._state["cooldown_until"]))
+        self._save_backup()
 
-        # 일일 손실 한도 (-10%)
+        # 일일 손실 한도
         if self._state["daily_pnl_pct"] <= -MAX_DAILY_LOSS_PCT:
             logger.error(
-                f"[RISK] 일일 손실 한도 -10% 도달: {self._state['daily_pnl_pct']:.2f}% → 당일 매매 중단"
+                f"[RISK] 일일 손실 한도 -{MAX_DAILY_LOSS_PCT}% 도달: {self._state['daily_pnl_pct']:.2f}% → 당일 매매 중단"
             )
 
-        # 주간 손실 한도 (-20%)
+        # 주간 손실 한도
         if self._state["weekly_pnl_pct"] <= -MAX_WEEKLY_LOSS_PCT:
             logger.error(
                 f"[RISK] 주간 손실 한도 -20% 도달: {self._state['weekly_pnl_pct']:.2f}% → 주간 매매 중단"

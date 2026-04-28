@@ -504,8 +504,9 @@ class CryptoAnalyzer:
         """실거래 결과 → 리스크 + ML + 추적"""
         await self.risk_manager.record_trade_result(pnl_pct, pnl_usdt)
 
-        # ML 결과 기록
-        label = 1 if pnl_pct > 0 else 0
+        # ML 결과 기록 (fee 차감 후 기준 — 페이퍼와 통일)
+        net_pnl = pnl_pct - fee_pct  # fee_pct는 마진 대비 수수료%
+        label = 1 if net_pnl > 0 else 0
         self.ml_engine.record_decision_result(True, label)
 
         # ML 재학습 체크
