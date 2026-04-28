@@ -18067,3 +18067,1921 @@ Traceback (most recent call last):
     if df_1m is not None and len(df_1m) >= 21:
        ^^^^^
 NameError: name 'df_1m' is not defined
+2026-04-28 22:45:31 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:45:33 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:45:35 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:45:38 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:45:40 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:45:42 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:45:44 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:45:46 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:45:48 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:45:50 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:45:52 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:45:54 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:45:56 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:45:58 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:46:00 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:46:02 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:46:04 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:46:06 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:46:08 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:46:10 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:46:12 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:46:14 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:46:16 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:46:18 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:46:20 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:46:22 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:46:24 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:46:26 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:46:28 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:46:30 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:46:32 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:46:34 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:46:36 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:46:38 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:46:40 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:46:42 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:46:44 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:46:46 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:46:48 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:46:50 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:46:53 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:46:55 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:46:57 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:46:59 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:47:01 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:47:03 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:47:05 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:47:07 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:47:09 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:47:11 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:47:13 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:47:15 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:47:17 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:47:19 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:47:21 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:47:23 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:47:25 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:47:27 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:47:29 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:47:31 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:47:33 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:47:35 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:47:37 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:47:39 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:47:41 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:47:43 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:47:45 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:47:47 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:47:49 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:47:51 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:47:53 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:47:55 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:47:57 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:47:59 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:48:01 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:48:03 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:48:05 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:48:08 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:48:10 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:48:12 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:48:14 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:48:16 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:48:18 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:48:20 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:48:22 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:48:24 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:48:26 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:48:28 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:48:30 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:48:32 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:48:34 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:48:36 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:48:38 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:48:40 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:48:42 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:48:44 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:48:46 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:48:48 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:48:50 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:48:52 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:48:54 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:48:56 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:48:58 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:49:00 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:49:02 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:49:04 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:49:06 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:49:08 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:49:10 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:49:12 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:49:14 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:49:16 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:49:18 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:49:20 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:49:23 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:49:25 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:49:27 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:49:29 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:49:31 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:49:33 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:49:35 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:49:37 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:49:39 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:49:41 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:49:43 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:49:45 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:49:47 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:49:49 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:49:51 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:49:53 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:49:55 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:49:57 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:49:59 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:50:01 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:50:03 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:50:05 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
+2026-04-28 22:50:07 [ERROR] CryptoAnalyzer: [EVAL] 에러: name 'df_1m' is not defined
+Traceback (most recent call last):
+  File "/app/src/main.py", line 176, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 246, in _evaluate
+    candidate = await self.detector.detect(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 88, in detect
+    brk["features_raw"] = self._build_raw_features(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/strategy/flow_engine.py", line 349, in _build_raw_features
+    if df_1m is not None and len(df_1m) >= 21:
+       ^^^^^
+NameError: name 'df_1m' is not defined
