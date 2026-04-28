@@ -576,7 +576,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-pri
       </div>
       <div style="text-align:center;">
         <div class="big-num" id="flowTrend" style="font-size:24px;">--</div>
-        <span class="big-sub">Trend</span>
+        <span class="big-sub">Regime</span>
       </div>
       <div style="text-align:center;">
         <div class="big-num" id="flowML" style="font-size:20px;color:var(--text-muted);">--</div>
@@ -1484,9 +1484,10 @@ async function updateEngineState() {
   dirEl.textContent = (data.direction||'--').toUpperCase();
   dirEl.style.color = data.direction==='long'?'var(--green)':data.direction==='short'?'var(--red)':'var(--text-muted)';
   document.getElementById('flowScore').textContent = (data.strength||0).toFixed(1);
-  const streakEl = document.getElementById('flowTrend');
-  streakEl.textContent = (data.trend||'--').toUpperCase();
-  streakEl.style.color = data.trend==='up'?'var(--green)':data.trend==='down'?'var(--red)':'var(--text-muted)';
+  const regimeEl = document.getElementById('flowTrend');
+  const regime = data.regime || '--';
+  regimeEl.textContent = regime.toUpperCase();
+  regimeEl.style.color = regime.includes('trend')?'var(--green)':regime==='ranging'?'var(--red)':'var(--text-muted)';
 
   // ML field: Phase + P(Win)
   const mlPhase = data.ml_phase || '--';

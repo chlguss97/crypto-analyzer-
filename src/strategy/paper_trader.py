@@ -280,16 +280,17 @@ class PaperTrader:
         tp2_mult = hm_cfg.get("tp2_mult", 2.5)
         tp3_mult = hm_cfg.get("tp3_mult", 4.0)
 
-        # 레버리지
-        if strength >= 2.0:
-            leverage = 20
-        elif strength >= 1.5:
-            leverage = 18
-        else:
-            leverage = 15
+        # 레버리지 (실전과 동일 — LeverageCalculator 사용)
+        from src.trading.leverage import LeverageCalculator
+        _lev_calc = LeverageCalculator()
+        grade = "A+" if strength >= 2.0 else "A" if strength >= 1.5 else "B+" if strength >= 1.0 else "B"
+        atr_pct = candidate.get("atr_pct", 0.3)
+        lev_result = _lev_calc.calculate(grade, atr_pct, self._loss_streak)
+        leverage = lev_result["leverage"]
 
-        # SL/TP
+        # SL/TP (min SL 0.5% — 실전과 동일)
         sl_dist = current_price * (sl_margin_pct / leverage / 100)
+        sl_dist = max(sl_dist, current_price * 0.005)
         tp1_dist = current_price * (tp1_margin_pct / leverage / 100)
 
         if direction == "long":

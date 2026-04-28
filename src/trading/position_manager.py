@@ -1518,12 +1518,8 @@ class PositionManager:
             except Exception as e:
                 logger.error(f"trade_logger.log_exit 실패: {e}")
 
-        # 04-13: 리스크 매니저에 매매 결과 기록 (일일/주간 P&L, 연패 추적)
-        if self.risk_manager:
-            try:
-                await self.risk_manager.record_trade_result(pnl_pct, pnl_usdt)
-            except Exception as e:
-                logger.error(f"리스크 매니저 기록 실패: {e}")
+        # risk_manager.record_trade_result는 main._on_trade_closed 콜백에서 호출
+        # (이중 호출 방지 — 2026-04-29 감사에서 발견)
 
         # ML 학습 콜백 (실거래 시그널 데이터 포함 + 수수료율 + 방향/사유)
         if self.on_trade_closed:
