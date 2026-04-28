@@ -226,8 +226,172 @@ class PaperTrader:
             logger.error(f"[PAPER] DB 복원 실패: {e}")
 
     # ══════════════════════════════════════════
-    #  진입 판단
+    #  진입 판단 (v2 — CandidateDetector 연동)
     # ══════════════════════════════════════════
+
+    async def try_candidate_entry(self, candidate: dict, regime: str):
+        """CandidateDetector 후보 → 가상 진입 (SPEC v2)"""
+        now = time.time()
+        current_price = candidate.get("price", 0)
+        if current_price <= 0:
+            return None
+
+        # 일일 리셋
+        today = datetime.now(timezone.utc).timetuple().tm_yday
+        if today != self._current_day:
+            self._reset_daily()
+            self._current_day = today
+
+        direction = candidate.get("direction", "neutral")
+        ctype = candidate.get("type", "momentum")
+        strength = candidate.get("strength", 0)
+
+        if direction == "neutral":
+            return None
+
+        # ── 리스크 게이트 (축소) ──
+        daily_pnl_pct = (self._daily_pnl_usdt / self.balance * 100) if self.balance > 0 else 0
+        if daily_pnl_pct <= -5.0:  # SPEC v2: -5%
+            return None
+        if now < self._cooldown_until:
+            return None
+        if len(self.positions) >= self.max_positions:
+            return None
+        if now - self._last_trade_time < 30:  # 30초 간격
+            return None
+
+        # 같은 방향 포지션 중복 방지
+        for pos in self.positions.values():
+            if pos.direction == direction:
+                return None
+
+        # ── ML Go/NoGo ──
+        features = candidate.get("features_raw", {})
+        if self.flow_ml:
+            go, prob = self.flow_ml.decide(features)
+            if not go:
+                return None
+
+        # ── 사이징 ──
+        hold_mode = candidate.get("hold_mode", "momentum")
+        hm_cfg = self.config.get("hold_modes", {}).get(hold_mode, {})
+        sl_margin_pct = hm_cfg.get("sl_margin_pct", 5.0)
+        tp1_margin_pct = hm_cfg.get("tp1_margin_pct", 10.0)
+        tp2_mult = hm_cfg.get("tp2_mult", 2.5)
+        tp3_mult = hm_cfg.get("tp3_mult", 4.0)
+
+        # 레버리지
+        if strength >= 2.0:
+            leverage = 20
+        elif strength >= 1.5:
+            leverage = 18
+        else:
+            leverage = 15
+
+        # SL/TP
+        sl_dist = current_price * (sl_margin_pct / leverage / 100)
+        tp1_dist = current_price * (tp1_margin_pct / leverage / 100)
+
+        if direction == "long":
+            sl = current_price - sl_dist
+            tp1 = current_price + tp1_dist
+            tp2 = current_price + sl_dist * tp2_mult
+            tp3 = current_price + sl_dist * tp3_mult
+        else:
+            sl = current_price + sl_dist
+            tp1 = current_price - tp1_dist
+            tp2 = current_price - sl_dist * tp2_mult
+            tp3 = current_price - sl_dist * tp3_mult
+
+        # 수수료 필터
+        fee_cost = self.FEE_MAKER * 2 * leverage * 100
+        tp1_gain = tp1_dist / current_price * leverage * 100
+        if tp1_gain <= fee_cost:
+            return None
+
+        # 마진
+        margin_pct = self.config.get("risk", {}).get("margin_pct", 0.40)
+        streak_sizing = self.config.get("risk", {}).get("streak_sizing", {})
+        size_mult = 1.0
+        for threshold, mult in sorted(streak_sizing.items(), key=lambda x: int(x[0]), reverse=True):
+            if self._loss_streak >= int(threshold):
+                size_mult = mult
+                break
+
+        margin = self.balance * margin_pct * size_mult
+        size_btc = margin * leverage / current_price
+        size_btc = math.floor(size_btc / 0.01) * 0.01
+        if size_btc < 0.01 or margin <= 0:
+            return None
+
+        # ── 가상 진입 ──
+        self._stats["total"] += 0  # 진입 시점에서는 카운트 안 함 (청산 시 카운트)
+        trade_id = await self._record_entry(
+            direction, current_price, sl, tp1, tp2, tp3,
+            size_btc, margin, leverage, ctype, strength, hold_mode,
+            candidate.get("features_raw", {}), regime
+        )
+
+        if trade_id:
+            from src.strategy.paper_trader import PaperPosition
+            pos = PaperPosition(
+                trade_id=trade_id, symbol="BTC-USDT-SWAP",
+                direction=direction, entry_price=current_price,
+                size_btc=size_btc, margin=margin, leverage=leverage,
+                sl_price=sl, tp1_price=tp1, tp2_price=tp2, tp3_price=tp3,
+                setup=ctype, hold_mode=hold_mode,
+                flow_result=candidate.get("features_raw", {}),
+                signals_snapshot=candidate.get("features_raw", {}),
+            )
+            self.positions[trade_id] = pos
+            self._last_trade_time = now
+            self._last_dir = direction
+
+            logger.info(
+                f"[PAPER] ▶ {direction.upper()} @ ${current_price:,.0f} | "
+                f"{ctype} str={strength:.1f} | SL ${sl:,.0f} TP ${tp1:,.0f} | "
+                f"{leverage}x | margin ${margin:,.0f}"
+            )
+
+            # JSONL 기록
+            _append_jsonl({
+                "type": "paper_entry", "paper": True,
+                "trade_id": trade_id, "direction": direction,
+                "entry_price": round(current_price, 1),
+                "margin": round(margin, 2), "size_btc": round(size_btc, 2),
+                "leverage": leverage, "sl_price": round(sl, 1),
+                "tp1_price": round(tp1, 1),
+                "score": strength, "setup": ctype,
+                "hold_mode": hold_mode,
+                "balance": round(self.balance, 2),
+            })
+
+            return trade_id
+        return None
+
+    async def _record_entry(self, direction, price, sl, tp1, tp2, tp3,
+                            size, margin, leverage, setup, score, hold_mode,
+                            signals, regime):
+        """DB에 가상 진입 기록"""
+        try:
+            import json
+            trade_id = await self.db.insert_trade({
+                "symbol": "BTC-USDT-SWAP",
+                "direction": direction,
+                "grade": f"PAPER_{setup}",
+                "score": score,
+                "entry_price": round(price, 1),
+                "entry_time": int(time.time() * 1000),
+                "leverage": leverage,
+                "position_size": round(size, 4),
+                "signals_snapshot": json.dumps(signals, default=str),
+            })
+            return trade_id
+        except Exception as e:
+            logger.error(f"[PAPER] DB 진입 기록 실패: {e}")
+            return None
+
+    # ── 레거시 호환: 기존 try_entry (FlowEngine result 기반) ──
 
     async def try_entry(self, signal_result: dict, mode: str, current_price: float):
         """시그널 평가 → 가상 진입 or shadow 추적"""

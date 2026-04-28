@@ -1,329 +1,374 @@
 """
-FlowML — FlowEngine 전용 경량 ML.
+ML DecisionEngine — Meta-Label Go/NoGo 분류기
 
-역할: FlowEngine이 "진입" 판단한 후, ML이 "이 상황에서 이기는 패턴인가" 검증.
-- FlowEngine은 3가지 규칙(추세+레벨+플로우)으로 YES/NO 결정
-- ML은 과거 데이터 기반으로 "이 조합이 이겼는지" 확률 제공
-- 확률 높으면 가점, 낮으면 감점 (차단 아님)
+역할: "이 후보를 실행하면 돈을 버는가?" → Yes(1) / No(0) 이진 분류
+근거: Lopez de Prado (2018) "Advances in Financial Machine Learning"
+      - Meta-Labeling: 방향은 시그널이 결정, ML은 품질만 판단
+      - Triple Barrier: TP/SL/Time 중 먼저 도달한 것으로 라벨링
 
-피처: FlowEngine 시그널 기반 (~15개, 단순)
-모델: GradientBoosting (단일, 레짐별 분리 불필요 — 피처에 레짐 포함)
-학습: 매 거래 결과 기록 → 50건마다 자동 재학습
+Phase A (< min_samples): 룰 기반 필터 (CVD + vol)
+Phase B (>= min_samples): GBM 분류기 P(Win) > threshold → Go
 """
 
 import json
 import logging
 import time
 import pickle
+import numpy as np
 from collections import deque
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
 DATA_DIR = Path(__file__).parent.parent.parent / "data"
-MODEL_PATH = DATA_DIR / "flow_ml.pkl"
-MIN_SAMPLES = 30  # 최소 학습 데이터
-RETRAIN_EVERY = 50  # N거래마다 재학습
+MODEL_PATH = DATA_DIR / "ml_meta_label.pkl"
+
+# 핵심 8 피처 이름 (순서 고정)
+CORE_FEATURES = [
+    "price_momentum",    # 5봉 변동%
+    "trend_strength",    # (EMA8-EMA21)/ATR
+    "cvd_norm",          # CVD/거래량 (-1~+1)
+    "cvd_matches",       # CVD 방향 일치 (0/1)
+    "vol_ratio",         # 거래량/평균
+    "adx",               # 추세 강도
+    "bb_position",       # BB 내 위치
+    "hour_sin",          # 시간대
+]
+
+# 확장 피처 (500건 이후 추가)
+EXTENDED_FEATURES = CORE_FEATURES + [
+    "price_change_15m",
+    "price_change_1h",
+    "cvd_15m_norm",
+    "whale_bias",
+    "liq_pressure",
+    "atr_pct",
+    "vol_trend",
+    "hour_cos",
+    "candle_body_ratio",
+    "price_vs_ema50",
+    "vol_ratio_1m",
+]
 
 
-class FlowML:
+class MLDecisionEngine:
+    """
+    ML 기반 Go/NoGo 결정 엔진.
+    Phase A: 룰 필터 (데이터 부족)
+    Phase B: GBM 분류기
+    """
 
-    def __init__(self):
+    def __init__(self, config=None):
+        ml_cfg = (config or {}).get("ml", {})
+        self.min_samples = ml_cfg.get("phase_a_min_samples", 200)
+        self.retrain_interval = ml_cfg.get("retrain_interval", 100)
+        self.window_size = ml_cfg.get("window_size", 500)
+        self.min_oos_accuracy = ml_cfg.get("min_oos_accuracy", 0.52)
+        self.go_threshold = ml_cfg.get("go_threshold", 0.55)
+        self.expanded_features_at = ml_cfg.get("expanded_features_at", 500)
+
         self.model = None
         self.scaler = None
-        self.buffer_X = deque(maxlen=5000)
-        self.buffer_y = deque(maxlen=5000)
         self.trained = False
+        self.phase = "A"  # "A" = 룰, "B" = ML
         self.oos_accuracy = 0.0
         self.train_accuracy = 0.0
-        self.trade_count = 0
-        self.recent_results = deque(maxlen=20)
-        self.feature_names = self._feature_names()
+        self.total_labeled = 0
+        self.last_train_count = 0
+        self.feature_names = list(CORE_FEATURES)
+        self.consecutive_bad_oos = 0
+
+        # 최근 성과 추적
+        self.recent_decisions = deque(maxlen=50)  # (go, actual_label)
+
         self._load()
 
-    @staticmethod
-    def _feature_names() -> list:
-        """피처 이름 목록 — 순서 고정"""
-        return [
-            # 추세 (4)
-            "trend_1d",       # 1=up, -1=down, 0=neutral
-            "trend_4h",
-            "trend_1h",
-            "trends_agree",   # 1d==4h ? 1 : 0
+    # ════════════════════════════════════════
+    #  결정 (Go / NoGo)
+    # ════════════════════════════════════════
 
-            # 레벨 (3)
-            "near_support",   # 0 or 1
-            "near_resistance",
-            "level_strength", # 병합 강도
-
-            # 오더플로우 (5)
-            "cvd_direction",  # 1=buy, -1=sell, 0=mixed
-            "cvd_strength",   # 0~1
-            "whale_confirm",  # 0 or 1
-            "liq_confirm",    # 0 or 1
-            "flow_agrees",    # flow방향==진입방향 ? 1 : 0
-
-            # 컨텍스트 (4)
-            "atr_pct",        # 변동성
-            "hour",           # 0~23 (UTC)
-            "is_weekend",     # 0 or 1
-            "conviction",     # FlowEngine score / 10
-        ]
-
-    def extract_features(self, flow_result: dict) -> list:
-        """FlowEngine analyze() 결과 → 피처 벡터"""
-        sigs = flow_result.get("signals", {})
-        flow = sigs.get("flow", {})
-        direction = flow_result.get("direction", "neutral")
-
-        def trend_val(t):
-            return 1 if t == "up" else -1 if t == "down" else 0
-
-        t1d = trend_val(sigs.get("trend_1d", "neutral"))
-        t4h = trend_val(sigs.get("trend_4h", "neutral"))
-        t1h = trend_val(sigs.get("trend_1h", "neutral"))
-
-        cvd_dir = 1 if flow.get("direction") == "long" else -1 if flow.get("direction") == "short" else 0
-        flow_agrees = 1 if flow.get("direction") == direction else 0
-
-        # 레벨 강도
-        levels = sigs.get("levels", {})
-        supports = levels.get("supports", [])
-        resistances = levels.get("resistances", [])
-        if direction == "long" and supports:
-            level_strength = supports[0].get("strength", 1.0)
-        elif direction == "short" and resistances:
-            level_strength = resistances[0].get("strength", 1.0)
-        else:
-            level_strength = 0
-
-        import datetime
-        now = datetime.datetime.now(datetime.timezone.utc)
-
-        return [
-            t1d, t4h, t1h,
-            1 if t1d == t4h and t1d != 0 else 0,
-            1 if sigs.get("near_support") else 0,
-            1 if sigs.get("near_resistance") else 0,
-            min(5.0, level_strength),
-            cvd_dir,
-            min(1.0, flow.get("strength", 0)),
-            1 if flow.get("whale_confirm") else 0,
-            1 if flow.get("liquidation_confirm") else 0,
-            flow_agrees,
-            flow_result.get("atr_pct", 0.3),
-            now.hour,
-            1 if now.weekday() >= 5 else 0,
-            flow_result.get("score", 6.0) / 10.0,
-        ]
-
-    def predict(self, flow_result: dict) -> dict:
+    def decide(self, features_raw: dict) -> tuple[bool, float]:
         """
-        FlowEngine 결과 → ML 보정값.
+        진입 여부 결정.
+
+        Args:
+            features_raw: CandidateDetector._build_raw_features()의 출력
 
         Returns:
-            {
-                "ml_score": float (-2.0 ~ +3.0),
-                "win_prob": float (0~1),
-                "trained": bool,
-                "samples": int,
-            }
+            (go: bool, probability: float)
+            go=True → 진입, go=False → NoGo (shadow 추적)
+            probability: P(Win) 또는 룰 기반 시 -1.0
         """
-        if not self.trained or self.model is None:
-            return {"ml_score": 0, "win_prob": 0.5, "trained": False,
-                    "samples": len(self.buffer_X)}
+        if self.phase == "A":
+            return self._decide_rule_based(features_raw)
+        else:
+            return self._decide_ml(features_raw)
+
+    def _decide_rule_based(self, features: dict) -> tuple[bool, float]:
+        """Phase A: 룰 기반 Go/NoGo (CVD 일치 + 거래량 평균 이상)"""
+        cvd_matches = features.get("cvd_matches", 0)
+        vol_ratio = features.get("vol_ratio", 0)
+
+        go = (cvd_matches == 1) and (vol_ratio > 1.0)
+        return go, -1.0  # 룰 기반이므로 확률 없음
+
+    def _decide_ml(self, features_raw: dict) -> tuple[bool, float]:
+        """Phase B: ML Go/NoGo"""
+        if self.model is None:
+            return self._decide_rule_based(features_raw)
 
         try:
-            features = self.extract_features(flow_result)
-            X = [features]
-
+            x = self._extract_feature_vector(features_raw)
             if self.scaler:
-                X = self.scaler.transform(X)
-
-            proba = self.model.predict_proba(X)[0]
-            win_prob = float(proba[1]) if len(proba) > 1 else 0.5
-
-            # 확률 → 점수 보정 (순서: 높은쪽부터 → 낮은쪽)
-            if win_prob >= 0.6:
-                ml_score = min(3.0, (win_prob - 0.5) * 6)    # 0.6→+0.6, 0.7→+1.2
-            elif win_prob >= 0.52:
-                ml_score = min(1.5, (win_prob - 0.5) * 8)    # 0.52→+0.16, 0.55→+0.4
-            elif win_prob <= 0.35:
-                ml_score = max(-2.0, (win_prob - 0.5) * 4)   # 0.35→-0.6, 0.25→-1.0
-            elif win_prob <= 0.45:
-                ml_score = max(-1.0, (win_prob - 0.5) * 3)   # 0.45→-0.15, 0.40→-0.3
+                x = self.scaler.transform([x])
             else:
-                ml_score = 0  # 0.45 < win_prob < 0.52 → neutral
+                x = [x]
 
-            return {
-                "ml_score": round(ml_score, 2),
-                "win_prob": round(win_prob, 3),
-                "trained": True,
-                "samples": len(self.buffer_X),
-                "oos_accuracy": round(self.oos_accuracy, 3),
-            }
+            prob = float(self.model.predict_proba(x)[0][1])  # P(Win)
+            go = prob > self.go_threshold
+            return go, prob
 
         except Exception as e:
-            logger.debug(f"FlowML predict error: {e}")
-            return {"ml_score": 0, "win_prob": 0.5, "trained": False,
-                    "samples": len(self.buffer_X)}
+            logger.warning(f"ML predict 실패 → 룰 폴백: {e}")
+            return self._decide_rule_based(features_raw)
 
-    def record_trade(self, flow_result: dict, pnl_pct: float, fee_pct: float = 0):
-        """거래 결과 기록 → 자동 재학습"""
-        try:
-            features = self.extract_features(flow_result)
-            net_pnl = pnl_pct - fee_pct
-            label = 1 if net_pnl > 0 else 0
+    def _extract_feature_vector(self, features_raw: dict) -> list[float]:
+        """features_raw dict → 모델 입력 벡터"""
+        return [float(features_raw.get(name, 0)) for name in self.feature_names]
 
-            self.buffer_X.append(features)
-            self.buffer_y.append(label)
-            self.trade_count += 1
-            self.recent_results.append(net_pnl)
+    # ════════════════════════════════════════
+    #  학습
+    # ════════════════════════════════════════
 
-            # N거래마다 재학습
-            if self.trade_count % RETRAIN_EVERY == 0 and len(self.buffer_X) >= MIN_SAMPLES:
-                self.train()
+    def check_and_train(self, labeled_signals: list[dict]):
+        """
+        signals 테이블에서 라벨 확정된 데이터로 학습 여부 판단.
 
-        except Exception as e:
-            logger.debug(f"FlowML record error: {e}")
+        Args:
+            labeled_signals: DB에서 가져온 [{"features": json, "label": 0|1, "entry_executed": 0|1}, ...]
+        """
+        self.total_labeled = len(labeled_signals)
 
-    def train(self):
-        """GBM 학습 — Walk-forward 검증"""
-        if len(self.buffer_X) < MIN_SAMPLES:
-            logger.info(f"[FlowML] 학습 데이터 부족: {len(self.buffer_X)}/{MIN_SAMPLES}")
+        # Phase A → B 전환 체크
+        if self.total_labeled >= self.min_samples and self.phase == "A":
+            logger.info(f"[ML] {self.total_labeled}건 도달 → Phase B 학습 시도")
+            self._train(labeled_signals)
             return
 
-        try:
-            from sklearn.ensemble import GradientBoostingClassifier
-            from sklearn.preprocessing import StandardScaler
-            import numpy as np
+        # Phase B: 재학습 주기 체크
+        if self.phase == "B" and (self.total_labeled - self.last_train_count) >= self.retrain_interval:
+            logger.info(f"[ML] 재학습 트리거: {self.total_labeled}건 (이전 {self.last_train_count})")
+            self._train(labeled_signals)
 
-            X = np.array(list(self.buffer_X))
-            y = np.array(list(self.buffer_y))
+    def _train(self, labeled_signals: list[dict]):
+        """GBM 학습 + Walk-Forward 검증"""
+        from sklearn.ensemble import GradientBoostingClassifier
+        from sklearn.preprocessing import StandardScaler
 
-            # 80/20 Walk-forward
-            split = int(len(X) * 0.8)
-            X_train, X_test = X[:split], X[split:]
-            y_train, y_test = y[:split], y[split:]
+        # 데이터 준비
+        X, y, weights = [], [], []
 
-            # 스케일링
-            scaler = StandardScaler()
-            X_train_s = scaler.fit_transform(X_train)
-            X_test_s = scaler.transform(X_test)
+        # 피처 확장 시점 체크
+        if self.total_labeled >= self.expanded_features_at:
+            self.feature_names = list(EXTENDED_FEATURES)
+            logger.info(f"[ML] 피처 확장: {len(CORE_FEATURES)} → {len(EXTENDED_FEATURES)}")
+        else:
+            self.feature_names = list(CORE_FEATURES)
 
-            # 클래스 균형
-            n_pos = int(y_train.sum())
-            n_neg = len(y_train) - n_pos
-            spw = n_neg / max(n_pos, 1)
+        for sig in labeled_signals[-self.window_size:]:
+            try:
+                features = json.loads(sig["features"]) if isinstance(sig["features"], str) else sig["features"]
+                vec = [float(features.get(name, 0)) for name in self.feature_names]
+                label = int(sig["label"])
+                X.append(vec)
+                y.append(label)
+                # 실 진입 데이터에 더 높은 가중치
+                w = 2.0 if sig.get("entry_executed", 0) == 1 else 1.0
+                weights.append(w)
+            except Exception as e:
+                logger.debug(f"[ML] 데이터 파싱 실패: {e}")
+                continue
 
-            model = GradientBoostingClassifier(
-                n_estimators=100,
-                max_depth=3,
-                learning_rate=0.1,
-                min_samples_leaf=5,
-                subsample=0.8,
+        if len(X) < self.min_samples:
+            logger.info(f"[ML] 학습 데이터 부족: {len(X)} < {self.min_samples}")
+            return
+
+        X = np.array(X, dtype=np.float64)
+        y = np.array(y)
+        weights = np.array(weights)
+
+        # NaN/Inf 처리
+        X = np.nan_to_num(X, nan=0.0, posinf=0.0, neginf=0.0)
+
+        # Walk-Forward: 80% 학습, 20% OOS 검증
+        split = int(len(X) * 0.8)
+        if split < 50 or (len(X) - split) < 20:
+            logger.info(f"[ML] 학습/검증 분할 불충분: {split}/{len(X)-split}")
+            return
+
+        X_train, X_test = X[:split], X[split:]
+        y_train, y_test = y[:split], y[split:]
+        w_train = weights[:split]
+
+        # 클래스 다양성 체크
+        if len(set(y_train)) < 2 or len(set(y_test)) < 2:
+            logger.warning("[ML] 클래스 다양성 부족 (전부 승 or 전부 패)")
+            return
+
+        # Scaler
+        scaler = StandardScaler()
+        X_train_scaled = scaler.fit_transform(X_train)
+        X_test_scaled = scaler.transform(X_test)
+
+        # 모델
+        model = GradientBoostingClassifier(
+            n_estimators=100,
+            max_depth=3,
+            learning_rate=0.1,
+            min_samples_leaf=20,
+            subsample=0.8,
+            max_features=min(0.7, len(self.feature_names)),
+            random_state=42,
+        )
+        model.fit(X_train_scaled, y_train, sample_weight=w_train)
+
+        # 검증
+        train_acc = float(model.score(X_train_scaled, y_train))
+        oos_acc = float(model.score(X_test_scaled, y_test))
+
+        logger.info(
+            f"[ML] 학습 완료: train={train_acc:.3f} OOS={oos_acc:.3f} "
+            f"(피처 {len(self.feature_names)}, 데이터 {len(X)}건)"
+        )
+
+        # OOS 정확도 검증
+        if oos_acc < self.min_oos_accuracy:
+            self.consecutive_bad_oos += 1
+            logger.warning(
+                f"[ML] OOS {oos_acc:.3f} < {self.min_oos_accuracy} "
+                f"→ 모델 미교체 (연속 {self.consecutive_bad_oos}회)"
             )
-            # sample_weight로 클래스 균형
-            weights = np.where(y_train == 1, spw, 1.0)
-            model.fit(X_train_s, y_train, sample_weight=weights)
+            if self.consecutive_bad_oos >= 2:
+                logger.error("[ML] OOS 2연속 미달 → Phase A 복귀")
+                self.phase = "A"
+                self.trained = False
+                self.model = None
+                self.scaler = None
+            return
 
-            # 정확도
-            train_acc = float(model.score(X_train_s, y_train))
-            oos_acc = float(model.score(X_test_s, y_test)) if len(X_test) > 0 else 0
+        # 모델 교체
+        self.consecutive_bad_oos = 0
+        self.model = model
+        self.scaler = scaler
+        self.trained = True
+        self.phase = "B"
+        self.train_accuracy = train_acc
+        self.oos_accuracy = oos_acc
+        self.last_train_count = self.total_labeled
 
-            self.model = model
-            self.scaler = scaler
-            self.trained = True
-            self.train_accuracy = train_acc
-            self.oos_accuracy = oos_acc
+        # 피처 중요도 로깅
+        importances = model.feature_importances_
+        sorted_idx = np.argsort(importances)[::-1]
+        top5 = [(self.feature_names[i], round(importances[i], 3)) for i in sorted_idx[:5]]
+        logger.info(f"[ML] Top 5 피처: {top5}")
 
-            logger.info(
-                f"[FlowML] 학습 완료: {len(X)}건 | "
-                f"Train={train_acc:.1%} OOS={oos_acc:.1%}"
-            )
+        self._save()
 
-            self.save()
+    # ════════════════════════════════════════
+    #  성과 추적
+    # ════════════════════════════════════════
 
-        except Exception as e:
-            logger.error(f"[FlowML] 학습 실패: {e}")
+    def record_decision_result(self, go: bool, actual_label: int):
+        """ML 결정 결과 기록 (성과 추적용)"""
+        self.recent_decisions.append((go, actual_label))
 
     def get_stats(self) -> dict:
-        """대시보드 표시용 통계"""
-        wr = 0
-        if self.recent_results:
-            wins = sum(1 for r in self.recent_results if r > 0)
-            wr = wins / len(self.recent_results)
+        """ML 상태 정보 (대시보드/텔레그램용)"""
+        # 최근 Go 결정의 정확도
+        go_decisions = [(g, l) for g, l in self.recent_decisions if g]
+        go_accuracy = 0.0
+        if len(go_decisions) >= 5:
+            go_accuracy = sum(1 for _, l in go_decisions if l == 1) / len(go_decisions) * 100
+
+        # NoGo 중 실제 Win 비율 (ML이 걸러낸 것 중 좋았던 비율 = 후회 비율)
+        nogo_decisions = [(g, l) for g, l in self.recent_decisions if not g]
+        nogo_miss_rate = 0.0
+        if len(nogo_decisions) >= 5:
+            nogo_miss_rate = sum(1 for _, l in nogo_decisions if l == 1) / len(nogo_decisions) * 100
 
         return {
+            "phase": self.phase,
             "trained": self.trained,
-            "samples": len(self.buffer_X),
-            "trade_count": self.trade_count,
-            "train_accuracy": round(self.train_accuracy, 3),
-            "oos_accuracy": round(self.oos_accuracy, 3),
-            "recent_wr": round(wr, 3),
-            "recent_trades": len(self.recent_results),
+            "total_labeled": self.total_labeled,
+            "oos_accuracy": round(self.oos_accuracy * 100, 1),
+            "train_accuracy": round(self.train_accuracy * 100, 1),
+            "go_threshold": self.go_threshold,
             "feature_count": len(self.feature_names),
+            "recent_go_accuracy": round(go_accuracy, 1),
+            "recent_nogo_miss": round(nogo_miss_rate, 1),
+            "consecutive_bad_oos": self.consecutive_bad_oos,
         }
 
-    def save(self):
-        """모델 + 버퍼 저장"""
+    # ════════════════════════════════════════
+    #  저장 / 로드
+    # ════════════════════════════════════════
+
+    def _save(self):
+        """모델 + 상태 저장"""
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        state = {
+            "model": self.model,
+            "scaler": self.scaler,
+            "trained": self.trained,
+            "phase": self.phase,
+            "oos_accuracy": self.oos_accuracy,
+            "train_accuracy": self.train_accuracy,
+            "total_labeled": self.total_labeled,
+            "last_train_count": self.last_train_count,
+            "feature_names": self.feature_names,
+            "consecutive_bad_oos": self.consecutive_bad_oos,
+        }
+        tmp = MODEL_PATH.with_suffix(".tmp")
         try:
-            DATA_DIR.mkdir(parents=True, exist_ok=True)
-            data = {
-                "version": 1,
-                "model": self.model,
-                "scaler": self.scaler,
-                "buffer_X": list(self.buffer_X),
-                "buffer_y": list(self.buffer_y),
-                "trained": self.trained,
-                "train_accuracy": self.train_accuracy,
-                "oos_accuracy": self.oos_accuracy,
-                "trade_count": self.trade_count,
-                "recent_results": list(self.recent_results),
-                "feature_names": self.feature_names,
-            }
-            # 원자적 저장
-            tmp = MODEL_PATH.with_suffix(".tmp")
             with open(tmp, "wb") as f:
-                pickle.dump(data, f)
+                pickle.dump(state, f)
             tmp.replace(MODEL_PATH)
-            logger.debug(f"[FlowML] 저장 완료: {len(self.buffer_X)}건")
+            logger.info(f"[ML] 모델 저장: {MODEL_PATH.name} (OOS {self.oos_accuracy:.3f})")
         except Exception as e:
-            logger.error(f"[FlowML] 저장 실패: {e}")
+            logger.error(f"[ML] 모델 저장 실패: {e}")
+            tmp.unlink(missing_ok=True)
 
     def _load(self):
-        """모델 로드"""
+        """모델 + 상태 로드"""
         if not MODEL_PATH.exists():
-            logger.info("[FlowML] 모델 없음 → cold start")
+            logger.info("[ML] 저장된 모델 없음 → Phase A 시작")
             return
 
         try:
             with open(MODEL_PATH, "rb") as f:
-                data = pickle.load(f)
+                state = pickle.load(f)
 
-            # 피처 호환성 체크
-            saved_features = data.get("feature_names", [])
-            if saved_features != self.feature_names:
-                logger.warning(
-                    f"[FlowML] 피처 변경 감지 ({len(saved_features)}→{len(self.feature_names)}) "
-                    f"→ 모델 리셋"
-                )
-                return
-
-            self.model = data.get("model")
-            self.scaler = data.get("scaler")
-            self.buffer_X = deque(data.get("buffer_X", []), maxlen=5000)
-            self.buffer_y = deque(data.get("buffer_y", []), maxlen=5000)
-            self.trained = data.get("trained", False)
-            self.train_accuracy = data.get("train_accuracy", 0)
-            self.oos_accuracy = data.get("oos_accuracy", 0)
-            self.trade_count = data.get("trade_count", 0)
-            self.recent_results = deque(data.get("recent_results", []), maxlen=20)
+            self.model = state.get("model")
+            self.scaler = state.get("scaler")
+            self.trained = state.get("trained", False)
+            self.phase = state.get("phase", "A")
+            self.oos_accuracy = state.get("oos_accuracy", 0.0)
+            self.train_accuracy = state.get("train_accuracy", 0.0)
+            self.total_labeled = state.get("total_labeled", 0)
+            self.last_train_count = state.get("last_train_count", 0)
+            self.feature_names = state.get("feature_names", list(CORE_FEATURES))
+            self.consecutive_bad_oos = state.get("consecutive_bad_oos", 0)
 
             logger.info(
-                f"[FlowML] 로드: {len(self.buffer_X)}건 | "
-                f"trained={self.trained} OOS={self.oos_accuracy:.1%}"
+                f"[ML] 모델 로드: Phase {self.phase}, "
+                f"OOS {self.oos_accuracy:.3f}, {self.total_labeled}건"
             )
-
         except Exception as e:
-            logger.warning(f"[FlowML] 로드 실패 → cold start: {e}")
+            logger.warning(f"[ML] 모델 로드 실패: {e} → Phase A 시작")
+            self.model = None
+            self.trained = False
+            self.phase = "A"
+
+
+# ── 하위 호환: 기존 코드가 FlowML로 import하는 경우 ──
+FlowML = MLDecisionEngine

@@ -1,624 +1,437 @@
 """
-FlowEngine v2 — 다중 셋업 오더플로우 엔진 (데이터 축적용)
+CandidateDetector v1 — 단순 후보 감지 + 피처 추출
 
-6종 셋업:
-  LVL  - Level Bounce: S/R 반등 + CVD 확인
-  MOM  - Momentum: EMA 크로스 + CVD 방향 일치
-  PB   - Pullback: 추세 중 EMA20 되돌림 + CVD 반등
-  BRK  - Breakout: 레벨 돌파 + 거래량/CVD 급증
-  DIV  - RSI Divergence: RSI 다이버전스 + 과매수/과매도
-  SES  - Session Open: 런던/뉴욕 세션 오픈 모멘텀
+3종 후보:
+  A. Momentum Ignition  — 큰 캔들 + 큰 거래량 (Jegadeesh & Titman)
+  B. Volatility Breakout — BB 스퀴즈→돌파 (Bollinger, Turtle Trading)
+  C. Liquidation Cascade — $500K+ 청산 폭주 (crypto 고유)
 
-각 셋업 독립 평가 → 가장 높은 점수 1개 선택 → 진입.
-모든 셋업 결과가 signals에 기록되어 ML 학습 데이터로 활용.
+후보 감지만 담당. 진입 결정은 ML(flow_ml.py)이 함.
 """
 
 import json
 import logging
+import math
 import numpy as np
 import pandas as pd
 from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
-# 세션 시간대 (UTC)
-SESSIONS = {
-    "asia":   (0, 8),    # 00:00~08:00 UTC (KST 09:00~17:00)
-    "london": (8, 14),   # 08:00~14:00 UTC
-    "newyork": (14, 21), # 14:00~21:00 UTC
-    "late":   (21, 24),  # 21:00~00:00 UTC
-}
 
+class CandidateDetector:
+    """
+    시장 후보 감지기.
+    "시장이 움직이고 있는가? 어느 방향?" 만 판단.
+    """
 
-class FlowEngine:
-
-    def __init__(self, redis=None, flow_ml=None):
+    def __init__(self, redis=None, config=None):
         self.redis = redis
-        self.flow_ml = flow_ml
+        cfg = (config or {}).get("candidate", {})
+        # Momentum 설정
+        mom = cfg.get("momentum", {})
+        self.mom_body_atr = mom.get("min_body_atr_ratio", 0.8)
+        self.mom_vol_ratio = mom.get("min_vol_ratio", 1.3)
+        self.mom_body_ratio = mom.get("min_body_ratio", 0.6)
+        # Breakout 설정
+        brk = cfg.get("breakout", {})
+        self.brk_squeeze_pctl = brk.get("bb_squeeze_pctl", 25)
+        self.brk_vol_ratio = brk.get("min_vol_ratio", 1.2)
+        # Cascade 설정
+        cas = cfg.get("cascade", {})
+        self.cas_min_liq = cas.get("min_liq_usd", 500_000)
+        self.cas_min_bias = cas.get("min_bias_pct", 0.80)
+        self.cas_min_change = cas.get("min_price_change_pct", 0.2)
 
-    async def analyze(self, df_1m, df_5m, df_15m=None, df_1h=None,
-                      df_4h=None, df_1d=None, rt_velocity=None) -> dict:
-        result = {
-            "setup": None, "direction": "neutral", "score": 0,
-            "hold_mode": "standard", "sl_distance": 0, "tp_distance": 0,
-            "signals": {}, "reason": "no_signal", "atr": 0, "atr_pct": 0,
-        }
+    async def detect(self, df_1m, df_5m, df_15m=None, df_1h=None,
+                     df_4h=None, df_1d=None) -> dict | None:
+        """
+        후보 감지. 3종 중 가장 강한 것 1개 반환. 없으면 None.
 
+        Returns:
+            {
+                "type": "momentum"|"breakout"|"cascade",
+                "direction": "long"|"short",
+                "strength": float,
+                "hold_mode": str,
+                "price": float,
+                "atr": float,
+                "atr_pct": float,
+                "features_raw": dict,  # 피처 추출용 원시 데이터
+            }
+        """
         if df_5m is None or len(df_5m) < 30:
-            return result
+            return None
 
         price = float(df_5m["close"].iloc[-1])
-        atr_5m = self._atr(df_5m, 14)
-        atr_pct = atr_5m / price * 100 if price > 0 else 0.3
-        result["atr"] = round(atr_5m, 2)
-        result["atr_pct"] = round(atr_pct, 4)
+        atr = self._atr(df_5m, 14)
+        if atr <= 0 or price <= 0:
+            return None
+        atr_pct = atr / price * 100
 
-        # ── 공통 컨텍스트 ──
-        trend_1d = self._ema_trend(df_1d)
-        trend_4h = self._ema_trend(df_4h)
-        trend_1h = self._ema_trend(df_1h)
-        trend_15m = self._ema_trend(df_15m)
-        trend_5m = self._ema_trend(df_5m)
-
-        # 큰 추세: 1d > 4h > 1h 순서
-        if trend_1d != "neutral":
-            big_trend = trend_1d
-        elif trend_4h != "neutral":
-            big_trend = trend_4h
-        elif trend_1h != "neutral":
-            big_trend = trend_1h
-        else:
-            big_trend = "neutral"
-
-        # 변동성 단계
-        if atr_pct >= 0.5:
-            vol_band = "high"
-        elif atr_pct >= 0.2:
-            vol_band = "mid"
-        else:
-            vol_band = "low"
-
-        # 세션
-        hour = datetime.now(timezone.utc).hour
-        session = "late"
-        for s_name, (s_start, s_end) in SESSIONS.items():
-            if s_start <= hour < s_end:
-                session = s_name
-                break
-
-        # RSI (5m)
-        rsi_5m = self._rsi(df_5m, 14)
-        rsi_15m = self._rsi(df_15m, 14) if df_15m is not None and len(df_15m) >= 20 else 50.0
-
-        # EMA (5m)
-        ema8_5m = self._ema(df_5m, 8)
-        ema21_5m = self._ema(df_5m, 21)
-        ema20_15m = self._ema(df_15m, 20) if df_15m is not None and len(df_15m) >= 20 else price
-
-        # 레벨
-        levels = self._find_key_levels(df_4h, df_1h, price, df_1d=df_1d)
-
-        # CVD
+        # 공통 데이터
+        vol_20avg = float(df_5m["volume"].astype(float).tail(20).mean()) if len(df_5m) >= 20 else 1.0
         flow = await self._get_flow_data()
 
-        # 컨텍스트 저장
-        ctx = {
-            "trend_1d": trend_1d, "trend_4h": trend_4h, "trend_1h": trend_1h,
-            "trend_15m": trend_15m, "trend_5m": trend_5m,
-            "big_trend": big_trend, "vol_band": vol_band, "session": session,
-            "rsi_5m": round(rsi_5m, 1), "rsi_15m": round(rsi_15m, 1),
-            "ema8_5m": round(ema8_5m, 1), "ema21_5m": round(ema21_5m, 1),
-            "ema20_15m": round(ema20_15m, 1),
-            "price": price, "hour": hour,
-        }
-        # 레벨 근접 판단 (FlowML 피처용)
-        near_support = any(abs(price - lv["price"]) <= atr_5m * 3.0 for lv in levels.get("supports", []))
-        near_resistance = any(abs(price - lv["price"]) <= atr_5m * 3.0 for lv in levels.get("resistances", []))
-
-        # ── SignalTracker 호환 normalized 시그널 추가 ──
-        # 기존 키(trend_1d 등)는 문자열/bool 그대로 유지 (FlowML, main.py, dashboard 하위호환)
-        # SignalTracker용 {"direction":..,"strength":..} 포맷은 별도 키로 추가
-        def _trend_to_signal(trend_str, strength=0.5):
-            if trend_str == "up":
-                return {"direction": "long", "strength": strength}
-            elif trend_str == "down":
-                return {"direction": "short", "strength": strength}
-            return {"direction": "neutral", "strength": 0.0}
-
-        def _level_signal(near_sup, near_res):
-            if near_sup and not near_res:
-                return {"direction": "long", "strength": 0.5}
-            elif near_res and not near_sup:
-                return {"direction": "short", "strength": 0.5}
-            return {"direction": "neutral", "strength": 0.0}
-
-        result["signals"] = {
-            # 원본 값 유지 (FlowML, main.py, dashboard 등 하위호환)
-            "trend_1d": trend_1d, "trend_4h": trend_4h, "trend_1h": trend_1h,
-            "big_trend": big_trend, "levels": levels, "flow": flow,
-            "near_support": near_support, "near_resistance": near_resistance,
-            "context": ctx,
-            # SignalTracker 호환 normalized 시그널 ({"direction":..,"strength":..} 포맷)
-            "sig_trend_1d": _trend_to_signal(trend_1d, 0.6),
-            "sig_trend_4h": _trend_to_signal(trend_4h, 0.5),
-            "sig_trend_1h": _trend_to_signal(trend_1h, 0.4),
-            "sig_big_trend": _trend_to_signal(big_trend, 0.5),
-            "sig_level": _level_signal(near_support, near_resistance),
-            # flow는 이미 {"direction":..,"strength":..} 포맷 → SignalTracker가 직접 사용
-        }
-
-        # ── 6종 셋업 독립 평가 ──
+        # 3종 후보 평가
         candidates = []
 
-        s1 = self._check_level_bounce(price, atr_5m, levels, flow, big_trend)
-        if s1:
-            candidates.append(s1)
+        mom = self._check_momentum_ignition(df_5m, price, atr, vol_20avg)
+        if mom:
+            mom["features_raw"] = self._build_raw_features(
+                df_5m, df_15m, df_1h, df_4h, df_1d, price, atr, atr_pct, flow, vol_20avg, mom["direction"]
+            )
+            candidates.append(mom)
 
-        s2 = self._check_momentum(price, atr_5m, ema8_5m, ema21_5m, flow, trend_5m, trend_15m, df_5m)
-        if s2:
-            candidates.append(s2)
+        brk = self._check_volatility_breakout(df_5m, price, atr, vol_20avg)
+        if brk:
+            brk["features_raw"] = self._build_raw_features(
+                df_5m, df_15m, df_1h, df_4h, df_1d, price, atr, atr_pct, flow, vol_20avg, brk["direction"]
+            )
+            candidates.append(brk)
 
-        s3 = self._check_pullback(price, atr_5m, ema20_15m, flow, big_trend, trend_15m, rsi_5m)
-        if s3:
-            candidates.append(s3)
-
-        s4 = self._check_breakout(price, atr_5m, levels, flow, df_5m)
-        if s4:
-            candidates.append(s4)
-
-        s5 = self._check_rsi_divergence(price, atr_5m, rsi_5m, df_5m, flow)
-        if s5:
-            candidates.append(s5)
-
-        s6 = self._check_session_open(price, atr_5m, hour, flow, big_trend, df_1m)
-        if s6:
-            candidates.append(s6)
-
-        # 7. 청산 캐스케이드 — big_trend 무시, 급락/급등 감지
-        s7 = await self._check_liquidation_cascade(price, atr_5m, flow)
-        if s7:
-            candidates.append(s7)
-
-        # 셋업별 결과를 signals에 기록 (ML 학습용)
-        result["signals"]["setups_evaluated"] = [
-            {"setup": c["setup"], "direction": c["direction"], "score": c["score"]}
-            for c in candidates
-        ]
+        cas = await self._check_liquidation_cascade(df_5m, price, atr, flow)
+        if cas:
+            cas["features_raw"] = self._build_raw_features(
+                df_5m, df_15m, df_1h, df_4h, df_1d, price, atr, atr_pct, flow, vol_20avg, cas["direction"]
+            )
+            candidates.append(cas)
 
         if not candidates:
-            result["reason"] = f"no_setup_triggered | big={big_trend} vol={vol_band} ses={session}"
-            return result
-
-        # 가장 높은 점수 선택
-        best = max(candidates, key=lambda x: x["score"])
-
-        result.update({
-            "setup": best["setup"],
-            "direction": best["direction"],
-            "score": best["score"],
-            "hold_mode": best.get("hold_mode", "standard"),
-            "sl_distance": best["sl_distance"],
-            "tp_distance": best["tp_distance"],
-            "reason": best["reason"],
-        })
-
-        # ML 보정
-        if self.flow_ml:
-            ml = self.flow_ml.predict(result)
-            result["signals"]["ml"] = ml
-            if ml["trained"]:
-                raw = result["score"]
-                result["score"] = round(max(0, min(10, raw + ml["ml_score"])), 1)
-                result["signals"]["raw_score"] = raw
-                result["signals"]["htf_bias_applied"] = ml["ml_score"]
-
-        return result
-
-    # ══════════════════════════════════════
-    # 셋업 1: Level Bounce
-    # ══════════════════════════════════════
-
-    def _check_level_bounce(self, price, atr, levels, flow, big_trend) -> dict | None:
-        near_support = None
-        near_resistance = None
-
-        for lv in levels.get("supports", []):
-            if abs(price - lv["price"]) <= atr * 3.0:
-                near_support = lv
-                break
-        for lv in levels.get("resistances", []):
-            if abs(price - lv["price"]) <= atr * 3.0:
-                near_resistance = lv
-                break
-
-        if not near_support and not near_resistance:
             return None
 
-        # 방향 결정
-        if near_support and (big_trend in ("up", "neutral")):
+        # 가장 강한 후보 선택
+        best = max(candidates, key=lambda x: x["strength"])
+        best["atr"] = round(atr, 2)
+        best["atr_pct"] = round(atr_pct, 4)
+        best["price"] = round(price, 1)
+        return best
+
+    # ════════════════════════════════════════
+    #  후보 A: Momentum Ignition
+    # ════════════════════════════════════════
+
+    def _check_momentum_ignition(self, df_5m, price, atr, vol_20avg) -> dict | None:
+        """큰 캔들 + 큰 거래량 = 진짜 움직임의 시작"""
+        c = df_5m.iloc[-2]  # 직전 완성 봉 (현재 봉은 미완성)
+        o, h, l, cl = float(c["open"]), float(c["high"]), float(c["low"]), float(c["close"])
+        vol = float(c["volume"])
+        body = cl - o
+        candle_range = h - l
+        if candle_range <= 0:
+            return None
+
+        body_ratio = abs(body) / candle_range
+        body_atr_ratio = abs(body) / atr if atr > 0 else 0
+        vol_ratio = vol / vol_20avg if vol_20avg > 0 else 0
+
+        if body_atr_ratio < self.mom_body_atr:
+            return None
+        if vol_ratio < self.mom_vol_ratio:
+            return None
+        if body_ratio < self.mom_body_ratio:
+            return None
+
+        direction = "long" if body > 0 else "short"
+        return {
+            "type": "momentum",
+            "direction": direction,
+            "strength": round(body_atr_ratio, 2),
+            "hold_mode": "momentum",
+            "vol_ratio": round(vol_ratio, 2),
+        }
+
+    # ════════════════════════════════════════
+    #  후보 B: Volatility Breakout (BB 스퀴즈→돌파)
+    # ════════════════════════════════════════
+
+    def _check_volatility_breakout(self, df_5m, price, atr, vol_20avg) -> dict | None:
+        """BB 스퀴즈 상태에서 돌파 감지"""
+        if len(df_5m) < 100:
+            return None
+
+        closes = df_5m["close"].astype(float)
+        vol = float(df_5m.iloc[-2]["volume"])
+        vol_ratio = vol / vol_20avg if vol_20avg > 0 else 0
+
+        # BB 계산 (20, 2)
+        bb_mid = closes.rolling(20).mean()
+        bb_std = closes.rolling(20).std()
+        bb_upper = bb_mid + 2 * bb_std
+        bb_lower = bb_mid - 2 * bb_std
+        bb_width = (bb_upper - bb_lower) / bb_mid * 100  # % 기준
+
+        current_width = float(bb_width.iloc[-1])
+        # 최근 100봉 중 현재 BB 폭의 백분위
+        recent_widths = bb_width.tail(100).dropna()
+        if len(recent_widths) < 20:
+            return None
+        pctl = float((recent_widths < current_width).sum() / len(recent_widths) * 100)
+
+        upper = float(bb_upper.iloc[-1])
+        lower = float(bb_lower.iloc[-1])
+
+        # 스퀴즈 상태 (하위 25%) + 돌파
+        if pctl > self.brk_squeeze_pctl:
+            return None
+        if vol_ratio < self.brk_vol_ratio:
+            return None
+
+        if price > upper:
             direction = "long"
-            level = near_support
-        elif near_resistance and (big_trend in ("down", "neutral")):
+            mid = float(bb_mid.iloc[-1])
+            strength = (price - mid) / (upper - mid) if upper > mid else 1.0
+        elif price < lower:
             direction = "short"
-            level = near_resistance
+            mid = float(bb_mid.iloc[-1])
+            strength = (mid - price) / (mid - lower) if mid > lower else 1.0
         else:
-            return None
-
-        # CVD 확인 (같은 방향이면 보너스, 반대면 차단하지 않음)
-        score = 6.0
-        if flow.get("direction") == direction:
-            score += 1.5
-        elif flow.get("direction") != "neutral" and flow.get("direction") != direction:
-            score -= 1.0
-
-        if level.get("strength", 1) >= 3.0:
-            score += 1.0  # 멀티TF 겹침 레벨
-
-        # SL/TP
-        if direction == "long":
-            sl_dist = price - level["price"] + atr * 0.5
-            tp_dist = sl_dist * 2.0
-            if levels.get("resistances"):
-                tp_dist = max(tp_dist, levels["resistances"][0]["price"] - price)
-        else:
-            sl_dist = level["price"] - price + atr * 0.5
-            tp_dist = sl_dist * 2.0
-            if levels.get("supports"):
-                tp_dist = max(tp_dist, price - levels["supports"][0]["price"])
-
-        sl_dist = max(sl_dist, price * 0.003)
-        tp_dist = max(tp_dist, sl_dist * 1.5)
+            return None  # 밴드 안 = 돌파 아님
 
         return {
-            "setup": "LVL", "direction": direction,
-            "score": round(min(10, score), 1),
-            "hold_mode": "standard",
-            "sl_distance": round(sl_dist, 1),
-            "tp_distance": round(tp_dist, 1),
-            "reason": f"level_bounce {direction} @ ${level['price']:,.0f} str={level.get('strength',1):.0f}",
+            "type": "breakout",
+            "direction": direction,
+            "strength": round(min(3.0, strength), 2),
+            "hold_mode": "breakout",
+            "bb_width_pctl": round(pctl, 1),
+            "vol_ratio": round(vol_ratio, 2),
         }
 
-    # ══════════════════════════════════════
-    # 셋업 2: Momentum (EMA Cross)
-    # ══════════════════════════════════════
+    # ════════════════════════════════════════
+    #  후보 C: Liquidation Cascade
+    # ════════════════════════════════════════
 
-    def _check_momentum(self, price, atr, ema8, ema21, flow, trend_5m, trend_15m, df_5m) -> dict | None:
-        if len(df_5m) < 25:
-            return None
-
-        c = df_5m["close"].astype(float)
-        ema8_prev = float(c.iloc[:-1].ewm(span=8, adjust=False).mean().iloc[-1])
-        ema21_prev = float(c.iloc[:-1].ewm(span=21, adjust=False).mean().iloc[-1])
-
-        # 크로스 감지: 이전에는 EMA8 < EMA21, 지금은 EMA8 > EMA21 (골든)
-        golden_cross = ema8_prev <= ema21_prev and ema8 > ema21
-        death_cross = ema8_prev >= ema21_prev and ema8 < ema21
-
-        if not golden_cross and not death_cross:
-            return None
-
-        direction = "long" if golden_cross else "short"
-
-        score = 6.0
-        # 15m 추세 일치
-        if trend_15m == ("up" if direction == "long" else "down"):
-            score += 1.0
-        # CVD 일치
-        if flow.get("direction") == direction:
-            score += 1.5
-        # 5m 추세 강도
-        if trend_5m == ("up" if direction == "long" else "down"):
-            score += 0.5
-
-        sl_dist = atr * 2.0
-        tp_dist = atr * 3.0
-
-        return {
-            "setup": "MOM", "direction": direction,
-            "score": round(min(10, score), 1),
-            "hold_mode": "quick",
-            "sl_distance": round(sl_dist, 1),
-            "tp_distance": round(tp_dist, 1),
-            "reason": f"momentum {'golden' if golden_cross else 'death'}_cross 5m",
-        }
-
-    # ══════════════════════════════════════
-    # 셋업 3: Pullback
-    # ══════════════════════════════════════
-
-    def _check_pullback(self, price, atr, ema20_15m, flow, big_trend, trend_15m, rsi) -> dict | None:
-        if big_trend == "neutral":
-            return None
-
-        direction = "long" if big_trend == "up" else "short"
-
-        # 풀백 조건: 추세는 있지만 가격이 EMA20 근처로 되돌림
-        dist_to_ema = (price - ema20_15m) / price * 100  # % 거리
-
-        if direction == "long":
-            # 상승 추세에서 가격이 EMA20 근처(0~-0.3%)로 내려옴
-            if dist_to_ema > 0.1 or dist_to_ema < -0.5:
-                return None
-            # RSI 과매도 근처면 더 좋음
-            if rsi > 60:
-                return None
-        else:
-            # 하락 추세에서 가격이 EMA20 근처(0~+0.3%)로 올라옴
-            if dist_to_ema < -0.1 or dist_to_ema > 0.5:
-                return None
-            if rsi < 40:
-                return None
-
-        score = 6.5
-        if flow.get("direction") == direction:
-            score += 1.5
-        if trend_15m == big_trend.replace("neutral", ""):
-            score += 0.5
-        # RSI 적정 범위
-        if direction == "long" and 30 <= rsi <= 45:
-            score += 0.5
-        elif direction == "short" and 55 <= rsi <= 70:
-            score += 0.5
-
-        sl_dist = atr * 2.5
-        tp_dist = atr * 4.0
-
-        return {
-            "setup": "PB", "direction": direction,
-            "score": round(min(10, score), 1),
-            "hold_mode": "standard",
-            "sl_distance": round(sl_dist, 1),
-            "tp_distance": round(tp_dist, 1),
-            "reason": f"pullback {direction} ema20_dist={dist_to_ema:+.2f}% rsi={rsi:.0f}",
-        }
-
-    # ══════════════════════════════════════
-    # 셋업 4: Breakout
-    # ══════════════════════════════════════
-
-    def _check_breakout(self, price, atr, levels, flow, df_5m) -> dict | None:
-        if len(df_5m) < 10:
-            return None
-
-        # 최근 5봉 중 돌파 확인
-        recent_highs = df_5m["high"].astype(float).iloc[-5:]
-        recent_lows = df_5m["low"].astype(float).iloc[-5:]
-        prev_close = float(df_5m["close"].iloc[-2])
-
-        # 저항 돌파 (long)
-        for lv in levels.get("resistances", []):
-            # 이전 봉은 레벨 아래, 현재 봉은 레벨 위
-            if prev_close < lv["price"] and price > lv["price"]:
-                # 거래량 증가 확인 (최근 5봉 평균 대비)
-                vol_now = float(df_5m["volume"].iloc[-1])
-                vol_avg = float(df_5m["volume"].iloc[-10:-1].mean()) if len(df_5m) >= 11 else vol_now
-                vol_ratio = vol_now / vol_avg if vol_avg > 0 else 1.0
-
-                if vol_ratio < 1.2:
-                    continue  # 거래량 미동반 돌파 무시
-
-                score = 6.0
-                if flow.get("direction") == "long":
-                    score += 1.5
-                if vol_ratio > 2.0:
-                    score += 1.0
-                if lv.get("strength", 1) >= 2.0:
-                    score += 0.5
-
-                sl_dist = price - lv["price"] + atr * 0.3
-                sl_dist = max(sl_dist, price * 0.003)
-                tp_dist = atr * 4.0
-
-                return {
-                    "setup": "BRK", "direction": "long",
-                    "score": round(min(10, score), 1),
-                    "hold_mode": "runner",
-                    "sl_distance": round(sl_dist, 1),
-                    "tp_distance": round(tp_dist, 1),
-                    "reason": f"breakout_up ${lv['price']:,.0f} vol={vol_ratio:.1f}x",
-                }
-
-        # 지지 하향 돌파 (short)
-        for lv in levels.get("supports", []):
-            if prev_close > lv["price"] and price < lv["price"]:
-                vol_now = float(df_5m["volume"].iloc[-1])
-                vol_avg = float(df_5m["volume"].iloc[-10:-1].mean()) if len(df_5m) >= 11 else vol_now
-                vol_ratio = vol_now / vol_avg if vol_avg > 0 else 1.0
-
-                if vol_ratio < 1.2:
-                    continue
-
-                score = 6.0
-                if flow.get("direction") == "short":
-                    score += 1.5
-                if vol_ratio > 2.0:
-                    score += 1.0
-                if lv.get("strength", 1) >= 2.0:
-                    score += 0.5
-
-                sl_dist = lv["price"] - price + atr * 0.3
-                sl_dist = max(sl_dist, price * 0.003)
-                tp_dist = atr * 4.0
-
-                return {
-                    "setup": "BRK", "direction": "short",
-                    "score": round(min(10, score), 1),
-                    "hold_mode": "runner",
-                    "sl_distance": round(sl_dist, 1),
-                    "tp_distance": round(tp_dist, 1),
-                    "reason": f"breakout_down ${lv['price']:,.0f} vol={vol_ratio:.1f}x",
-                }
-
-        return None
-
-    # ══════════════════════════════════════
-    # 셋업 5: RSI Divergence
-    # ══════════════════════════════════════
-
-    def _check_rsi_divergence(self, price, atr, rsi, df_5m, flow) -> dict | None:
-        if len(df_5m) < 30:
-            return None
-
-        closes = df_5m["close"].astype(float).values
-        rsi_series = self._rsi_series(df_5m, 14)
-        if len(rsi_series) < 20:
-            return None
-
-        # Bullish divergence: 가격 lower low + RSI higher low + RSI < 35
-        if rsi < 35:
-            price_ll = closes[-1] < min(closes[-10:-5])
-            rsi_hl = rsi_series[-1] > min(rsi_series[-10:-5])
-            if price_ll and rsi_hl:
-                score = 6.5
-                if flow.get("direction") == "long":
-                    score += 1.0
-                sl_dist = atr * 2.0
-                tp_dist = atr * 3.5
-                return {
-                    "setup": "DIV", "direction": "long",
-                    "score": round(min(10, score), 1),
-                    "hold_mode": "standard",
-                    "sl_distance": round(sl_dist, 1),
-                    "tp_distance": round(tp_dist, 1),
-                    "reason": f"bullish_divergence rsi={rsi:.0f}",
-                }
-
-        # Bearish divergence: 가격 higher high + RSI lower high + RSI > 65
-        if rsi > 65:
-            price_hh = closes[-1] > max(closes[-10:-5])
-            rsi_lh = rsi_series[-1] < max(rsi_series[-10:-5])
-            if price_hh and rsi_lh:
-                score = 6.5
-                if flow.get("direction") == "short":
-                    score += 1.0
-                sl_dist = atr * 2.0
-                tp_dist = atr * 3.5
-                return {
-                    "setup": "DIV", "direction": "short",
-                    "score": round(min(10, score), 1),
-                    "hold_mode": "standard",
-                    "sl_distance": round(sl_dist, 1),
-                    "tp_distance": round(tp_dist, 1),
-                    "reason": f"bearish_divergence rsi={rsi:.0f}",
-                }
-
-        return None
-
-    # ══════════════════════════════════════
-    # 셋업 6: Session Open
-    # ══════════════════════════════════════
-
-    def _check_session_open(self, price, atr, hour, flow, big_trend, df_1m) -> dict | None:
-        # 런던(08 UTC) / 뉴욕(14 UTC) 오픈 후 30분 이내만
-        if hour not in (8, 14):
-            return None
-        minute = datetime.now(timezone.utc).minute
-        if minute > 30:
-            return None
-
-        if df_1m is None or len(df_1m) < 15:
-            return None
-
-        # 오픈 후 모멘텀: 최근 10분 방향
-        recent = df_1m["close"].astype(float).iloc[-10:]
-        move_pct = (float(recent.iloc[-1]) - float(recent.iloc[0])) / float(recent.iloc[0]) * 100
-
-        if abs(move_pct) < 0.05:
-            return None  # 모멘텀 부족
-
-        direction = "long" if move_pct > 0 else "short"
-
-        session_name = "london" if hour == 8 else "newyork"
-        score = 6.0
-
-        # 큰 추세와 일치
-        if big_trend == ("up" if direction == "long" else "down"):
-            score += 1.0
-        # CVD 일치
-        if flow.get("direction") == direction:
-            score += 1.5
-        # 강한 모멘텀
-        if abs(move_pct) > 0.15:
-            score += 0.5
-
-        sl_dist = atr * 2.0
-        tp_dist = atr * 3.0
-
-        return {
-            "setup": "SES", "direction": direction,
-            "score": round(min(10, score), 1),
-            "hold_mode": "quick",
-            "sl_distance": round(sl_dist, 1),
-            "tp_distance": round(tp_dist, 1),
-            "reason": f"session_{session_name}_open {direction} move={move_pct:+.2f}%",
-        }
-
-    # ══════════════════════════════════════
-    # 셋업 7: Liquidation Cascade — big_trend 무시, 급락/급등 즉시 대응
-    # ══════════════════════════════════════
-
-    async def _check_liquidation_cascade(self, price, atr, flow) -> dict | None:
-        """$50만+ 청산 캐스케이드 감지 → 청산 방향 반대로 진입 (모멘텀 추종)"""
+    async def _check_liquidation_cascade(self, df_5m, price, atr, flow) -> dict | None:
+        """대량 청산 폭주 감지"""
         if not self.redis:
             return None
-
         try:
-            liq_str = await self.redis.get("flow:liq:surge")
-            if not liq_str:
-                return None
-
-            liq = json.loads(liq_str)
-            total = liq.get("total", 0)
-            bias = liq.get("bias", "")  # "short" = 롱 청산 많음 = 하락 강세
-            long_liq = liq.get("long_liq", 0)
-            short_liq = liq.get("short_liq", 0)
-
-            if total < 500_000 or not bias:
-                return None
-
-            # bias="short" → 롱이 대량 청산 → SHORT 진입
-            # bias="long" → 숏이 대량 청산 → LONG 진입
-            direction = bias
-
-            score = 7.0
-            # $100만+ 초대형
-            if total >= 1_000_000:
-                score += 1.5
-            # CVD 일치
-            if flow.get("direction") == direction:
-                score += 1.0
-            # 한쪽 청산이 90%+ 편중
-            if total > 0:
-                dominant_pct = max(long_liq, short_liq) / total
-                if dominant_pct > 0.9:
-                    score += 0.5
-
-            sl_dist = atr * 2.5  # 급변동 중이므로 넉넉하게
-            tp_dist = atr * 4.0
-
-            return {
-                "setup": "LIQ", "direction": direction,
-                "score": round(min(10, score), 1),
-                "hold_mode": "standard",
-                "sl_distance": round(sl_dist, 1),
-                "tp_distance": round(tp_dist, 1),
-                "reason": f"liq_cascade ${total:,.0f} (long=${long_liq:,.0f} short=${short_liq:,.0f}) → {direction.upper()}",
-            }
-        except Exception as e:
-            logger.debug(f"liquidation cascade check error: {e}")
+            liq_total = float(await self.redis.get("flow:liq:1m_total") or 0)
+            liq_long = float(await self.redis.get("flow:liq:1m_long") or 0)
+            liq_short = float(await self.redis.get("flow:liq:1m_short") or 0)
+        except Exception:
             return None
 
-    # ══════════════════════════════════════
-    # 헬퍼
-    # ══════════════════════════════════════
+        if liq_total < self.cas_min_liq:
+            return None
+
+        # 편중도
+        bias = max(liq_long, liq_short) / liq_total if liq_total > 0 else 0
+        if bias < self.cas_min_bias:
+            return None
+
+        # 5분 가격 변동
+        if len(df_5m) < 2:
+            return None
+        prev_close = float(df_5m["close"].iloc[-2])
+        change_pct = abs(price - prev_close) / prev_close * 100
+        if change_pct < self.cas_min_change:
+            return None
+
+        # 롱 청산 폭주 → short 진입 (가격 떨어지는 쪽), 반대도 동일
+        if liq_long > liq_short:
+            direction = "short"
+        else:
+            direction = "long"
+
+        strength = liq_total / 1_000_000  # $1M = 1.0
+
+        return {
+            "type": "cascade",
+            "direction": direction,
+            "strength": round(min(5.0, strength), 2),
+            "hold_mode": "cascade",
+            "liq_total": round(liq_total, 0),
+            "liq_bias": round(bias, 2),
+        }
+
+    # ════════════════════════════════════════
+    #  피처 추출
+    # ════════════════════════════════════════
+
+    def _build_raw_features(self, df_5m, df_15m, df_1h, df_4h, df_1d,
+                            price, atr, atr_pct, flow, vol_20avg, direction) -> dict:
+        """ML용 피처 원시 데이터 구축 (8개 핵심 + 확장용)"""
+        closes_5m = df_5m["close"].astype(float)
+
+        # 1. price_momentum: 5봉(25분) 변동%
+        pm = 0.0
+        if len(closes_5m) >= 6:
+            pm = (float(closes_5m.iloc[-1]) - float(closes_5m.iloc[-6])) / float(closes_5m.iloc[-6]) * 100
+
+        # 2. trend_strength: (EMA8 - EMA21) / ATR
+        ema8 = float(closes_5m.ewm(span=8, adjust=False).mean().iloc[-1])
+        ema21 = float(closes_5m.ewm(span=min(21, len(closes_5m)-1), adjust=False).mean().iloc[-1])
+        ts = (ema8 - ema21) / atr if atr > 0 else 0
+
+        # 3. cvd_norm: CVD_5m / 거래량 (정규화)
+        cvd_5m_raw = flow.get("cvd_5m", 0)
+        total_vol_5m = float(df_5m["volume"].astype(float).tail(1).iloc[0]) if len(df_5m) > 0 else 1.0
+        cvd_norm = cvd_5m_raw / max(total_vol_5m, 1e-10)
+        cvd_norm = max(-1.0, min(1.0, cvd_norm))
+
+        # 4. cvd_matches: CVD 부호가 방향과 일치
+        cvd_matches = 1 if (direction == "long" and cvd_5m_raw > 0) or \
+                           (direction == "short" and cvd_5m_raw < 0) else 0
+
+        # 5. vol_ratio
+        last_vol = float(df_5m["volume"].astype(float).iloc[-2]) if len(df_5m) >= 2 else 0
+        vol_ratio = last_vol / vol_20avg if vol_20avg > 0 else 1.0
+
+        # 6. adx (15m에서 계산, 없으면 5m)
+        adx = self._calc_adx(df_15m if df_15m is not None and len(df_15m) >= 30 else df_5m)
+
+        # 7. bb_position: (price - BB_lower) / (BB_upper - BB_lower)
+        bb_pos = 0.5
+        if len(closes_5m) >= 20:
+            bb_mid = float(closes_5m.rolling(20).mean().iloc[-1])
+            bb_std = float(closes_5m.rolling(20).std().iloc[-1])
+            if bb_std > 0:
+                bb_upper = bb_mid + 2 * bb_std
+                bb_lower = bb_mid - 2 * bb_std
+                bb_pos = (price - bb_lower) / (bb_upper - bb_lower) if bb_upper > bb_lower else 0.5
+
+        # 8. hour_sin
+        hour = datetime.now(timezone.utc).hour
+        hour_sin = math.sin(2 * math.pi * hour / 24)
+
+        features = {
+            # 핵심 8개
+            "price_momentum": round(pm, 4),
+            "trend_strength": round(ts, 4),
+            "cvd_norm": round(cvd_norm, 4),
+            "cvd_matches": cvd_matches,
+            "vol_ratio": round(vol_ratio, 2),
+            "adx": round(adx, 1),
+            "bb_position": round(bb_pos, 4),
+            "hour_sin": round(hour_sin, 4),
+        }
+
+        # 확장 피처 (500건 후 사용, 지금은 수집만)
+        hour_cos = math.cos(2 * math.pi * hour / 24)
+        price_15m = 0.0
+        if df_15m is not None and len(df_15m) >= 2:
+            c15 = df_15m["close"].astype(float)
+            price_15m = (float(c15.iloc[-1]) - float(c15.iloc[-2])) / float(c15.iloc[-2]) * 100
+        price_1h = 0.0
+        if df_1h is not None and len(df_1h) >= 2:
+            c1h = df_1h["close"].astype(float)
+            price_1h = (float(c1h.iloc[-1]) - float(c1h.iloc[-2])) / float(c1h.iloc[-2]) * 100
+
+        cvd_15m_raw = flow.get("cvd_15m", 0)
+        whale_bias = flow.get("whale_bias", 0)
+        liq_pressure = 1.0 if flow.get("liq_active") else 0.0
+
+        # EMA50 거리
+        ema50 = float(closes_5m.ewm(span=min(50, len(closes_5m)-1), adjust=False).mean().iloc[-1])
+        price_vs_ema50 = (price - ema50) / ema50 * 100 if ema50 > 0 else 0
+
+        # 캔들 몸통 비율 (최근 5봉 평균)
+        body_ratios = []
+        for i in range(-6, -1):
+            if abs(i) <= len(df_5m):
+                row = df_5m.iloc[i]
+                r = abs(float(row["close"]) - float(row["open"])) / max(float(row["high"]) - float(row["low"]), 1e-10)
+                body_ratios.append(r)
+        avg_body_ratio = sum(body_ratios) / len(body_ratios) if body_ratios else 0.5
+
+        # 거래량 추세 (3봉)
+        vol_trend = 0
+        if len(df_5m) >= 4:
+            v = df_5m["volume"].astype(float)
+            if float(v.iloc[-2]) > float(v.iloc[-3]) > float(v.iloc[-4]):
+                vol_trend = 1
+            elif float(v.iloc[-2]) < float(v.iloc[-3]) < float(v.iloc[-4]):
+                vol_trend = -1
+
+        # 1분 거래량
+        vol_ratio_1m = 0.0
+        if df_1m is not None and len(df_1m) >= 21:
+            v1m = df_1m["volume"].astype(float)
+            avg_1m = float(v1m.tail(20).mean())
+            vol_ratio_1m = float(v1m.iloc[-1]) / max(avg_1m, 1e-10)
+
+        features.update({
+            "price_change_15m": round(price_15m, 4),
+            "price_change_1h": round(price_1h, 4),
+            "cvd_15m_norm": round(cvd_15m_raw / max(total_vol_5m, 1e-10), 4),
+            "whale_bias": round(whale_bias, 4),
+            "liq_pressure": liq_pressure,
+            "atr_pct": round(atr_pct, 4),
+            "bb_width_pctl": 0.0,  # breakout에서 개별 설정
+            "vol_trend": vol_trend,
+            "regime_score": adx,  # ADX를 레짐 대용으로 사용
+            "di_spread": 0.0,  # 별도 계산 필요 시
+            "hour_cos": round(hour_cos, 4),
+            "candle_body_ratio": round(avg_body_ratio, 4),
+            "price_vs_ema50": round(price_vs_ema50, 4),
+            "vol_ratio_1m": round(vol_ratio_1m, 2),
+        })
+
+        return features
+
+    # ════════════════════════════════════════
+    #  유틸리티 (기존 FlowEngine에서 보존)
+    # ════════════════════════════════════════
+
+    def _atr(self, df, period=14) -> float:
+        if df is None or len(df) < period:
+            return 0.0
+        h = df["high"].astype(float)
+        l = df["low"].astype(float)
+        c = df["close"].astype(float)
+        tr = pd.concat([h - l, (h - c.shift(1)).abs(), (l - c.shift(1)).abs()], axis=1).max(axis=1)
+        return float(tr.rolling(period).mean().iloc[-1]) if len(tr) >= period else float(tr.mean())
+
+    def _ema(self, df, span) -> float:
+        if df is None or len(df) < 2:
+            return 0.0
+        return float(df["close"].astype(float).ewm(span=min(span, len(df)-1), adjust=False).mean().iloc[-1])
+
+    def _rsi(self, df, period=14) -> float:
+        if df is None or len(df) < period + 1:
+            return 50.0
+        delta = df["close"].astype(float).diff()
+        gain = delta.where(delta > 0, 0.0).ewm(alpha=1/period, adjust=False).mean()
+        loss = (-delta.where(delta < 0, 0.0)).ewm(alpha=1/period, adjust=False).mean()
+        rs = gain / loss.replace(0, 1e-10)
+        rsi = 100 - 100 / (1 + rs)
+        return float(rsi.iloc[-1])
+
+    def _calc_adx(self, df, period=14) -> float:
+        """ADX 계산 (추세 강도 0~100)"""
+        if df is None or len(df) < period * 2:
+            return 20.0  # 기본값: 약한 추세
+        h = df["high"].astype(float)
+        l = df["low"].astype(float)
+        c = df["close"].astype(float)
+
+        # +DM, -DM
+        up = h.diff()
+        down = -l.diff()
+        plus_dm = pd.Series(np.where((up > down) & (up > 0), up, 0), index=h.index)
+        minus_dm = pd.Series(np.where((down > up) & (down > 0), down, 0), index=h.index)
+
+        # TR
+        tr = pd.concat([h - l, (h - c.shift(1)).abs(), (l - c.shift(1)).abs()], axis=1).max(axis=1)
+
+        # Wilder smoothing
+        atr = tr.ewm(alpha=1/period, adjust=False).mean()
+        plus_di = 100 * (plus_dm.ewm(alpha=1/period, adjust=False).mean() / atr.replace(0, 1e-10))
+        minus_di = 100 * (minus_dm.ewm(alpha=1/period, adjust=False).mean() / atr.replace(0, 1e-10))
+
+        dx = 100 * (plus_di - minus_di).abs() / (plus_di + minus_di).replace(0, 1e-10)
+        adx = dx.ewm(alpha=1/period, adjust=False).mean()
+
+        return float(adx.iloc[-1]) if not pd.isna(adx.iloc[-1]) else 20.0
 
     def _ema_trend(self, df) -> str:
+        """상위 TF 추세 판단 (호환용)"""
         if df is None or len(df) < 10:
             return "neutral"
         c = df["close"].astype(float)
         p = float(c.iloc[-1])
         ema20 = float(c.ewm(span=max(1, min(20, len(c)-1)), adjust=False).mean().iloc[-1])
-
         if len(df) >= 50:
             ema50 = float(c.ewm(span=50, adjust=False).mean().iloc[-1])
             if p > ema20 > ema50:
@@ -632,133 +445,48 @@ class FlowEngine:
                 return "down"
         return "neutral"
 
-    def _atr(self, df, period=14) -> float:
-        h = df["high"].astype(float)
-        l = df["low"].astype(float)
-        c = df["close"].astype(float)
-        tr = pd.concat([h - l, (h - c.shift(1)).abs(), (l - c.shift(1)).abs()], axis=1).max(axis=1)
-        return float(tr.rolling(period).mean().iloc[-1]) if len(tr) >= period else float(tr.mean())
-
-    def _ema(self, df, span) -> float:
-        if df is None or len(df) < span:
-            return 0.0
-        return float(df["close"].astype(float).ewm(span=span, adjust=False).mean().iloc[-1])
-
-    def _rsi(self, df, period=14) -> float:
-        if df is None or len(df) < period + 1:
-            return 50.0
-        delta = df["close"].astype(float).diff()
-        gain = delta.where(delta > 0, 0.0).ewm(alpha=1/period, adjust=False).mean()
-        loss = (-delta.where(delta < 0, 0.0)).ewm(alpha=1/period, adjust=False).mean()
-        rs = gain / loss.replace(0, 1e-10)
-        rsi = 100 - 100 / (1 + rs)
-        return float(rsi.iloc[-1])
-
-    def _rsi_series(self, df, period=14) -> list:
-        if df is None or len(df) < period + 1:
-            return []
-        delta = df["close"].astype(float).diff()
-        gain = delta.where(delta > 0, 0.0).ewm(alpha=1/period, adjust=False).mean()
-        loss = (-delta.where(delta < 0, 0.0)).ewm(alpha=1/period, adjust=False).mean()
-        rs = gain / loss.replace(0, 1e-10)
-        rsi = 100 - 100 / (1 + rs)
-        return rsi.dropna().tolist()[-20:]
-
-    def _find_key_levels(self, df_4h, df_1h, current_price, df_1d=None) -> dict:
-        supports = []
-        resistances = []
-
-        for df, tf_weight in [(df_1d, 3.0), (df_4h, 2.0), (df_1h, 1.0)]:
-            if df is None or len(df) < 20:
-                continue
-            highs = df["high"].astype(float).values
-            lows = df["low"].astype(float).values
-
-            for i in range(3, len(highs) - 3):
-                if highs[i] == max(highs[i-3:i+4]):
-                    resistances.append({
-                        "price": round(float(highs[i]), 1),
-                        "strength": tf_weight, "idx": i,
-                    })
-                if lows[i] == min(lows[i-3:i+4]):
-                    supports.append({
-                        "price": round(float(lows[i]), 1),
-                        "strength": tf_weight, "idx": i,
-                    })
-
-        supports = self._merge_levels(supports, current_price * 0.003)
-        resistances = self._merge_levels(resistances, current_price * 0.003)
-
-        supports = [s for s in supports if s["price"] < current_price]
-        resistances = [r for r in resistances if r["price"] > current_price]
-
-        supports.sort(key=lambda x: current_price - x["price"])
-        resistances.sort(key=lambda x: x["price"] - current_price)
-
-        return {"supports": supports[:5], "resistances": resistances[:5]}
-
-    def _merge_levels(self, levels, merge_dist):
-        if not levels:
-            return []
-        levels.sort(key=lambda x: x["price"])
-        merged = [levels[0].copy()]
-        for lv in levels[1:]:
-            if abs(lv["price"] - merged[-1]["price"]) <= merge_dist:
-                merged[-1]["strength"] += lv["strength"]
-                merged[-1]["price"] = round((merged[-1]["price"] + lv["price"]) / 2, 1)
-            else:
-                merged.append(lv.copy())
-        return merged
-
     async def _get_flow_data(self) -> dict:
-        """CVD + 고래 + 청산 데이터 조회 (확인/비확인 판단 없이 원시 데이터 반환)"""
+        """CVD + 고래 + 청산 데이터 조회"""
         flow = {
             "direction": "neutral", "strength": 0.0,
-            "cvd_15m": 0, "cvd_1h": 0,
-            "whale_confirm": False, "liquidation_confirm": False,
+            "cvd_5m": 0, "cvd_15m": 0, "cvd_1h": 0,
+            "whale_bias": 0.0, "liq_active": False,
         }
 
         if not self.redis:
             return flow
 
         try:
-            cvd_15m = float(await self.redis.get("flow:combined:cvd_15m") or
-                           await self.redis.get("cvd:15m:current:BTC-USDT-SWAP") or 0)
-            cvd_1h = float(await self.redis.get("flow:combined:cvd_1h") or
-                          await self.redis.get("cvd:1h:current:BTC-USDT-SWAP") or 0)
+            cvd_5m = float(await self.redis.get("flow:combined:cvd_5m") or 0)
+            cvd_15m = float(await self.redis.get("flow:combined:cvd_15m") or 0)
+            cvd_1h = float(await self.redis.get("flow:combined:cvd_1h") or 0)
 
+            flow["cvd_5m"] = round(cvd_5m, 2)
             flow["cvd_15m"] = round(cvd_15m, 2)
             flow["cvd_1h"] = round(cvd_1h, 2)
 
-            # CVD 방향 (15m 단독으로도 판단 — 1h는 보너스)
-            CVD_MIN = 0.3
-            if cvd_15m > CVD_MIN:
+            # CVD 방향
+            if cvd_5m > 0.3:
                 flow["direction"] = "long"
-                flow["strength"] = min(1.0, abs(cvd_15m) / 50)
-            elif cvd_15m < -CVD_MIN:
+                flow["strength"] = min(1.0, abs(cvd_5m) / 50)
+            elif cvd_5m < -0.3:
                 flow["direction"] = "short"
-                flow["strength"] = min(1.0, abs(cvd_15m) / 50)
-
-            # 1h 일치 시 강도 부스트
-            if (cvd_15m > 0 and cvd_1h > 0) or (cvd_15m < 0 and cvd_1h < 0):
-                flow["strength"] = min(1.0, flow["strength"] * 1.5)
+                flow["strength"] = min(1.0, abs(cvd_5m) / 50)
 
             # 고래
             whale_str = await self.redis.get("flow:combined:whale_bias")
             if whale_str:
-                wb = float(whale_str)
-                if (flow["direction"] == "long" and wb > 0.1) or \
-                   (flow["direction"] == "short" and wb < -0.1):
-                    flow["whale_confirm"] = True
+                flow["whale_bias"] = float(whale_str)
 
             # 청산
-            liq_str = await self.redis.get("flow:liq:surge")
-            if liq_str:
-                liq = json.loads(liq_str)
-                if liq.get("bias") == flow["direction"]:
-                    flow["liquidation_confirm"] = True
+            liq_total = float(await self.redis.get("flow:liq:1m_total") or 0)
+            flow["liq_active"] = liq_total > 100_000
 
         except Exception as e:
             logger.debug(f"flow data error: {e}")
 
         return flow
+
+
+# ── 하위 호환: 기존 코드가 FlowEngine으로 import하는 경우 ──
+FlowEngine = CandidateDetector

@@ -1,10 +1,27 @@
 # Commit Log
 
 > 자동 생성 — `scripts/update_commit_log.sh` (매 커밋 후 실행)
-> Updated: 2026-04-24 15:13:00    
-> Total commits: 221 (2026-04-03 → 2026-04-24)
+> Updated: 2026-04-28 14:24:03    
+> Total commits: 234 (2026-04-03 → 2026-04-28)
 
 Claude 가 질문/변경 작업 시 이 파일을 참고해서 과거 변경 이력 컨텍스트를 확보합니다. 수동 편집 금지 — 다음 커밋 시 덮어써집니다.
+
+## 2026-04-28
+- `adab444` feat: maker 강제 + ranging 차단 — 수수료/횡보 손실 근절
+
+## 2026-04-27
+- `7a33f80` feat: 모멘텀 게이트 — 떨어지는데 롱 치지 마
+- `462a806` fix: 오늘 거래 분석 기반 4건 수정
+- `155ae57` fix: 서버TP1 후 SL 재등록 + log_push 브랜치 복귀 실패 방지
+- `9276773` fix: SL 최소값 0.35%→0.5% — 5m 노이즈 밖으로
+- `0d2184a` fix: _append_jsonl import를 파일 상단으로 이동 (런타임 크래시 방지)
+- `8cd5365` fix: 로깅 보완 5건 — 주간번호 통일 + 이벤트 이력 보존 + 상태 기록
+- `534abf7` fix: log_push에 bot.log/trades.log/signals.log 주간 파일 포함
+- `168214d` feat: 주간 로그 영구 보존 — 월요일 기준 파일 로테이션
+- `cbfb27c` feat: 로깅 영구 보존 — bot.log 파일 핸들러 + exit JSONL 필드 보강
+- `dabf8d3` fix: sl_failsafe 디버그를 JSONL에도 영구 기록 (Docker 로그 유실 대비)
+- `2496d3f` fix: sl_failsafe 52% 문제 — SL 검증 대기 강화 + TP1 race condition 제거
+- `3938015` fix: 전수검사 20건 버그 수정 — CRITICAL 3 + HIGH 12 + MEDIUM 5
 
 ## 2026-04-24
 - `e17736e` feat: Signal Score — 마지막 시그널 30초 유지 표시

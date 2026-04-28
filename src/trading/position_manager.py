@@ -542,6 +542,43 @@ class PositionManager:
 
     async def _process_position(self, symbol: str, pos: "Position", current_price: float):
         """단일 포지션 처리 — lock 안에서 호출됨"""
+        # 0. Adverse Selection — 진입 후 90초 내 구조적 역행 감지
+        as_cfg = load_config().get("adverse_selection", {})
+        if as_cfg.get("enabled", False) and not pos.runner_mode:
+            elapsed = pos.hold_minutes * 60  # 초 단위
+            window = as_cfg.get("window_sec", 90)
+            if elapsed <= window:
+                # 마진 기준 미실현 PnL% 계산
+                if pos.direction == "long":
+                    margin_pct = (current_price - pos.entry_price) / pos.entry_price * pos.leverage * 100
+                else:
+                    margin_pct = (pos.entry_price - current_price) / pos.entry_price * pos.leverage * 100
+                threshold = -as_cfg.get("margin_threshold_pct", 2.5)
+                if margin_pct <= threshold:
+                    # 추가 조건 확인 (CVD 반전 + 거래량 역행) — AND 조건
+                    as_triggered = True
+                    if as_cfg.get("require_cvd_reversal") and self.redis:
+                        try:
+                            cvd_raw = await self.redis.get("flow:combined:cvd_5m")
+                            cvd = float(cvd_raw) if cvd_raw else 0
+                            # CVD가 진입 반대 방향이어야 함
+                            if pos.direction == "long" and cvd >= 0:
+                                as_triggered = False
+                            elif pos.direction == "short" and cvd <= 0:
+                                as_triggered = False
+                        except Exception:
+                            as_triggered = False  # CVD 확인 불가 시 비발동
+
+                    if as_triggered:
+                        logger.warning(
+                            f"⚡ Adverse Selection 발동: {pos.direction.upper()} "
+                            f"마진 {margin_pct:+.1f}% (한도 {threshold}%) | "
+                            f"{elapsed:.0f}초 경과"
+                        )
+                        await self._cancel_all_algos(pos)
+                        await self._full_close(pos, "adverse_selection")
+                        return
+
         # 1. SL failsafe — 가격이 봇 내부 SL을 넘었으면 즉시 청산
         sl_breached = (
             (pos.direction == "long" and current_price <= pos.current_sl) or

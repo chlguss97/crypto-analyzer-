@@ -1,18 +1,21 @@
-# OKX CryptoAnalyzer v1.0
+# OKX CryptoAnalyzer v2.0
 
 ## 프로젝트 개요
 - BTC 무기한 선물(OKX) 자동매매 시스템
-- **듀얼 모델**: Swing 14개 기법 + Scalp 18종 (ScalpEngine v3/v4) — **Swing/Scalp 독립 운영 (둘 다 성장 후 판단)**
-- 설계서: `명세서.md` (헤더 "현재 상태" 섹션 + Part 17~22 참조)
+- **모멘텀 스캘핑**: CandidateDetector 3종(Momentum/Breakout/Cascade) + ML Meta-Label Go/NoGo
+- 설계서: `SPEC_V2.md` (2026-04-28 전면 재설계)
 - 변경 인덱스: `COMMIT_LOG.md` (자동 갱신, 매 커밋 후)
 - 사람용 변경 큐레이션: `CHANGELOG.md`
 - 운영 매뉴얼: `MANUAL.md`
 
-## 핵심 설계 결정 (논의 완료)
-- 매매 스타일: Swing + Scalp 독립 병행 (어느 쪽이 좋은지 데이터로 판단 예정)
-- 타임프레임: Scalp(1m/5m) / Swing(15m·1H·4H)
-- 레버리지: 10~30배 동적 (등급 + ATR 변동성 + 연패 상태 연동)
-- **사이즈/SL 모드: `margin_loss_cap`** (기본) — SL 거리 = max_margin_loss_pct/leverage, TP/트레일도 마진 % 기준
+## 핵심 설계 결정 (SPEC v2, 2026-04-28)
+- 매매 스타일: 모멘텀 스캘핑 (역추세 폐기, 추세 추종만)
+- 시그널: 3종 후보 감지 → ML Go/NoGo → 실행
+- 데이터: 100% Binance (차트/CVD/청산), 매매만 OKX
+- 타임프레임: 5m(실행) / 15m(확인) / 1h(필터)
+- 레버리지: 15~20배 동적
+- **SL/TP**: 마진 -5% / +10% (RR 2.0)
+- **주문**: Maker 강제 (post-only), 강한 시그널만 taker 허용
   - 옛 모드 `risk_per_trade` (큰 계좌용) 보존
 - 시그널 처리: Fast Path(실시간) + Slow Path(주기) 2단계
 - 시간 청산: 단계별 + 러너 모드는 8시간 hard limit

@@ -573,20 +573,6 @@ async def get_flow_ml_stats():
         return {"trained": False, "samples": 0, "error": str(e)}
 
 
-@app.get("/api/news")
-async def get_news_status():
-    """뉴스 필터 상태 + 다음 이벤트"""
-    from src.trading.news_filter import NewsFilter
-    nf = NewsFilter()
-    blocked, reason = nf.is_news_blackout()
-    upcoming = nf.get_upcoming_events(days=7)
-    return {
-        "blocked": blocked,
-        "reason": reason,
-        "upcoming": upcoming,
-    }
-
-
 @app.get("/api/risk/state")
 async def get_risk_state():
     await _ensure_initialized()

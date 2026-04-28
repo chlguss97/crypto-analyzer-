@@ -61,6 +61,28 @@ CREATE TABLE IF NOT EXISTS oi_funding (
 CREATE INDEX IF NOT EXISTS idx_oi_funding_lookup
     ON oi_funding(symbol, timestamp DESC);
 
+CREATE TABLE IF NOT EXISTS signals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts INTEGER NOT NULL,
+    candidate_type TEXT NOT NULL,
+    direction TEXT NOT NULL,
+    strength REAL NOT NULL,
+    price REAL NOT NULL,
+    features TEXT NOT NULL,
+    ml_go INTEGER DEFAULT -1,
+    ml_prob REAL DEFAULT 0,
+    entry_executed INTEGER DEFAULT 0,
+    reject_reason TEXT,
+    label INTEGER DEFAULT -1,
+    barrier_hit TEXT,
+    pnl_pct REAL DEFAULT 0,
+    resolve_ts INTEGER DEFAULT 0,
+    regime TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_signals_ts ON signals(ts);
+CREATE INDEX IF NOT EXISTS idx_signals_label ON signals(label);
+
 CREATE TABLE IF NOT EXISTS daily_summary (
     date TEXT PRIMARY KEY,
     total_trades INTEGER DEFAULT 0,
@@ -228,6 +250,79 @@ class Database:
             {"id": trade_id, **exit_data},
         )
         await self._db.commit()
+
+    # ── Signals (후보 전수 기록) ──
+
+    async def insert_signal(self, signal: dict) -> int:
+        """후보 시그널 기록 (진입 여부 무관)"""
+        cursor = await self._db.execute(
+            """INSERT INTO signals
+               (ts, candidate_type, direction, strength, price, features,
+                ml_go, ml_prob, entry_executed, reject_reason, regime)
+               VALUES (:ts, :candidate_type, :direction, :strength, :price,
+                       :features, :ml_go, :ml_prob, :entry_executed,
+                       :reject_reason, :regime)""",
+            signal,
+        )
+        await self._db.commit()
+        return cursor.lastrowid
+
+    async def update_signal_label(self, signal_id: int, label: int,
+                                  barrier_hit: str, pnl_pct: float, resolve_ts: int):
+        """Triple Barrier 결과로 라벨 확정"""
+        await self._db.execute(
+            """UPDATE signals SET label=?, barrier_hit=?, pnl_pct=?, resolve_ts=?
+               WHERE id=?""",
+            (label, barrier_hit, pnl_pct, resolve_ts, signal_id),
+        )
+        await self._db.commit()
+
+    async def update_signal_entry(self, signal_id: int):
+        """실제 진입 완료 표시"""
+        await self._db.execute(
+            "UPDATE signals SET entry_executed=1 WHERE id=?", (signal_id,)
+        )
+        await self._db.commit()
+
+    async def get_labeled_signals(self, limit: int = 500) -> list[dict]:
+        """ML 학습용: 라벨 확정된 시그널 조회 (최신 순)"""
+        cursor = await self._db.execute(
+            """SELECT * FROM signals WHERE label != -1
+               ORDER BY ts DESC LIMIT ?""",
+            (limit,),
+        )
+        rows = await cursor.fetchall()
+        return [dict(r) for r in reversed(rows)]
+
+    async def get_pending_shadows(self) -> list[dict]:
+        """라벨 미확정 + 미진입 시그널 (shadow 추적 대상)"""
+        cursor = await self._db.execute(
+            """SELECT id, ts, candidate_type, direction, price, features
+               FROM signals
+               WHERE label = -1 AND entry_executed = 0
+               ORDER BY ts ASC"""
+        )
+        rows = await cursor.fetchall()
+        return [dict(r) for r in rows]
+
+    async def get_signal_count(self, labeled_only: bool = True) -> int:
+        """라벨 확정된 시그널 수"""
+        if labeled_only:
+            cursor = await self._db.execute(
+                "SELECT COUNT(*) FROM signals WHERE label != -1"
+            )
+        else:
+            cursor = await self._db.execute("SELECT COUNT(*) FROM signals")
+        row = await cursor.fetchone()
+        return row[0] if row else 0
+
+    async def get_recent_signals(self, limit: int = 20) -> list[dict]:
+        """대시보드용: 최근 시그널 조회"""
+        cursor = await self._db.execute(
+            "SELECT * FROM signals ORDER BY ts DESC LIMIT ?", (limit,)
+        )
+        rows = await cursor.fetchall()
+        return [dict(r) for r in rows]
 
 
 def _json_default(obj):
