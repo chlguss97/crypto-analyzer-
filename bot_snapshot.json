@@ -1,9 +1,9 @@
 {
-  "ts": 1777335299,
-  "ts_iso": "2026-04-28T00:14:59.404964+00:00",
-  "balance": 210.57,
+  "ts": 1777336147,
+  "ts_iso": "2026-04-28T00:29:07.297161+00:00",
+  "balance": 212.26,
   "autotrading": "on",
-  "regime": "ranging",
+  "regime": "unknown",
   "trade_state": {},
   "positions": {
     "BTC/USDT:USDT": {
@@ -29,7 +29,7 @@
       "manual_sl_override": 0,
       "manual_tp_override": 0,
       "algo_ids": "{\"sl\": \"sl17773350210204730\", \"tp1\": \"tp117773350211481605\", \"tp2\": null, \"tp3\": null}",
-      "hold_minutes": 4
+      "hold_minutes": 18
     }
   },
   "streak": 0,
