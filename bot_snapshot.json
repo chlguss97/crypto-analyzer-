@@ -1,25 +1,25 @@
 {
-  "ts": 1777339783,
-  "ts_iso": "2026-04-28T01:29:43.890644+00:00",
-  "balance": 211.22,
+  "ts": 1777340692,
+  "ts_iso": "2026-04-28T01:44:52.940212+00:00",
+  "balance": 212.63,
   "autotrading": "on",
   "regime": "unknown",
   "trade_state": {},
   "positions": {
     "BTC/USDT:USDT": {
-      "trade_id": 51,
+      "trade_id": 53,
       "symbol": "BTC/USDT:USDT",
       "direction": "short",
-      "entry_price": 77295.7,
+      "entry_price": 77111.9,
       "size": 0.02,
-      "remaining_size": 0.01,
+      "remaining_size": 0.02,
       "leverage": 20,
-      "sl_price": 77682.1,
-      "tp1_price": 77102.8,
-      "tp2_price": 76329.4,
-      "tp3_price": 75749.7,
+      "sl_price": 77487.2,
+      "tp1_price": 76950.3,
+      "tp2_price": 76330.7,
+      "tp3_price": 75945.2,
       "grade": "B+",
-      "entry_time": 1777335023000,
+      "entry_time": 1777340122000,
       "tp1_filled": 0,
       "tp2_filled": 0,
       "tp3_filled": 0,
@@ -28,12 +28,12 @@
       "trail_distance": 0.0,
       "manual_sl_override": 0,
       "manual_tp_override": 0,
-      "algo_ids": "{\"sl\": \"sl17773386344840327\", \"tp1\": null, \"tp2\": null, \"tp3\": null}",
-      "hold_minutes": 79
+      "algo_ids": "{\"sl\": \"sl17773401200941224\", \"tp1\": \"tp117773401202273939\", \"tp2\": null, \"tp3\": null}",
+      "hold_minutes": 9
     }
   },
   "streak": 0,
-  "daily_pnl": 0.0,
+  "daily_pnl": 4.63,
   "paper": {
     "balance": 7230.9,
     "initial_balance": 7500.0,
@@ -43,17 +43,24 @@
     "win_rate": 20.0,
     "daily_pnl_pct": -0.47,
     "loss_streak": 6,
-    "active_positions": 0,
+    "active_positions": 1,
     "shadow_missed": 0,
     "shadow_correct": 0
   },
   "pending_algos": [
     {
-      "id": "sl17773386344840327",
+      "id": "tp117773401202273939",
       "type": "trigger",
-      "trigger": "77682.1",
+      "trigger": "76950.3",
       "side": "buy",
       "sz": "1"
+    },
+    {
+      "id": "sl17773401200941224",
+      "type": "trigger",
+      "trigger": "77487.2",
+      "side": "buy",
+      "sz": "2"
     }
   ]
 }

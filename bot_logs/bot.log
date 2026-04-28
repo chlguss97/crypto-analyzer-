@@ -1,87 +1,34 @@
-2026-04-27 04:10:34 [WARNING] src.trading.executor: post-only 추격 실패 → market 폴백 (taker 0.05%)
-2026-04-27 04:43:40 [WARNING] CryptoAnalyzer: 종료 시 미청산 포지션: BTC/USDT:USDT SHORT @ $79030.0
-2026-04-27 04:43:56 [WARNING] src.trading.position_manager: 거래소 포지션 발견 (봇 미추적): BTC/USDT:USDT short 2.000000 @ $79030.0
-2026-04-27 04:53:09 [ERROR] src.trading.position_manager: 🛑 SL failsafe 발동: SHORT 가격 $78957 vs SL $78951 | 보유 9분 | runner=True | size=0.0100/2.0000 | algo_debug={'pending_count': 0, 'pending_ids': [], 'pos_sl_algo_id': 'sl17772654756709188'}
-2026-04-27 04:53:09 [ERROR] src.trading.executor: 시장가 주문 실패 (1/3): okx {"code":"1","data":[{"clOrdId":"6b9ad766b55dBCDEcd317c1fc0404520","ordId":"","sCode":"51169","sMsg":"Order failed because you don't have any positions in this direction for this contract to reduce or close. ","subCode":"","tag":"6b9ad766b55dBCDE","ts":"1777265589798"}],"inTime":"1777265589798203","msg":"All operations failed","outTime":"1777265589799295"}
-2026-04-27 05:01:22 [WARNING] CryptoAnalyzer: 종료 시 미청산 포지션: BTC/USDT:USDT LONG @ $78946.4
-2026-04-27 05:01:40 [WARNING] src.trading.position_manager: 거래소 포지션 발견 (봇 미추적): BTC/USDT:USDT long 2.000000 @ $78946.4
-2026-04-27 05:11:51 [WARNING] src.trading.position_manager: 포지션 외부 종료 감지 (사이즈≈0) → 정리: BTC/USDT:USDT
-2026-04-27 05:11:54 [WARNING] src.trading.risk_manager: 손실 기록: -0.10% | 연패: 1
-2026-04-27 05:11:54 [WARNING] src.trading.risk_manager: 손실 기록: -0.10% | 연패: 2
-2026-04-27 05:15:22 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $653,330 (롱청산 $653,330 / 숏청산 $0) → SHORT 강세
-2026-04-27 05:15:23 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $656,526 (롱청산 $656,526 / 숏청산 $0) → SHORT 강세
-2026-04-27 05:15:24 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $1,044,207 (롱청산 $1,044,207 / 숏청산 $0) → SHORT 강세
-2026-04-27 05:15:27 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $1,106,546 (롱청산 $1,106,546 / 숏청산 $0) → SHORT 강세
-2026-04-27 05:15:28 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $1,111,455 (롱청산 $1,111,455 / 숏청산 $0) → SHORT 강세
-2026-04-27 05:15:29 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $1,200,044 (롱청산 $1,200,044 / 숏청산 $0) → SHORT 강세
-2026-04-27 05:15:32 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $1,203,939 (롱청산 $1,203,939 / 숏청산 $0) → SHORT 강세
-2026-04-27 05:15:33 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $1,218,662 (롱청산 $1,218,662 / 숏청산 $0) → SHORT 강세
-2026-04-27 05:15:36 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $1,236,266 (롱청산 $1,236,266 / 숏청산 $0) → SHORT 강세
-2026-04-27 05:15:37 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $1,274,432 (롱청산 $1,274,432 / 숏청산 $0) → SHORT 강세
-2026-04-27 05:15:38 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $1,324,040 (롱청산 $1,324,040 / 숏청산 $0) → SHORT 강세
-2026-04-27 05:15:39 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $1,372,086 (롱청산 $1,372,086 / 숏청산 $0) → SHORT 강세
-2026-04-27 05:15:43 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $1,377,927 (롱청산 $1,377,927 / 숏청산 $0) → SHORT 강세
-2026-04-27 05:15:48 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $1,378,550 (롱청산 $1,378,550 / 숏청산 $0) → SHORT 강세
-2026-04-27 05:15:50 [WARNING] src.trading.position_manager: 포지션 외부 종료 감지 (사이즈≈0) → 정리: BTC/USDT:USDT
-2026-04-27 05:15:52 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $1,343,491 (롱청산 $1,343,491 / 숏청산 $0) → SHORT 강세
-2026-04-27 05:15:52 [WARNING] src.trading.risk_manager: 손실 기록: -7.47% | 연패: 3
-2026-04-27 05:15:52 [WARNING] src.trading.risk_manager: 3연패 → 5분 쿨다운
-2026-04-27 05:15:52 [WARNING] src.trading.risk_manager: 손실 기록: -7.47% | 연패: 4
-2026-04-27 05:15:52 [WARNING] src.trading.risk_manager: 3연패 → 5분 쿨다운
-2026-04-27 05:15:52 [ERROR] src.trading.risk_manager: [RISK] 일일 손실 한도 -10% 도달: -15.13% → 당일 매매 중단
-2026-04-27 05:15:52 [ERROR] src.trading.risk_manager: [RISK] 주간 손실 한도 -20% 도달: -25.88% → 주간 매매 중단
-2026-04-27 05:15:54 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $1,421,654 (롱청산 $1,421,654 / 숏청산 $0) → SHORT 강세
-2026-04-27 05:15:57 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $1,419,926 (롱청산 $1,419,926 / 숏청산 $0) → SHORT 강세
-2026-04-27 05:16:00 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $1,420,004 (롱청산 $1,420,004 / 숏청산 $0) → SHORT 강세
-2026-04-27 05:16:02 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $1,443,349 (롱청산 $1,443,349 / 숏청산 $0) → SHORT 강세
-2026-04-27 05:16:04 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $1,495,996 (롱청산 $1,495,996 / 숏청산 $0) → SHORT 강세
-2026-04-27 05:16:05 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $1,561,281 (롱청산 $1,561,281 / 숏청산 $0) → SHORT 강세
-2026-04-27 05:16:07 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $1,597,118 (롱청산 $1,597,118 / 숏청산 $0) → SHORT 강세
-2026-04-27 05:16:25 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $687,573 (롱청산 $687,573 / 숏청산 $0) → SHORT 강세
-2026-04-27 05:16:26 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $698,379 (롱청산 $698,379 / 숏청산 $0) → SHORT 강세
-2026-04-27 05:16:28 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $1,244,855 (롱청산 $1,244,855 / 숏청산 $0) → SHORT 강세
-2026-04-27 05:16:29 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $1,220,989 (롱청산 $1,220,989 / 숏청산 $0) → SHORT 강세
-2026-04-27 05:16:30 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $1,480,488 (롱청산 $1,480,488 / 숏청산 $0) → SHORT 강세
-2026-04-27 05:16:31 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $1,615,103 (롱청산 $1,615,103 / 숏청산 $0) → SHORT 강세
-2026-04-27 05:16:32 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $1,788,586 (롱청산 $1,788,586 / 숏청산 $0) → SHORT 강세
-2026-04-27 05:16:33 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $1,801,898 (롱청산 $1,801,898 / 숏청산 $0) → SHORT 강세
-2026-04-27 05:16:35 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $1,806,790 (롱청산 $1,806,790 / 숏청산 $0) → SHORT 강세
-2026-04-27 05:20:12 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $2,991,350 (롱청산 $2,991,350 / 숏청산 $0) → SHORT 강세
-2026-04-27 05:20:13 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $3,136,730 (롱청산 $3,136,730 / 숏청산 $0) → SHORT 강세
-2026-04-27 05:20:14 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $3,214,973 (롱청산 $3,214,973 / 숏청산 $0) → SHORT 강세
-2026-04-27 05:20:15 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $3,219,393 (롱청산 $3,219,393 / 숏청산 $0) → SHORT 강세
-2026-04-27 05:20:20 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $3,219,625 (롱청산 $3,219,625 / 숏청산 $0) → SHORT 강세
-2026-04-27 05:20:23 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $3,260,324 (롱청산 $3,260,324 / 숏청산 $0) → SHORT 강세
-2026-04-27 05:20:24 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $3,260,557 (롱청산 $3,260,557 / 숏청산 $0) → SHORT 강세
-2026-04-27 05:22:20 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $534,625 (롱청산 $534,625 / 숏청산 $0) → SHORT 강세
-2026-04-27 05:22:21 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $534,780 (롱청산 $534,780 / 숏청산 $0) → SHORT 강세
-2026-04-27 05:22:50 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $538,036 (롱청산 $538,036 / 숏청산 $0) → SHORT 강세
-2026-04-27 05:23:04 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $545,630 (롱청산 $545,630 / 숏청산 $0) → SHORT 강세
-2026-04-27 05:23:05 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $572,745 (롱청산 $572,745 / 숏청산 $0) → SHORT 강세
-2026-04-27 05:23:06 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $580,492 (롱청산 $580,492 / 숏청산 $0) → SHORT 강세
-2026-04-27 05:23:07 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $583,590 (롱청산 $583,590 / 숏청산 $0) → SHORT 강세
-2026-04-27 05:30:32 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $553,730 (롱청산 $553,495 / 숏청산 $234) → SHORT 강세
-2026-04-27 05:36:39 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $847,790 (롱청산 $847,790 / 숏청산 $0) → SHORT 강세
-2026-04-27 05:36:40 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $848,332 (롱청산 $848,332 / 숏청산 $0) → SHORT 강세
-2026-04-27 05:36:45 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $877,468 (롱청산 $877,468 / 숏청산 $0) → SHORT 강세
-2026-04-27 05:36:47 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $909,227 (롱청산 $909,227 / 숏청산 $0) → SHORT 강세
-2026-04-27 05:36:48 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $933,952 (롱청산 $933,952 / 숏청산 $0) → SHORT 강세
-2026-04-27 05:36:49 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $949,868 (롱청산 $949,868 / 숏청산 $0) → SHORT 강세
-2026-04-27 05:38:06 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $3,881,327 (롱청산 $3,881,327 / 숏청산 $0) → SHORT 강세
-2026-04-27 05:38:08 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $3,883,026 (롱청산 $3,883,026 / 숏청산 $0) → SHORT 강세
-2026-04-27 05:38:09 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $3,898,083 (롱청산 $3,898,083 / 숏청산 $0) → SHORT 강세
-2026-04-27 05:38:10 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $3,912,912 (롱청산 $3,912,912 / 숏청산 $0) → SHORT 강세
-2026-04-27 06:31:39 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $539,985 (롱청산 $539,985 / 숏청산 $0) → SHORT 강세
-2026-04-27 06:31:40 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $558,116 (롱청산 $558,116 / 숏청산 $0) → SHORT 강세
-2026-04-27 06:31:42 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $559,890 (롱청산 $559,890 / 숏청산 $0) → SHORT 강세
-2026-04-27 06:31:43 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $561,356 (롱청산 $561,356 / 숏청산 $0) → SHORT 강세
-2026-04-27 06:31:44 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $813,954 (롱청산 $813,954 / 숏청산 $0) → SHORT 강세
-2026-04-27 06:31:45 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $1,236,323 (롱청산 $1,236,323 / 숏청산 $0) → SHORT 강세
-2026-04-27 06:31:46 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $1,256,371 (롱청산 $1,256,371 / 숏청산 $0) → SHORT 강세
-2026-04-27 06:31:50 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $1,253,742 (롱청산 $1,253,742 / 숏청산 $0) → SHORT 강세
-2026-04-27 06:32:05 [WARNING] src.data.binance_stream: 💥 청산 폭발: 1분간 $1,251,188 (롱청산 $1,251,188 / 숏청산 $0) → SHORT 강세
-2026-04-27 15:05:38 [WARNING] src.data.ws_stream: WebSocket 끊김: sent 1011 (internal error) keepalive ping timeout; no close frame received → 5초 후 재연결 (시도 1)
-2026-04-27 15:19:14 [WARNING] src.data.ws_stream: WebSocket 끊김: sent 1011 (internal error) keepalive ping timeout; no close frame received → 5초 후 재연결 (시도 1)
-2026-04-27 15:22:43 [WARNING] src.data.ws_stream: WebSocket 끊김: sent 1011 (internal error) keepalive ping timeout; no close frame received → 5초 후 재연결 (시도 1)
-2026-04-27 19:06:12 [WARNING] src.data.ws_stream: WebSocket 끊김: no close frame received or sent → 5초 후 재연결 (시도 1)
-2026-04-27 22:56:29 [WARNING] src.data.ws_stream: WebSocket 끊김: no close frame received or sent → 5초 후 재연결 (시도 1)
+2026-04-28 01:33:55 [WARNING] src.strategy.setup_tracker: [SetupTracker] 셋업 PB(Pullback) 비활성 (승률 0% < 35%, avg_pnl=-3.40%, 11건)
+2026-04-28 01:33:55 [ERROR] src.trading.risk_manager: [RISK] 주간 손실 한도 -20% 도달: -23.56% → 주간 매매 중단
+2026-04-28 01:33:55 [ERROR] src.trading.risk_manager: [RISK] 주간 손실 한도 -20% 도달: -21.25% → 주간 매매 중단
+2026-04-28 01:34:15 [WARNING] src.strategy.setup_tracker: [SetupTracker] 셋업 PB(Pullback) 비활성 (승률 8% < 35%, avg_pnl=-2.92%, 12건)
+2026-04-28 01:34:17 [WARNING] src.strategy.setup_tracker: [SetupTracker] 셋업 PB(Pullback) 비활성 (승률 8% < 35%, avg_pnl=-2.92%, 12건)
+2026-04-28 01:34:19 [WARNING] src.strategy.setup_tracker: [SetupTracker] 셋업 PB(Pullback) 비활성 (승률 8% < 35%, avg_pnl=-2.92%, 12건)
+2026-04-28 01:34:21 [WARNING] src.strategy.setup_tracker: [SetupTracker] 셋업 PB(Pullback) 비활성 (승률 8% < 35%, avg_pnl=-2.92%, 12건)
+2026-04-28 01:34:23 [WARNING] src.strategy.setup_tracker: [SetupTracker] 셋업 PB(Pullback) 비활성 (승률 8% < 35%, avg_pnl=-2.92%, 12건)
+2026-04-28 01:34:25 [WARNING] src.strategy.setup_tracker: [SetupTracker] 셋업 PB(Pullback) 비활성 (승률 8% < 35%, avg_pnl=-2.92%, 12건)
+2026-04-28 01:34:27 [WARNING] src.strategy.setup_tracker: [SetupTracker] 셋업 PB(Pullback) 비활성 (승률 8% < 35%, avg_pnl=-2.92%, 12건)
+2026-04-28 01:34:29 [WARNING] src.strategy.setup_tracker: [SetupTracker] 셋업 PB(Pullback) 비활성 (승률 8% < 35%, avg_pnl=-2.92%, 12건)
+2026-04-28 01:34:31 [WARNING] src.strategy.setup_tracker: [SetupTracker] 셋업 PB(Pullback) 비활성 (승률 8% < 35%, avg_pnl=-2.92%, 12건)
+2026-04-28 01:34:33 [WARNING] src.strategy.setup_tracker: [SetupTracker] 셋업 PB(Pullback) 비활성 (승률 8% < 35%, avg_pnl=-2.92%, 12건)
+2026-04-28 01:34:35 [WARNING] src.strategy.setup_tracker: [SetupTracker] 셋업 PB(Pullback) 비활성 (승률 8% < 35%, avg_pnl=-2.92%, 12건)
+2026-04-28 01:34:38 [WARNING] src.strategy.setup_tracker: [SetupTracker] 셋업 PB(Pullback) 비활성 (승률 8% < 35%, avg_pnl=-2.92%, 12건)
+2026-04-28 01:34:40 [WARNING] src.strategy.setup_tracker: [SetupTracker] 셋업 PB(Pullback) 비활성 (승률 8% < 35%, avg_pnl=-2.92%, 12건)
+2026-04-28 01:34:42 [WARNING] src.strategy.setup_tracker: [SetupTracker] 셋업 PB(Pullback) 비활성 (승률 8% < 35%, avg_pnl=-2.92%, 12건)
+2026-04-28 01:34:44 [WARNING] src.strategy.setup_tracker: [SetupTracker] 셋업 PB(Pullback) 비활성 (승률 8% < 35%, avg_pnl=-2.92%, 12건)
+2026-04-28 01:34:46 [WARNING] src.strategy.setup_tracker: [SetupTracker] 셋업 PB(Pullback) 비활성 (승률 8% < 35%, avg_pnl=-2.92%, 12건)
+2026-04-28 01:34:48 [WARNING] src.strategy.setup_tracker: [SetupTracker] 셋업 PB(Pullback) 비활성 (승률 8% < 35%, avg_pnl=-2.92%, 12건)
+2026-04-28 01:34:50 [WARNING] src.strategy.setup_tracker: [SetupTracker] 셋업 PB(Pullback) 비활성 (승률 8% < 35%, avg_pnl=-2.92%, 12건)
+2026-04-28 01:34:52 [WARNING] src.strategy.setup_tracker: [SetupTracker] 셋업 PB(Pullback) 비활성 (승률 8% < 35%, avg_pnl=-2.92%, 12건)
+2026-04-28 01:34:54 [WARNING] src.strategy.setup_tracker: [SetupTracker] 셋업 PB(Pullback) 비활성 (승률 8% < 35%, avg_pnl=-2.92%, 12건)
+2026-04-28 01:34:56 [WARNING] src.strategy.setup_tracker: [SetupTracker] 셋업 PB(Pullback) 비활성 (승률 8% < 35%, avg_pnl=-2.92%, 12건)
+2026-04-28 01:34:58 [WARNING] src.strategy.setup_tracker: [SetupTracker] 셋업 PB(Pullback) 비활성 (승률 8% < 35%, avg_pnl=-2.92%, 12건)
+2026-04-28 01:35:00 [WARNING] src.strategy.setup_tracker: [SetupTracker] 셋업 PB(Pullback) 비활성 (승률 8% < 35%, avg_pnl=-2.92%, 12건)
+2026-04-28 01:35:02 [WARNING] src.strategy.setup_tracker: [SetupTracker] 셋업 PB(Pullback) 비활성 (승률 8% < 35%, avg_pnl=-2.92%, 12건)
+2026-04-28 01:35:04 [WARNING] src.strategy.setup_tracker: [SetupTracker] 셋업 PB(Pullback) 비활성 (승률 8% < 35%, avg_pnl=-2.92%, 12건)
+2026-04-28 01:35:06 [WARNING] src.strategy.setup_tracker: [SetupTracker] 셋업 PB(Pullback) 비활성 (승률 8% < 35%, avg_pnl=-2.92%, 12건)
+2026-04-28 01:35:08 [WARNING] src.strategy.setup_tracker: [SetupTracker] 셋업 PB(Pullback) 비활성 (승률 8% < 35%, avg_pnl=-2.92%, 12건)
+2026-04-28 01:35:10 [WARNING] src.strategy.setup_tracker: [SetupTracker] 셋업 PB(Pullback) 비활성 (승률 8% < 35%, avg_pnl=-2.92%, 12건)
+2026-04-28 01:35:12 [WARNING] src.strategy.setup_tracker: [SetupTracker] 셋업 PB(Pullback) 비활성 (승률 8% < 35%, avg_pnl=-2.92%, 12건)
+2026-04-28 01:35:14 [WARNING] src.strategy.setup_tracker: [SetupTracker] 셋업 PB(Pullback) 비활성 (승률 8% < 35%, avg_pnl=-2.92%, 12건)
+2026-04-28 01:35:16 [WARNING] src.strategy.setup_tracker: [SetupTracker] 셋업 PB(Pullback) 비활성 (승률 8% < 35%, avg_pnl=-2.92%, 12건)
