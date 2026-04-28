@@ -333,11 +333,15 @@ class PaperTrader:
         )
 
         if trade_id:
-            from src.strategy.paper_trader import PaperPosition
+            grade = "A" if strength >= 1.5 else "B+" if strength >= 1.0 else "B"
             pos = PaperPosition(
                 trade_id=trade_id, symbol="BTC-USDT-SWAP",
-                direction=direction, entry_price=current_price,
-                size_btc=size_btc, margin=margin, leverage=leverage,
+                direction=direction,
+                grade=f"PAPER_{ctype}",
+                score=strength,
+                entry_price=current_price,
+                entry_time=now,
+                margin=margin, size_btc=size_btc, leverage=leverage,
                 sl_price=sl, tp1_price=tp1, tp2_price=tp2, tp3_price=tp3,
                 setup=ctype, hold_mode=hold_mode,
                 flow_result=candidate.get("features_raw", {}),
