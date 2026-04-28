@@ -1397,3 +1397,9 @@
 2026-04-28 07:05:09 [ERROR] CryptoAnalyzer: 포지션 체크 에러: [Errno 2] No such file or directory: '/app/config/settings.yaml'
 2026-04-28 07:05:20 [WARNING] CryptoAnalyzer: 미청산: BTC/USDT:USDT LONG @ $76835.8
 2026-04-28 07:05:35 [WARNING] src.trading.position_manager: 거래소 포지션 발견 (봇 미추적): BTC/USDT:USDT long 1.000000 @ $76835.8
+2026-04-28 07:16:25 [ERROR] src.trading.position_manager: 🛑 SL failsafe 발동: LONG 가격 $76432 vs SL $76452 | 보유 10분 | runner=False | size=0.0100/1.0000 | algo_debug={'pending_count': 0, 'pending_ids': [], 'pos_sl_algo_id': 'sl17773599361017351'}
+2026-04-28 07:16:27 [WARNING] src.trading.risk_manager: 손실 기록: -0.11% | 연패: 1
+2026-04-28 07:16:27 [ERROR] src.trading.risk_manager: [RISK] 주간 손실 한도 -20% 도달: -17.16% → 주간 매매 중단
+2026-04-28 07:16:27 [WARNING] src.trading.risk_manager: 손실 기록: -0.11% | 연패: 2
+2026-04-28 07:16:27 [ERROR] src.trading.risk_manager: [RISK] 주간 손실 한도 -20% 도달: -17.28% → 주간 매매 중단
+2026-04-28 07:16:27 [WARNING] src.strategy.setup_tracker: [SetupTracker] 알 수 없는 셋업: momentum
