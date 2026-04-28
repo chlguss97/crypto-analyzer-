@@ -1,7 +1,7 @@
 {
-  "ts": 1777343358,
-  "ts_iso": "2026-04-28T02:29:18.965437+00:00",
-  "balance": 213.66,
+  "ts": 1777344267,
+  "ts_iso": "2026-04-28T02:44:27.999440+00:00",
+  "balance": 216.74,
   "autotrading": "on",
   "regime": "unknown",
   "trade_state": {},
@@ -12,24 +12,24 @@
       "direction": "short",
       "entry_price": 77111.9,
       "size": 0.02,
-      "remaining_size": 0.02,
+      "remaining_size": 0.01,
       "leverage": 20,
-      "sl_price": 77487.2,
+      "sl_price": 76937.5,
       "tp1_price": 76950.3,
       "tp2_price": 76330.7,
       "tp3_price": 75945.2,
       "grade": "B+",
       "entry_time": 1777340122000,
-      "tp1_filled": 0,
+      "tp1_filled": 1,
       "tp2_filled": 0,
       "tp3_filled": 0,
-      "runner_mode": 0,
-      "best_price": 0.0,
-      "trail_distance": 0.0,
+      "runner_mode": 1,
+      "best_price": 76630.9,
+      "trail_distance": 161.59999999999127,
       "manual_sl_override": 0,
       "manual_tp_override": 0,
-      "algo_ids": "{\"sl\": \"sl17773401200941224\", \"tp1\": \"tp117773401202273939\", \"tp2\": null, \"tp3\": null}",
-      "hold_minutes": 53
+      "algo_ids": "{\"sl\": \"rsl17773439613798008\", \"tp1\": null, \"tp2\": null, \"tp3\": null}",
+      "hold_minutes": 69
     }
   },
   "streak": 0,
@@ -49,18 +49,11 @@
   },
   "pending_algos": [
     {
-      "id": "tp117773401202273939",
+      "id": "rsl17773439613798008",
       "type": "trigger",
-      "trigger": "76950.3",
+      "trigger": "76937.5",
       "side": "buy",
       "sz": "1"
-    },
-    {
-      "id": "sl17773401200941224",
-      "type": "trigger",
-      "trigger": "77487.2",
-      "side": "buy",
-      "sz": "2"
     }
   ]
 }
