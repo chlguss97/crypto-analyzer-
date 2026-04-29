@@ -180,7 +180,7 @@ class WebSocketStream:
         """수신 메시지 라우팅"""
         if "event" in data:
             if data["event"] == "subscribe":
-                logger.debug(f"구독 확인: {data.get('arg', {}).get('channel')}")
+                logger.info(f"OKX WS 구독 확인: {data.get('arg', {}).get('channel')}")
             elif data["event"] == "error":
                 logger.error(f"OKX WS 에러: {data}")
             return
@@ -198,6 +198,8 @@ class WebSocketStream:
                 await self._handle_trade(trade)
         elif channel.startswith("candle"):
             tf = channel.replace("candle", "")
+            if self._trade_count < 5:
+                logger.warning(f"[CANDLE-DEBUG] channel={channel} tf={tf} items_len={len(items)} first={str(items[0])[:80] if items else 'empty'}")
             for candle in items:
                 await self._handle_candle(candle, tf)
         elif channel == "books5":
