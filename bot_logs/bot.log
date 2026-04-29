@@ -3792,3 +3792,18 @@ Traceback (most recent call last):
     if df_1m is not None and len(df_1m) >= 21:
        ^^^^^
 NameError: name 'df_1m' is not defined
+2026-04-29 01:20:09 [WARNING] src.data.binance_stream: Binance WS 30초 무응답 → ping 체크 (count=0)
+2026-04-29 01:20:39 [WARNING] src.data.binance_stream: Binance WS 30초 무응답 → ping 체크 (count=0)
+2026-04-29 01:21:09 [WARNING] src.data.binance_stream: Binance WS 30초 무응답 → ping 체크 (count=0)
+2026-04-29 01:21:39 [WARNING] src.data.binance_stream: Binance WS 30초 무응답 → ping 체크 (count=0)
+2026-04-29 01:22:09 [WARNING] src.data.binance_stream: Binance WS 30초 무응답 → ping 체크 (count=0)
+2026-04-29 01:23:29 [WARNING] src.data.binance_stream: Binance WS 30초 무응답 → ping 체크 (count=0)
+2026-04-29 01:23:59 [WARNING] src.data.binance_stream: Binance WS 30초 무응답 → ping 체크 (count=0)
+2026-04-29 01:24:29 [WARNING] src.data.binance_stream: Binance WS 30초 무응답 → ping 체크 (count=0)
+2026-04-29 01:24:59 [WARNING] src.data.binance_stream: Binance WS 30초 무응답 → ping 체크 (count=0)
+2026-04-29 01:25:29 [WARNING] src.data.binance_stream: Binance WS 30초 무응답 → ping 체크 (count=0)
+2026-04-29 01:25:59 [WARNING] src.data.binance_stream: Binance WS 30초 무응답 → ping 체크 (count=0)
+2026-04-29 01:26:29 [WARNING] src.data.binance_stream: Binance WS 30초 무응답 → ping 체크 (count=0)
+2026-04-29 01:26:59 [WARNING] src.data.binance_stream: Binance WS 30초 무응답 → ping 체크 (count=0)
+2026-04-29 01:27:29 [WARNING] src.data.binance_stream: Binance WS 30초 무응답 → ping 체크 (count=0)
+2026-04-29 01:29:43 [WARNING] src.data.binance_stream: Binance WS 30초 무응답 → ping 체크 (count=0)
