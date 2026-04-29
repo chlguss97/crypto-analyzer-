@@ -104,9 +104,9 @@ adverse_selection:
 
 candidate:
   momentum:
-    min_body_atr_ratio: 0.8
-    min_vol_ratio: 1.3
-    min_body_ratio: 0.6
+    min_body_atr_ratio: 0.4      # 0.8→0.4 (Phase A 데이터 수집, Phase B 후 복원)
+    min_vol_ratio: 1.0            # 1.3→1.0 (평균 이상이면 OK)
+    min_body_ratio: 0.4           # 0.6→0.4
   breakout:
     bb_squeeze_pctl: 25
     min_vol_ratio: 1.2
