@@ -255,9 +255,35 @@ class CryptoAnalyzer:
                 logger.info(f"[EVAL] 후보 없음 (5m={len(candles_5m)}건, regime={regime_now})")
             return
 
-        # 동일 캔들 중복 시그널 방지 (같은 5m 캔들에서 반복 감지 차단)
+        # 동일 캔들 중복 시그널 방지
         dedup_key = (candidate["type"], candidate["direction"], int(candidate["price"] * 10))
         if dedup_key == getattr(self, "_last_dedup_key", None):
+            return
+
+        # 약한 후보는 shadow 전용 (진입 안 함, ML 데이터만 수집)
+        is_weak = candidate.get("weak", False)
+        if is_weak:
+            signal_record = {
+                "ts": int(now),
+                "candidate_type": candidate["type"],
+                "direction": candidate["direction"],
+                "strength": candidate["strength"],
+                "price": candidate["price"],
+                "features": json.dumps(candidate.get("features_raw", {}), default=str),
+                "ml_go": 0,
+                "ml_prob": 0.0,
+                "entry_executed": 0,
+                "reject_reason": "weak_candidate",
+                "regime": regime_now,
+            }
+            await self.db.insert_signal(signal_record)
+            from src.monitoring.trade_logger import _append_jsonl
+            _append_jsonl({
+                "type": "candidate", "candidate_type": candidate["type"],
+                "direction": candidate["direction"], "strength": round(candidate["strength"], 2),
+                "price": round(candidate["price"], 1), "ml_go": 0, "weak": True,
+                "regime": regime_now,
+            })
             return
         self._last_dedup_key = dedup_key
 

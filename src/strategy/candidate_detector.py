@@ -98,6 +98,17 @@ class CandidateDetector:
             candidates.append(cas)
 
         if not candidates:
+            # 약한 후보 감지 (shadow 전용 — ML 데이터 가속)
+            weak = self._check_weak_momentum(df_5m, price, atr, vol_20avg)
+            if weak:
+                weak["features_raw"] = await self._build_raw_features(
+                    df_5m, df_15m, df_1h, df_4h, df_1d, price, atr, atr_pct, flow, vol_20avg, weak["direction"]
+                )
+                weak["atr"] = round(atr, 2)
+                weak["atr_pct"] = round(atr_pct, 4)
+                weak["price"] = round(price, 1)
+                weak["weak"] = True  # shadow 전용 표시
+                return weak
             return None
 
         # 가장 강한 후보 선택
@@ -105,7 +116,42 @@ class CandidateDetector:
         best["atr"] = round(atr, 2)
         best["atr_pct"] = round(atr_pct, 4)
         best["price"] = round(price, 1)
+        best["weak"] = False
         return best
+
+    # ════════════════════════════════════════
+    #  약한 후보 (Shadow 전용 — ML 데이터 가속)
+    # ════════════════════════════════════════
+
+    def _check_weak_momentum(self, df_5m, price, atr, vol_20avg) -> dict | None:
+        """정규 후보 조건의 절반으로 감지 — 진입 안 하고 shadow로만 추적"""
+        c = df_5m.iloc[-2]
+        body = float(c["close"]) - float(c["open"])
+        candle_range = float(c["high"]) - float(c["low"])
+        if candle_range <= 0:
+            return None
+
+        body_ratio = abs(body) / candle_range
+        body_atr_ratio = abs(body) / atr if atr > 0 else 0
+        vol = float(c["volume"])
+        vol_ratio = vol / vol_20avg if vol_20avg > 0 else 0
+
+        # 정규: 0.8/1.3/0.6 → 약한: 0.4/1.0/0.4
+        if body_atr_ratio < 0.4:
+            return None
+        if vol_ratio < 1.0:
+            return None
+        if body_ratio < 0.4:
+            return None
+
+        direction = "long" if body > 0 else "short"
+        return {
+            "type": "weak_momentum",
+            "direction": direction,
+            "strength": round(body_atr_ratio, 2),
+            "hold_mode": "momentum",
+            "vol_ratio": round(vol_ratio, 2),
+        }
 
     # ════════════════════════════════════════
     #  후보 A: Momentum Ignition
