@@ -352,11 +352,11 @@ class MLDecisionEngine:
         if self.on_phase_change:
             import asyncio
             try:
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    asyncio.ensure_future(self.on_phase_change(old_phase, new_phase, details))
-                else:
-                    loop.run_until_complete(self.on_phase_change(old_phase, new_phase, details))
+                loop = asyncio.get_running_loop()
+                loop.create_task(self.on_phase_change(old_phase, new_phase, details))
+            except RuntimeError:
+                # 이벤트 루프 없음 (테스트 등) → 무시
+                logger.debug("Phase 알림: 이벤트 루프 없음 → 스킵")
             except Exception as e:
                 logger.debug(f"Phase 알림 전송 실패: {e}")
 
