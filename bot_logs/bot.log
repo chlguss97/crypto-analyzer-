@@ -4066,3 +4066,65 @@ NameError: name 'df_1m' is not defined
 2026-04-29 04:48:42 [ERROR] src.data.ws_stream: OKX WS 에러: {'event': 'error', 'msg': "Wrong URL or channel:candle4H,instId:BTC-USDT-SWAP doesn't exist. Please use the correct URL, channel and parameters referring to API document.", 'code': '60018', 'connId': '704c6d39'}
 2026-04-29 04:48:42 [ERROR] src.data.ws_stream: OKX WS 에러: {'event': 'error', 'msg': "Wrong URL or channel:candle1D,instId:BTC-USDT-SWAP doesn't exist. Please use the correct URL, channel and parameters referring to API document.", 'code': '60018', 'connId': '704c6d39'}
 2026-04-29 04:48:42 [ERROR] src.data.ws_stream: OKX WS 에러: {'event': 'error', 'msg': "Wrong URL or channel:candle1W,instId:BTC-USDT-SWAP doesn't exist. Please use the correct URL, channel and parameters referring to API document.", 'code': '60018', 'connId': '704c6d39'}
+2026-04-29 05:07:43 [WARNING] src.data.ws_stream: [CANDLE-DEBUG] channel=candle15m tf=15m items_len=1 first=['1777438800000', '77216.8', '77248.8', '77150.0', '77206.3', '81836.20', '818.3
+2026-04-29 05:07:43 [WARNING] src.data.ws_stream: [CANDLE-DEBUG] channel=candle1H tf=1H items_len=1 first=['1777438800000', '77216.8', '77248.8', '77150.0', '77206.3', '81836.20', '818.3
+2026-04-29 05:07:43 [WARNING] src.data.ws_stream: [CANDLE-DEBUG] channel=candle1m tf=1m items_len=1 first=['1777439220000', '77183.4', '77206.3', '77183.4', '77206.3', '2275.87', '22.758
+2026-04-29 05:07:43 [WARNING] src.data.ws_stream: [CANDLE-DEBUG] channel=candle5m tf=5m items_len=1 first=['1777439100000', '77199.4', '77225.0', '77183.3', '77206.3', '19078.82', '190.7
+2026-04-29 05:07:43 [WARNING] src.data.ws_stream: [CANDLE-DEBUG] channel=candle1D tf=1D items_len=1 first=['1777392000000', '76026.4', '77416.7', '75854.3', '77206.3', '3059197.63', '305
+2026-04-29 05:07:43 [WARNING] src.data.ws_stream: [CANDLE-DEBUG] channel=candle4H tf=4H items_len=1 first=['1777435200000', '76946.5', '77416.7', '76837.6', '77206.3', '681723.83', '6817
+2026-04-29 05:07:43 [WARNING] src.data.ws_stream: [CANDLE-DEBUG] channel=candle1W tf=1W items_len=1 first=['1777219200000', '78005.3', '79489.9', '75624.7', '77206.3', '21786547.88', '21
+2026-04-29 05:07:43 [WARNING] src.data.ws_stream: [CANDLE-DEBUG] channel=candle15m tf=15m items_len=1 first=['1777438800000', '77216.8', '77248.8', '77150.0', '77206.3', '81836.34', '818.3
+2026-04-29 05:07:43 [WARNING] src.data.ws_stream: [CANDLE-DEBUG] channel=candle5m tf=5m items_len=1 first=['1777439100000', '77199.4', '77225.0', '77183.3', '77206.3', '19078.96', '190.7
+2026-04-29 05:07:43 [WARNING] src.data.ws_stream: [CANDLE-DEBUG] channel=candle1m tf=1m items_len=1 first=['1777439220000', '77183.4', '77206.3', '77183.4', '77206.3', '2276.01', '22.760
+2026-04-29 05:07:43 [WARNING] src.data.ws_stream: [CANDLE-DEBUG] channel=candle1H tf=1H items_len=1 first=['1777438800000', '77216.8', '77248.8', '77150.0', '77206.3', '81836.34', '818.3
+2026-04-29 05:07:43 [WARNING] src.data.ws_stream: [CANDLE-DEBUG] channel=candle1W tf=1W items_len=1 first=['1777219200000', '78005.3', '79489.9', '75624.7', '77206.3', '21786548.02', '21
+2026-04-29 05:07:43 [WARNING] src.data.ws_stream: [CANDLE-DEBUG] channel=candle1D tf=1D items_len=1 first=['1777392000000', '76026.4', '77416.7', '75854.3', '77206.3', '3059197.77', '305
+2026-04-29 05:07:43 [WARNING] src.data.ws_stream: [CANDLE-DEBUG] channel=candle4H tf=4H items_len=1 first=['1777435200000', '76946.5', '77416.7', '76837.6', '77206.3', '681723.97', '6817
+2026-04-29 05:07:43 [WARNING] src.data.ws_stream: [CANDLE-DEBUG] channel=candle4H tf=4H items_len=1 first=['1777435200000', '76946.5', '77416.7', '76837.6', '77206.3', '681726.57', '6817
+2026-04-29 05:07:43 [WARNING] src.data.ws_stream: [CANDLE-DEBUG] channel=candle1H tf=1H items_len=1 first=['1777438800000', '77216.8', '77248.8', '77150.0', '77206.3', '81838.94', '818.3
+2026-04-29 05:07:43 [WARNING] src.data.ws_stream: [CANDLE-DEBUG] channel=candle1W tf=1W items_len=1 first=['1777219200000', '78005.3', '79489.9', '75624.7', '77206.3', '21786550.62', '21
+2026-04-29 05:07:43 [WARNING] src.data.ws_stream: [CANDLE-DEBUG] channel=candle1D tf=1D items_len=1 first=['1777392000000', '76026.4', '77416.7', '75854.3', '77206.3', '3059200.37', '305
+2026-04-29 05:07:43 [WARNING] src.data.ws_stream: [CANDLE-DEBUG] channel=candle1m tf=1m items_len=1 first=['1777439220000', '77183.4', '77206.3', '77183.4', '77206.3', '2278.61', '22.786
+2026-04-29 05:07:43 [WARNING] src.data.ws_stream: [CANDLE-DEBUG] channel=candle15m tf=15m items_len=1 first=['1777438800000', '77216.8', '77248.8', '77150.0', '77206.3', '81838.94', '818.3
+2026-04-29 05:07:43 [WARNING] src.data.ws_stream: [CANDLE-DEBUG] channel=candle5m tf=5m items_len=1 first=['1777439100000', '77199.4', '77225.0', '77183.3', '77206.3', '19081.56', '190.8
+2026-04-29 05:11:22 [WARNING] src.data.ws_stream: [MSG-DEBUG #1] keys=['arg', 'data'] event='' channel='candle1m' data_len=1
+2026-04-29 05:11:22 [WARNING] src.data.ws_stream: [CANDLE-DEBUG] channel=candle1m tf=1m items=1 type=list first=['1777439460000', '77218.9', '77239.5', '77218.8', '77223.0', '580.43', '5.8043', '448263.92748000',
+2026-04-29 05:11:22 [WARNING] src.data.ws_stream: [MSG-DEBUG #2] keys=['event', 'arg', 'connId'] event='subscribe' channel='tickers' data_len=0
+2026-04-29 05:11:22 [WARNING] src.data.ws_stream: [MSG-DEBUG #3] keys=['event', 'arg', 'connId'] event='subscribe' channel='trades' data_len=0
+2026-04-29 05:11:22 [WARNING] src.data.ws_stream: [MSG-DEBUG #4] keys=['event', 'arg', 'connId'] event='subscribe' channel='books5' data_len=0
+2026-04-29 05:11:22 [WARNING] src.data.ws_stream: [MSG-DEBUG #5] keys=['arg', 'data'] event='' channel='tickers' data_len=1
+2026-04-29 05:11:22 [WARNING] src.data.ws_stream: [MSG-DEBUG #6] keys=['event', 'arg', 'connId'] event='subscribe' channel='candle1m' data_len=0
+2026-04-29 05:11:22 [WARNING] src.data.ws_stream: [MSG-DEBUG #7] keys=['arg', 'data'] event='' channel='candle5m' data_len=1
+2026-04-29 05:11:22 [WARNING] src.data.ws_stream: [CANDLE-DEBUG] channel=candle5m tf=5m items=1 type=list first=['1777439400000', '77218.8', '77239.5', '77202.1', '77223.0', '7226.19', '72.2619', '5579606.1488100
+2026-04-29 05:11:22 [WARNING] src.data.ws_stream: [MSG-DEBUG #8] keys=['event', 'arg', 'connId'] event='subscribe' channel='candle5m' data_len=0
+2026-04-29 05:11:22 [WARNING] src.data.ws_stream: [MSG-DEBUG #9] keys=['arg', 'data'] event='' channel='candle15m' data_len=1
+2026-04-29 05:11:22 [WARNING] src.data.ws_stream: [CANDLE-DEBUG] channel=candle15m tf=15m items=1 type=list first=['1777438800000', '77216.8', '77267.2', '77150.0', '77223.0', '97293.50', '972.9350', '75107666.9845
+2026-04-29 05:11:22 [WARNING] src.data.ws_stream: [MSG-DEBUG #10] keys=['arg', 'data'] event='' channel='tickers' data_len=1
+2026-04-29 05:11:22 [WARNING] src.data.ws_stream: [MSG-DEBUG #11] keys=['event', 'arg', 'connId'] event='subscribe' channel='candle15m' data_len=0
+2026-04-29 05:11:22 [WARNING] src.data.ws_stream: [MSG-DEBUG #12] keys=['arg', 'data'] event='' channel='candle1H' data_len=1
+2026-04-29 05:11:22 [WARNING] src.data.ws_stream: [CANDLE-DEBUG] channel=candle1H tf=1H items=1 type=list first=['1777438800000', '77216.8', '77267.2', '77150.0', '77223.0', '97293.50', '972.9350', '75107666.9845
+2026-04-29 05:11:22 [WARNING] src.data.ws_stream: [MSG-DEBUG #13] keys=['event', 'arg', 'connId'] event='subscribe' channel='candle1H' data_len=0
+2026-04-29 05:11:22 [WARNING] src.data.ws_stream: [MSG-DEBUG #14] keys=['arg', 'data'] event='' channel='candle4H' data_len=1
+2026-04-29 05:11:22 [WARNING] src.data.ws_stream: [CANDLE-DEBUG] channel=candle4H tf=4H items=1 type=list first=['1777435200000', '76946.5', '77416.7', '76837.6', '77223.0', '697181.13', '6971.8113', '538170097.2
+2026-04-29 05:11:22 [WARNING] src.data.ws_stream: [MSG-DEBUG #15] keys=['event', 'arg', 'connId'] event='subscribe' channel='candle4H' data_len=0
+2026-04-29 05:11:22 [WARNING] src.data.ws_stream: [MSG-DEBUG #16] keys=['arg', 'data'] event='' channel='candle1D' data_len=1
+2026-04-29 05:11:22 [WARNING] src.data.ws_stream: [CANDLE-DEBUG] channel=candle1D tf=1D items=1 type=list first=['1777392000000', '76026.4', '77416.7', '75854.3', '77223.0', '3074654.93', '30746.5493', '235414864
+2026-04-29 05:11:22 [WARNING] src.data.ws_stream: [MSG-DEBUG #17] keys=['event', 'arg', 'connId'] event='subscribe' channel='candle1D' data_len=0
+2026-04-29 05:11:22 [WARNING] src.data.ws_stream: [MSG-DEBUG #18] keys=['arg', 'data'] event='' channel='candle1W' data_len=1
+2026-04-29 05:11:22 [WARNING] src.data.ws_stream: [CANDLE-DEBUG] channel=candle1W tf=1W items=1 type=list first=['1777219200000', '78005.3', '79489.9', '75624.7', '77223.0', '21802005.18', '218020.0518', '1686404
+2026-04-29 05:11:22 [WARNING] src.data.ws_stream: [MSG-DEBUG #19] keys=['event', 'arg', 'connId'] event='subscribe' channel='candle1W' data_len=0
+2026-04-29 05:11:22 [WARNING] src.data.ws_stream: [MSG-DEBUG #20] keys=['arg', 'data'] event='' channel='tickers' data_len=1
+2026-04-29 05:11:23 [WARNING] src.data.ws_stream: [CANDLE-DEBUG] channel=candle4H tf=4H items=1 type=list first=['1777435200000', '76946.5', '77416.7', '76837.6', '77222.9', '697202.36', '6972.0236', '538186491.6
+2026-04-29 05:11:23 [WARNING] src.data.ws_stream: [CANDLE-DEBUG] channel=candle4H tf=4H items=1 type=list first=['1777435200000', '76946.5', '77416.7', '76837.6', '77223.0', '697202.40', '6972.0240', '538186522.5
+2026-04-29 05:11:23 [WARNING] src.data.ws_stream: [CANDLE-DEBUG] channel=candle1D tf=1D items=1 type=list first=['1777392000000', '76026.4', '77416.7', '75854.3', '77222.9', '3074676.16', '30746.7616', '235416504
+2026-04-29 05:11:23 [WARNING] src.data.ws_stream: [CANDLE-DEBUG] channel=candle1W tf=1W items=1 type=list first=['1777219200000', '78005.3', '79489.9', '75624.7', '77222.9', '21802026.41', '218020.2641', '1686406
+2026-04-29 05:11:23 [WARNING] src.data.ws_stream: [CANDLE-DEBUG] channel=candle1W tf=1W items=1 type=list first=['1777219200000', '78005.3', '79489.9', '75624.7', '77223.0', '21802026.45', '218020.2645', '1686406
+2026-04-29 05:11:23 [WARNING] src.data.ws_stream: [CANDLE-DEBUG] channel=candle1D tf=1D items=1 type=list first=['1777392000000', '76026.4', '77416.7', '75854.3', '77223.0', '3074676.20', '30746.7620', '235416507
+2026-04-29 05:11:23 [WARNING] src.data.ws_stream: [CANDLE-DEBUG] channel=candle1m tf=1m items=1 type=list first=['1777439460000', '77218.9', '77239.5', '77218.8', '77222.9', '601.66', '6.0166', '464658.34916000',
+2026-04-29 05:11:23 [WARNING] src.data.ws_stream: [CANDLE-DEBUG] channel=candle1m tf=1m items=1 type=list first=['1777439460000', '77218.9', '77239.5', '77218.8', '77223.0', '601.70', '6.0170', '464689.23836000',
+2026-04-29 05:11:23 [WARNING] src.data.ws_stream: [CANDLE-DEBUG] channel=candle1H tf=1H items=1 type=list first=['1777438800000', '77216.8', '77267.2', '77150.0', '77222.9', '97314.73', '973.1473', '75124061.4062
+2026-04-29 05:11:23 [WARNING] src.data.ws_stream: [CANDLE-DEBUG] channel=candle1H tf=1H items=1 type=list first=['1777438800000', '77216.8', '77267.2', '77150.0', '77223.0', '97314.77', '973.1477', '75124092.2954
+2026-04-29 05:11:23 [WARNING] src.data.ws_stream: [CANDLE-DEBUG] channel=candle5m tf=5m items=1 type=list first=['1777439400000', '77218.8', '77239.5', '77202.1', '77222.9', '7247.42', '72.4742', '5596000.5704900
+2026-04-29 05:11:23 [WARNING] src.data.ws_stream: [CANDLE-DEBUG] channel=candle15m tf=15m items=1 type=list first=['1777438800000', '77216.8', '77267.2', '77150.0', '77222.9', '97314.73', '973.1473', '75124061.4062
+2026-04-29 05:11:23 [WARNING] src.data.ws_stream: [CANDLE-DEBUG] channel=candle5m tf=5m items=1 type=list first=['1777439400000', '77218.8', '77239.5', '77202.1', '77223.0', '7247.46', '72.4746', '5596031.4596900
+2026-04-29 05:11:23 [WARNING] src.data.ws_stream: [CANDLE-DEBUG] channel=candle15m tf=15m items=1 type=list first=['1777438800000', '77216.8', '77267.2', '77150.0', '77223.0', '97314.77', '973.1477', '75124092.2954
