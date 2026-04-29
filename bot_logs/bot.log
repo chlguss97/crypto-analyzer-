@@ -3958,3 +3958,44 @@ NameError: name 'df_1m' is not defined
 2026-04-29 01:59:53 [ERROR] src.data.binance_stream: Futures REST 폴링 에러: cannot access local variable 'now' where it is not associated with a value
 2026-04-29 01:59:58 [ERROR] src.data.binance_stream: Futures REST 폴링 에러: cannot access local variable 'now' where it is not associated with a value
 2026-04-29 02:00:04 [ERROR] src.data.binance_stream: Futures REST 폴링 에러: cannot access local variable 'now' where it is not associated with a value
+2026-04-29 02:00:09 [ERROR] src.data.binance_stream: Futures REST 폴링 에러: cannot access local variable 'now' where it is not associated with a value
+2026-04-29 02:00:14 [ERROR] src.data.binance_stream: Futures REST 폴링 에러: cannot access local variable 'now' where it is not associated with a value
+2026-04-29 02:00:19 [ERROR] src.data.binance_stream: Futures REST 폴링 에러: cannot access local variable 'now' where it is not associated with a value
+2026-04-29 02:00:24 [ERROR] src.data.binance_stream: Futures REST 폴링 에러: cannot access local variable 'now' where it is not associated with a value
+2026-04-29 02:00:29 [ERROR] src.data.binance_stream: Futures REST 폴링 에러: cannot access local variable 'now' where it is not associated with a value
+2026-04-29 02:00:34 [ERROR] src.data.binance_stream: Futures REST 폴링 에러: cannot access local variable 'now' where it is not associated with a value
+2026-04-29 02:00:39 [ERROR] src.data.binance_stream: Futures REST 폴링 에러: cannot access local variable 'now' where it is not associated with a value
+2026-04-29 02:00:44 [ERROR] src.data.binance_stream: Futures REST 폴링 에러: cannot access local variable 'now' where it is not associated with a value
+2026-04-29 02:00:49 [ERROR] src.data.binance_stream: Futures REST 폴링 에러: cannot access local variable 'now' where it is not associated with a value
+2026-04-29 02:00:54 [ERROR] src.data.binance_stream: Futures REST 폴링 에러: cannot access local variable 'now' where it is not associated with a value
+2026-04-29 02:00:59 [ERROR] src.data.binance_stream: Futures REST 폴링 에러: cannot access local variable 'now' where it is not associated with a value
+2026-04-29 02:01:05 [ERROR] src.data.binance_stream: Futures REST 폴링 에러: cannot access local variable 'now' where it is not associated with a value
+2026-04-29 02:01:10 [ERROR] src.data.binance_stream: Futures REST 폴링 에러: cannot access local variable 'now' where it is not associated with a value
+2026-04-29 02:01:15 [ERROR] src.data.binance_stream: Futures REST 폴링 에러: cannot access local variable 'now' where it is not associated with a value
+2026-04-29 02:01:20 [ERROR] src.data.binance_stream: Futures REST 폴링 에러: cannot access local variable 'now' where it is not associated with a value
+2026-04-29 02:01:25 [ERROR] src.data.binance_stream: Futures REST 폴링 에러: cannot access local variable 'now' where it is not associated with a value
+2026-04-29 02:01:30 [ERROR] src.data.binance_stream: Futures REST 폴링 에러: cannot access local variable 'now' where it is not associated with a value
+2026-04-29 02:01:35 [ERROR] src.data.binance_stream: Futures REST 폴링 에러: cannot access local variable 'now' where it is not associated with a value
+2026-04-29 02:01:40 [ERROR] src.data.binance_stream: Futures REST 폴링 에러: cannot access local variable 'now' where it is not associated with a value
+2026-04-29 02:01:45 [ERROR] src.data.binance_stream: Futures REST 폴링 에러: cannot access local variable 'now' where it is not associated with a value
+2026-04-29 02:01:50 [ERROR] src.data.binance_stream: Futures REST 폴링 에러: cannot access local variable 'now' where it is not associated with a value
+2026-04-29 02:01:55 [ERROR] src.data.binance_stream: Futures REST 폴링 에러: cannot access local variable 'now' where it is not associated with a value
+2026-04-29 02:02:00 [ERROR] src.data.binance_stream: Futures REST 폴링 에러: cannot access local variable 'now' where it is not associated with a value
+2026-04-29 02:02:06 [ERROR] src.data.binance_stream: Futures REST 폴링 에러: cannot access local variable 'now' where it is not associated with a value
+2026-04-29 02:02:34 [WARNING] src.data.binance_stream: [BN-DEBUG] raw keys=['result', 'id'] event='' stream=?
+2026-04-29 02:02:34 [WARNING] src.data.binance_stream: [BN-DEBUG] raw keys=['e', 'E', 's', 'a', 'p'] event='aggTrade' stream=?
+2026-04-29 02:02:34 [WARNING] src.data.binance_stream: [BN-DEBUG] raw keys=['e', 'E', 's', 'a', 'p'] event='aggTrade' stream=?
+2026-04-29 02:02:34 [WARNING] src.data.binance_stream: [BN-DEBUG] raw keys=['e', 'E', 's', 'a', 'p'] event='aggTrade' stream=?
+2026-04-29 02:03:25 [WARNING] src.data.binance_stream: [BN-DEBUG] raw keys=['result', 'id'] event='' stream=?
+2026-04-29 02:03:25 [WARNING] src.data.binance_stream: [BN-DEBUG] raw keys=['e', 'E', 's', 'a', 'p'] event='aggTrade' stream=?
+2026-04-29 02:03:25 [WARNING] src.data.binance_stream: [BN-DEBUG] raw keys=['e', 'E', 's', 'a', 'p'] event='aggTrade' stream=?
+2026-04-29 02:03:26 [WARNING] src.data.binance_stream: [BN-DEBUG] raw keys=['e', 'E', 's', 'k'] event='kline' stream=?
+2026-04-29 02:03:26 [WARNING] src.data.binance_stream: [BN-DEBUG] raw keys=['e', 'E', 's', 'k'] event='kline' stream=?
+2026-04-29 02:03:26 [WARNING] src.data.binance_stream: [BN-DEBUG] raw keys=['e', 'E', 's', 'k'] event='kline' stream=?
+2026-04-29 02:03:26 [WARNING] src.data.binance_stream: [BN-DEBUG] raw keys=['e', 'E', 's', 'k'] event='kline' stream=?
+2026-04-29 02:03:26 [WARNING] src.data.binance_stream: [BN-DEBUG] raw keys=['e', 'E', 's', 'k'] event='kline' stream=?
+2026-04-29 02:03:26 [WARNING] src.data.binance_stream: [BN-DEBUG] raw keys=['e', 'E', 's', 'k'] event='kline' stream=?
+2026-04-29 02:03:26 [WARNING] src.data.binance_stream: [BN-DEBUG] raw keys=['e', 'E', 's', 'k'] event='kline' stream=?
+2026-04-29 02:03:26 [WARNING] src.data.binance_stream: [BN-DEBUG] raw keys=['e', 'E', 's', 'c', 'o'] event='24hrMiniTicker' stream=?
+2026-04-29 02:03:27 [WARNING] src.data.binance_stream: [BN-DEBUG] raw keys=['e', 'E', 's', 'c', 'o'] event='24hrMiniTicker' stream=?
+2026-04-29 02:03:27 [WARNING] src.data.binance_stream: [BN-DEBUG] raw keys=['e', 'E', 's', 'a', 'p'] event='aggTrade' stream=?
