@@ -174,6 +174,44 @@ periodic_shadow_check()
 
 ---
 
+## 7단계: 외부 API 스펙 검증 ★코드만 읽지 말고 공식 문서 대조
+
+코드 대 코드가 아니라 **코드 대 외부 API 공식 스펙** 대조.
+이전 검사에서 놓친 치명적 버그들이 여기서 발견됨.
+
+### WebSocket URL 형식
+- Binance combined stream: `/stream?streams=s1/s2/s3` (NOT `/ws/s1/s2/s3`)
+- Binance single stream: `/ws/<streamName>`
+- OKX public WS: `wss://ws.okx.com:8443/ws/v5/public`
+- 각 URL 형식이 공식 문서와 정확히 일치하는지
+
+### WebSocket 메시지 형식
+- Binance combined: `{"stream":"...", "data":{...}}` — unwrap 필요
+- Binance single: 직접 `{"e":"aggTrade", ...}`
+- OKX: `{"arg":{...}, "data":[...]}`
+- 각 이벤트 필드명이 공식 문서와 일치하는지 (e, p, q, m, T 등)
+
+### 라이브러리 버전 호환
+- `pip list`로 실제 설치 버전 확인
+- websockets: v14+ API 변경 (async with 패턴 → await connect + recv 루프)
+- ccxt: unified API 필드명 변경 여부
+- python-telegram-bot: v20+ async 전환
+- asyncio: Python 3.12+ get_event_loop() → get_running_loop()
+
+### 네트워크 접근성
+- 서버에서 각 외부 엔드포인트 접근 가능한지 (curl 테스트)
+- 방화벽/IP 차단 여부
+- REST는 되는데 WS만 안 되는 케이스
+
+### REST API 파라미터
+- OKX: ordType, instId, tdMode, posSide 등 필수 파라미터
+- Binance: fetch_ohlcv 심볼 형식 (spot: BTC/USDT, futures: BTC/USDT:USDT)
+
+> **코드가 "문법적으로" 맞아도 "스펙에" 안 맞으면 조용히 실패.**
+> 반드시 공식 문서 URL 참조해서 대조할 것.
+
+---
+
 ## 발견 항목 출력 형식
 
 | # | 심각도 | 카테고리 | 위치 | 증상 | 증거 | 권장 수정 |
@@ -192,7 +230,7 @@ periodic_shadow_check()
 
 ---
 
-## 7단계: 자동 수정 정책
+## 8단계: 자동 수정 정책
 
 ### ✅ 자동 수정 OK
 
@@ -218,7 +256,7 @@ periodic_shadow_check()
 
 ---
 
-## 8단계: 변경 이력 문서화
+## 9단계: 변경 이력 문서화
 
 ### 1) CHANGELOG.md 갱신
 
@@ -242,7 +280,7 @@ periodic_shadow_check()
 
 ---
 
-## 9단계: Git 커밋
+## 10단계: Git 커밋
 
 ### 커밋 메시지 형식
 
