@@ -36,7 +36,7 @@ from src.data.storage import RedisClient
 
 logger = logging.getLogger(__name__)
 
-BINANCE_WS = "wss://stream.binance.com:9443/ws"  # spot WS (fstream futures 403 차단)
+BINANCE_WS = "wss://fstream.binance.com/ws"  # futures WS (REST fapi 정상 확인)
 SYMBOL = "btcusdt"
 WHALE_THRESHOLD_USD = 50_000  # $50k 이상 = 대형 체결
 WHALE_WINDOW_SEC = 300        # 최근 5분간 대형 체결 추적
@@ -93,8 +93,6 @@ class BinanceStream:
         self._reconnect_count = 0
 
         # 10 스트림: aggTrades + miniTicker + 캔들 7종 + 강제 청산
-        # spot WS (futures fstream 403 차단 대응)
-        # forceOrder는 futures 전용 → spot에서 불가, 제거
         streams = [
             f"{SYMBOL}@aggTrade",
             f"{SYMBOL}@miniTicker",
@@ -105,6 +103,7 @@ class BinanceStream:
             f"{SYMBOL}@kline_4h",
             f"{SYMBOL}@kline_1d",
             f"{SYMBOL}@kline_1w",
+            f"{SYMBOL}@forceOrder",
         ]
         url = f"{BINANCE_WS}/{'/'.join(streams)}"
 
@@ -122,18 +121,20 @@ class BinanceStream:
                 self._trades.clear()
                 self._cvd_snapshots.clear()
                 self._last_micro_flush = 0
-                logger.info(f"Binance WS 연결 성공: {SYMBOL} (버퍼 리셋)")
+                logger.info(f"Binance WS 연결 성공: {SYMBOL} (버퍼 리셋) URL: {url[:60]}...")
                 try:
                     while self._running:
                         try:
                             message = await asyncio.wait_for(ws.recv(), timeout=30)
                         except asyncio.TimeoutError:
                             # 30초 무응답 → ping 체크
+                            logger.warning(f"Binance WS 30초 무응답 → ping 체크 (count={self._trade_count})")
                             try:
-                                await ws.ping()
+                                pong = await asyncio.wait_for(ws.ping(), timeout=5)
                                 continue
-                            except Exception:
-                                break  # 연결 끊김
+                            except Exception as e:
+                                logger.error(f"Binance WS ping 실패 → 재연결: {e}")
+                                break
                         try:
                             data = json.loads(message)
                             await self._handle(data)
