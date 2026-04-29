@@ -1297,7 +1297,7 @@ const REGIME_LABELS = {
   'trending_up': 'TRENDING UP', 'trending_down': 'TRENDING DOWN',
   'ranging': 'RANGING', 'volatile': 'VOLATILE'
 };
-const SETUP_COLORS = {'LVL':'var(--green)','MOM':'var(--accent)','PB':'var(--blue)','BRK':'var(--yellow)','DIV':'#c084fc','SES':'#f97316','momentum':'var(--accent)','breakout':'var(--yellow)','cascade':'#c084fc','pullback':'var(--blue)','level':'var(--green)'};
+const SETUP_COLORS = {'momentum':'var(--accent)','breakout':'var(--yellow)','cascade':'#c084fc','weak_momentum':'var(--text-muted)'};
 
 async function updateEngineTab() {
   const data = await api('/api/engine/overview');

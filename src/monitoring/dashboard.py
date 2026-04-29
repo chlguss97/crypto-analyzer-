@@ -57,8 +57,8 @@ async def verify_auth(
 
 
 app = FastAPI(
-    title="CryptoAnalyzer v1.0",
-    version="1.0.0",
+    title="CryptoAnalyzer v2",
+    version="2.0.0",
     dependencies=[Depends(verify_auth)],
 )
 
@@ -431,11 +431,13 @@ async def get_market():
     """실시간 시장 데이터 (Redis 기반)"""
     await _ensure_initialized()
     ticker = await redis.hgetall("rt:ticker:BTC-USDT-SWAP")
+    funding = await redis.get("rt:funding:BTC-USDT-SWAP")
+    oi = await redis.get("rt:oi:BTC-USDT-SWAP")
 
     return {
         "ticker": ticker or {},
-        "open_interest": None,   # OI collector 미사용 (v2)
-        "funding_rate": None,
+        "open_interest": float(oi) if oi else None,
+        "funding_rate": float(funding) if funding else None,
         "long_short_ratio": None,
     }
 
@@ -563,8 +565,8 @@ async def get_setup_tracker():
 async def get_flow_ml_stats():
     """MLDecisionEngine 모델 통계"""
     try:
-        from src.strategy.ml_engine import MLDecisionEngine as FlowML
-        ml = FlowML()
+        from src.strategy.ml_engine import MLDecisionEngine
+        ml = MLDecisionEngine()
         return ml.get_stats()
     except Exception as e:
         return {"trained": False, "total_labeled": 0, "error": str(e)}
@@ -705,7 +707,7 @@ async def get_engine_overview():
     # ML 상태
     ml_stats = {}
     try:
-        from src.strategy.ml_engine import MLDecisionEngine as FlowML
+        from src.strategy.ml_engine import MLDecisionEngine
         ml_stats = FlowML().get_stats()
     except Exception:
         pass

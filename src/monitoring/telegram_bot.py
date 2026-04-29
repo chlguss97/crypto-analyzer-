@@ -149,7 +149,7 @@ class TelegramNotifier:
             regime = (await self.redis.get("sys:regime")) if self.redis else "?"
             balance = (await self.redis.get("sys:balance")) if self.redis else "?"
             positions = len(self.position_manager.positions) if self.position_manager else 0
-            learning = "YES" if self.redis and (await self.redis.get("sys:learning")) == "1" else "NO"
+            learning = "NO"  # v2: sys:learning 미사용
 
             text = (
                 "\U0001f4ca <b>봇 상태</b>\n\n"
