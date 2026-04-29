@@ -14,3 +14,99 @@ Traceback (most recent call last):
     with open(config_path, "r", encoding="utf-8") as f:
          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 FileNotFoundError: [Errno 2] No such file or directory: '/app/config/settings.yaml'
+2026-04-29 22:35:06 [ERROR] CryptoAnalyzer: [EVAL] 에러: [Errno 2] No such file or directory: '/app/config/settings.yaml'
+Traceback (most recent call last):
+  File "/app/src/main.py", line 185, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 366, in _evaluate
+    await self.paper_trader.try_candidate_entry(candidate, regime_now)
+  File "/app/src/strategy/paper_trader.py", line 291, in try_candidate_entry
+    _lev_calc = LeverageCalculator()
+                ^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/trading/leverage.py", line 29, in __init__
+    self.config = load_config()
+                  ^^^^^^^^^^^^^
+  File "/app/src/utils/helpers.py", line 15, in load_config
+    with open(config_path, "r", encoding="utf-8") as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/app/config/settings.yaml'
+2026-04-29 23:45:03 [ERROR] CryptoAnalyzer: [EVAL] 에러: [Errno 2] No such file or directory: '/app/config/settings.yaml'
+Traceback (most recent call last):
+  File "/app/src/main.py", line 185, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 366, in _evaluate
+    await self.paper_trader.try_candidate_entry(candidate, regime_now)
+  File "/app/src/strategy/paper_trader.py", line 291, in try_candidate_entry
+    _lev_calc = LeverageCalculator()
+                ^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/trading/leverage.py", line 29, in __init__
+    self.config = load_config()
+                  ^^^^^^^^^^^^^
+  File "/app/src/utils/helpers.py", line 15, in load_config
+    with open(config_path, "r", encoding="utf-8") as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/app/config/settings.yaml'
+2026-04-30 00:15:06 [ERROR] CryptoAnalyzer: [EVAL] 에러: [Errno 2] No such file or directory: '/app/config/settings.yaml'
+Traceback (most recent call last):
+  File "/app/src/main.py", line 185, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 366, in _evaluate
+    await self.paper_trader.try_candidate_entry(candidate, regime_now)
+  File "/app/src/strategy/paper_trader.py", line 291, in try_candidate_entry
+    _lev_calc = LeverageCalculator()
+                ^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/trading/leverage.py", line 29, in __init__
+    self.config = load_config()
+                  ^^^^^^^^^^^^^
+  File "/app/src/utils/helpers.py", line 15, in load_config
+    with open(config_path, "r", encoding="utf-8") as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/app/config/settings.yaml'
+2026-04-30 01:05:04 [ERROR] CryptoAnalyzer: [EVAL] 에러: [Errno 2] No such file or directory: '/app/config/settings.yaml'
+Traceback (most recent call last):
+  File "/app/src/main.py", line 185, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 366, in _evaluate
+    await self.paper_trader.try_candidate_entry(candidate, regime_now)
+  File "/app/src/strategy/paper_trader.py", line 291, in try_candidate_entry
+    _lev_calc = LeverageCalculator()
+                ^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/trading/leverage.py", line 29, in __init__
+    self.config = load_config()
+                  ^^^^^^^^^^^^^
+  File "/app/src/utils/helpers.py", line 15, in load_config
+    with open(config_path, "r", encoding="utf-8") as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/app/config/settings.yaml'
+2026-04-30 03:05:05 [ERROR] CryptoAnalyzer: [EVAL] 에러: [Errno 2] No such file or directory: '/app/config/settings.yaml'
+Traceback (most recent call last):
+  File "/app/src/main.py", line 185, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 366, in _evaluate
+    await self.paper_trader.try_candidate_entry(candidate, regime_now)
+  File "/app/src/strategy/paper_trader.py", line 291, in try_candidate_entry
+    _lev_calc = LeverageCalculator()
+                ^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/trading/leverage.py", line 29, in __init__
+    self.config = load_config()
+                  ^^^^^^^^^^^^^
+  File "/app/src/utils/helpers.py", line 15, in load_config
+    with open(config_path, "r", encoding="utf-8") as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/app/config/settings.yaml'
+2026-04-30 07:50:06 [ERROR] CryptoAnalyzer: [EVAL] 에러: [Errno 2] No such file or directory: '/app/config/settings.yaml'
+Traceback (most recent call last):
+  File "/app/src/main.py", line 185, in periodic_eval
+    await self._evaluate()
+  File "/app/src/main.py", line 366, in _evaluate
+    await self.paper_trader.try_candidate_entry(candidate, regime_now)
+  File "/app/src/strategy/paper_trader.py", line 291, in try_candidate_entry
+    _lev_calc = LeverageCalculator()
+                ^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/trading/leverage.py", line 29, in __init__
+    self.config = load_config()
+                  ^^^^^^^^^^^^^
+  File "/app/src/utils/helpers.py", line 15, in load_config
+    with open(config_path, "r", encoding="utf-8") as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/app/config/settings.yaml'
