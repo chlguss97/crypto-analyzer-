@@ -613,6 +613,7 @@ class BinanceStream:
 
         async with aiohttp.ClientSession() as session:
             while self._running:
+                now = time.time()
                 try:
                     # 1. 최근 청산 (forceOrders)
                     try:
@@ -623,7 +624,6 @@ class BinanceStream:
                         ) as resp:
                             if resp.status == 200:
                                 orders = await resp.json()
-                                now = time.time()
 
                                 # 1분 윈도우 청산 합산
                                 cutoff_ms = int((now - 60) * 1000)
