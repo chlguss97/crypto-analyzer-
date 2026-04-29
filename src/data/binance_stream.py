@@ -147,6 +147,9 @@ class BinanceStream:
         # Binance combined stream: {"stream":"...","data":{...}}
         data = raw.get("data", raw)
         event = data.get("e", "")
+        # 첫 100메시지 디버그 (이후 제거)
+        if self._trade_count < 3:
+            logger.warning(f"[BN-DEBUG] raw keys={list(raw.keys())[:5]} event='{event}' stream={raw.get('stream','?')[:30]}")
         if event == "aggTrade":
             await self._on_agg_trade(data)
         elif event == "24hrMiniTicker":
