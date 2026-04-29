@@ -1,12 +1,13 @@
 # Commit Log
 
 > 자동 생성 — `scripts/update_commit_log.sh` (매 커밋 후 실행)
-> Updated: 2026-04-29 09:02:37    
-> Total commits: 254 (2026-04-03 → 2026-04-29)
+> Updated: 2026-04-29 09:09:39    
+> Total commits: 255 (2026-04-03 → 2026-04-29)
 
 Claude 가 질문/변경 작업 시 이 파일을 참고해서 과거 변경 이력 컨텍스트를 확보합니다. 수동 편집 금지 — 다음 커밋 시 덮어써집니다.
 
 ## 2026-04-29
+- `084c322` debug: Binance WS 첫 메시지 로깅 (임시)
 - `6ab9898` perf: post-only 대기 3초→2초 (최대 6초 블록)
 - `160a9bd` fix: post-only 블록 40초→9초 (3초×3회) — 스캘핑 속도 확보
 - `3e2003b` fix: 전수검사 2차 — HIGH 8건 수정

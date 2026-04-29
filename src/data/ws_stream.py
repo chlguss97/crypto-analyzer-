@@ -46,12 +46,13 @@ class WebSocketStream:
                 await asyncio.sleep(wait)
 
     async def _connect(self, symbol: str):
-        """WebSocket 연결 + 구독"""
-        async with websockets.connect(OKX_WS_PUBLIC, ping_interval=20) as ws:
-            self.ws = ws
-            self._reconnect_count = 0
-            logger.info("WebSocket 연결 성공")
+        """WebSocket 연결 + 구독 (websockets v14+ 호환)"""
+        ws = await websockets.connect(OKX_WS_PUBLIC, ping_interval=20, open_timeout=10)
+        self.ws = ws
+        self._reconnect_count = 0
+        logger.info("WebSocket 연결 성공")
 
+        try:
             # 구독: 틱, 체결, 캔들(15m)
             subscribe_msg = {
                 "op": "subscribe",
@@ -63,21 +64,27 @@ class WebSocketStream:
             }
             await ws.send(json.dumps(subscribe_msg))
 
-            async for message in ws:
-                if not self._running:
-                    break
-                # JSON parse 실패가 연결을 끊지 않게 (잘못된 메시지 1건은 skip)
+            while self._running:
+                try:
+                    message = await asyncio.wait_for(ws.recv(), timeout=30)
+                except asyncio.TimeoutError:
+                    try:
+                        await ws.ping()
+                        continue
+                    except Exception:
+                        break
                 try:
                     data = json.loads(message)
                 except (json.JSONDecodeError, ValueError) as e:
-                    logger.warning(f"WS JSON parse 실패 (skip): {e} | msg[:120]={str(message)[:120]}")
+                    logger.warning(f"WS JSON parse 실패 (skip): {e}")
                     continue
-                # 메시지 처리 실패도 연결 유지
                 try:
                     await self._handle_message(data)
                 except Exception as e:
                     logger.error(f"WS 메시지 처리 에러 (skip): {e}", exc_info=True)
                     continue
+        finally:
+            await ws.close()
 
     async def _handle_message(self, data: dict):
         """수신 메시지 처리"""

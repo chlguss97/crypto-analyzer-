@@ -109,22 +109,30 @@ class BinanceStream:
 
         while self._running:
             try:
-                async with websockets.connect(url, ping_interval=20) as ws:
-                    self._reconnect_count = 0
-                    # 재연결 시 CVD/마이크로 버퍼 리셋 (stale 데이터 방지)
-                    self._cvd_5m = 0.0
-                    self._cvd_15m = 0.0
-                    self._cvd_1h = 0.0
-                    self._cvd_reset_5m = 0
-                    self._cvd_reset_15m = 0
-                    self._cvd_reset_1h = 0
-                    self._trades.clear()
-                    self._cvd_snapshots.clear()
-                    self._last_micro_flush = 0
-                    logger.info(f"Binance WS 연결 성공: {SYMBOL} (버퍼 리셋)")
-                    async for message in ws:
-                        if not self._running:
-                            break
+                ws = await websockets.connect(url, ping_interval=20, open_timeout=10)
+                self._reconnect_count = 0
+                # 재연결 시 CVD/마이크로 버퍼 리셋 (stale 데이터 방지)
+                self._cvd_5m = 0.0
+                self._cvd_15m = 0.0
+                self._cvd_1h = 0.0
+                self._cvd_reset_5m = 0
+                self._cvd_reset_15m = 0
+                self._cvd_reset_1h = 0
+                self._trades.clear()
+                self._cvd_snapshots.clear()
+                self._last_micro_flush = 0
+                logger.info(f"Binance WS 연결 성공: {SYMBOL} (버퍼 리셋)")
+                try:
+                    while self._running:
+                        try:
+                            message = await asyncio.wait_for(ws.recv(), timeout=30)
+                        except asyncio.TimeoutError:
+                            # 30초 무응답 → ping 체크
+                            try:
+                                await ws.ping()
+                                continue
+                            except Exception:
+                                break  # 연결 끊김
                         try:
                             data = json.loads(message)
                             await self._handle(data)
@@ -132,6 +140,8 @@ class BinanceStream:
                             continue
                         except Exception as e:
                             logger.error(f"Binance WS 처리 에러: {e}")
+                finally:
+                    await ws.close()
             except asyncio.CancelledError:
                 raise
             except Exception as e:
