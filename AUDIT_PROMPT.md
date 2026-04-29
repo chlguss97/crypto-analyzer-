@@ -35,9 +35,9 @@ src/
     risk_manager.py               — 리스크 게이트 (일일/주간/DD/연패)
     leverage.py                   — 레버리지 계산
   data/
-    binance_stream.py             — Binance WS (CVD/고래/청산/마이크로스트럭처)
-    ws_stream.py                  — OKX WS (가격/ticker)
-    candle_collector.py           — 캔들 수집 (Binance REST 백업)
+    ws_stream.py                  — OKX WS (전체 데이터: CVD/캔들/마이크로/고래/가격)
+    binance_stream.py             — Binance REST (청산/펀딩비/OI만)
+    candle_collector.py           — OKX REST (캔들 백필 + 30초 백업)
     storage.py                    — SQLite + Redis 래퍼
   engine/
     regime_detector.py            — 레짐 판별 (trending/ranging/volatile)
@@ -54,7 +54,8 @@ config/
 ```
 
 - 진입점: `main.py:main()` (단일)
-- 데이터 흐름: Binance WS → Redis → CandidateDetector → ML → OKX Executor → PositionManager → DB
+- 데이터 흐름: OKX WS → Redis → CandidateDetector → ML → OKX Executor → PositionManager → DB
+  (청산/펀딩/OI만 Binance REST 폴링)
 - 실전·페이퍼 분기: `main.py:_evaluate()` 에서 paper_trader.try_candidate_entry() + _execute() 병렬
 - ML 학습: signals DB → ml_engine.check_and_train() (5분마다)
 - ML 추론: candidate features → ml_engine.decide() → Go/NoGo

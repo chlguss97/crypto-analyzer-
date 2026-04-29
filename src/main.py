@@ -72,8 +72,8 @@ class CryptoAnalyzer:
         self.db = Database()
         self.redis = RedisClient()
         self.candle_collector = CandleCollector(self.db)
-        self.ws_stream = WebSocketStream(self.redis)
-        self.binance_stream = BinanceStream(self.redis, db=self.db)
+        self.ws_stream = WebSocketStream(self.redis, db=self.db)  # OKX WS (전체 데이터)
+        self.binance_stream = BinanceStream(self.redis)  # Binance REST (청산만)
 
         # ── 새 구조 ──
         self.detector = CandidateDetector(redis=self.redis, config=self.config)
@@ -556,7 +556,7 @@ class CryptoAnalyzer:
             try:
                 price_str = await self.redis.get("rt:price:BTC-USDT-SWAP")
                 if not price_str:
-                    price_str = await self.redis.get("bn:price:BTCUSDT")
+                    price_str = None  # OKX WS가 유일한 가격 소스
                 if not price_str:
                     await asyncio.sleep(5)
                     continue
@@ -673,7 +673,7 @@ class CryptoAnalyzer:
             try:
                 price_str = await self.redis.get("rt:price:BTC-USDT-SWAP")
                 if not price_str:
-                    price_str = await self.redis.get("bn:price:BTCUSDT")
+                    price_str = None  # OKX WS가 유일한 가격 소스
                 if price_str:
                     price = float(price_str)
                     if self.position_manager.positions:

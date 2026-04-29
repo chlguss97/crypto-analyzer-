@@ -1,12 +1,14 @@
 # Commit Log
 
 > 자동 생성 — `scripts/update_commit_log.sh` (매 커밋 후 실행)
-> Updated: 2026-04-29 10:51:16    
-> Total commits: 267 (2026-04-03 → 2026-04-29)
+> Updated: 2026-04-29 11:00:47    
+> Total commits: 269 (2026-04-03 → 2026-04-29)
 
 Claude 가 질문/변경 작업 시 이 파일을 참고해서 과거 변경 이력 컨텍스트를 확보합니다. 수동 편집 금지 — 다음 커밋 시 덮어써집니다.
 
 ## 2026-04-29
+- `4d10cce` fix: Futures REST now 변수 스코프 에러
+- `45ca0c0` feat: Futures REST 하이브리드 — 청산/펀딩비/OI 5초 폴링
 - `5fc1d2c` fix: Binance spot WS 확정 — futures WS 모든 엔드포인트 차단
 - `a2e543b` fix: Binance WS 새 엔드포인트 wss://ws-fapi.binance.com 시도
 - `1ee615a` fix: Binance WS 구독 메시지 방식으로 전환 (공식 라이브러리 동일)
