@@ -28,6 +28,7 @@ from src.data.storage import RedisClient
 logger = logging.getLogger(__name__)
 
 OKX_WS_PUBLIC = "wss://ws.okx.com:8443/ws/v5/public"
+OKX_WS_BUSINESS = "wss://ws.okx.com:8443/ws/v5/business"  # 캔들 전용
 SYMBOL = "BTC-USDT-SWAP"
 WHALE_THRESHOLD_USD = 50_000
 WHALE_WINDOW_SEC = 300
@@ -112,15 +113,27 @@ class WebSocketStream:
         self._last_micro_flush = 0
         self._trade_count = 0
 
-        logger.info(f"OKX WS 연결 성공: {symbol} (버퍼 리셋)")
+        logger.info(f"OKX WS Public 연결 성공: {symbol} (버퍼 리셋)")
+
+        # Business WS (캔들 전용 — OKX는 캔들을 /business 엔드포인트에서만 제공)
+        ws_biz = await websockets.connect(OKX_WS_BUSINESS, ping_interval=20, open_timeout=10)
+        logger.info(f"OKX WS Business 연결 성공 (캔들)")
 
         try:
-            # 전체 채널 구독 (10개 — 50개 한도 내)
-            subscribe_msg = {
+            # Public: trades + tickers + books
+            await ws.send(json.dumps({
                 "op": "subscribe",
                 "args": [
                     {"channel": "tickers", "instId": symbol},
                     {"channel": "trades", "instId": symbol},
+                    {"channel": "books5", "instId": symbol},
+                ],
+            }))
+
+            # Business: 캔들 7종
+            await ws_biz.send(json.dumps({
+                "op": "subscribe",
+                "args": [
                     {"channel": "candle1m", "instId": symbol},
                     {"channel": "candle5m", "instId": symbol},
                     {"channel": "candle15m", "instId": symbol},
@@ -128,32 +141,40 @@ class WebSocketStream:
                     {"channel": "candle4H", "instId": symbol},
                     {"channel": "candle1D", "instId": symbol},
                     {"channel": "candle1W", "instId": symbol},
-                    {"channel": "books5", "instId": symbol},
                 ],
-            }
-            await ws.send(json.dumps(subscribe_msg))
-            logger.info(f"OKX WS 구독: 10개 채널")
+            }))
+            logger.info("OKX WS 구독: Public 3채널 + Business 7채널")
 
-            while self._running:
-                try:
-                    message = await asyncio.wait_for(ws.recv(), timeout=30)
-                except asyncio.TimeoutError:
+            # 두 WS에서 동시 수신 (asyncio.gather)
+            async def _recv_loop(ws_conn, name):
+                while self._running:
                     try:
-                        await ws.ping()
-                        continue
+                        message = await asyncio.wait_for(ws_conn.recv(), timeout=30)
+                    except asyncio.TimeoutError:
+                        try:
+                            await ws_conn.ping()
+                            continue
+                        except Exception:
+                            logger.warning(f"OKX WS {name} ping 실패 → 재연결")
+                            break
                     except Exception:
                         break
-                try:
-                    data = json.loads(message)
-                except (json.JSONDecodeError, ValueError):
-                    continue
-                try:
-                    await self._handle_message(data)
-                except Exception as e:
-                    logger.error(f"OKX WS 처리 에러: {e}", exc_info=True)
-                    continue
+                    try:
+                        data = json.loads(message)
+                    except (json.JSONDecodeError, ValueError):
+                        continue
+                    try:
+                        await self._handle_message(data)
+                    except Exception as e:
+                        logger.error(f"OKX WS {name} 처리 에러: {e}", exc_info=True)
+
+            await asyncio.gather(
+                _recv_loop(ws, "public"),
+                _recv_loop(ws_biz, "business"),
+            )
         finally:
             await ws.close()
+            await ws_biz.close()
 
     async def _handle_message(self, data: dict):
         """수신 메시지 라우팅"""
