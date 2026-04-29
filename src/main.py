@@ -42,6 +42,14 @@ from src.strategy.setup_tracker import SetupTracker
 from src.engine.regime_detector import MarketRegimeDetector
 from src.strategy.paper_trader import PaperTrader
 
+import os
+os.environ["TZ"] = "Asia/Seoul"
+try:
+    import time as _tz_time
+    _tz_time.tzset()
+except AttributeError:
+    pass  # Windows
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",

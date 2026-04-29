@@ -1,12 +1,14 @@
 # Commit Log
 
 > 자동 생성 — `scripts/update_commit_log.sh` (매 커밋 후 실행)
-> Updated: 2026-04-29 14:54:30    
-> Total commits: 279 (2026-04-03 → 2026-04-29)
+> Updated: 2026-04-29 15:22:33    
+> Total commits: 281 (2026-04-03 → 2026-04-29)
 
 Claude 가 질문/변경 작업 시 이 파일을 참고해서 과거 변경 이력 컨텍스트를 확보합니다. 수동 편집 금지 — 다음 커밋 시 덮어써집니다.
 
 ## 2026-04-29
+- `8a0c44a` debug: 캔들 volume 확인 스크립트
+- `cdc11c5` docs: 전수검사 7단계 추가 — 변수 스코프 검증
 - `131e4e9` fix: CRITICAL — _build_raw_features df_1m 미정의 NameError
 - `9b9b65b` config: 후보 감지 조건 완화 (Phase A 데이터 수집)
 - `4b5aa1f` config: 일일 손실 한도 -5%→-10% (Phase A 데이터 수집)
