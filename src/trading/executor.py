@@ -13,8 +13,8 @@ LIMIT_TIMEOUT_SEC = 30  # 120→30초: 미체결 시 빠르게 시장가 전환 
 MAX_SLIPPAGE_PCT = 0.1
 
 # 04-16: 수수료 절감 — maker 0.02% vs taker 0.05% → 전 주문 limit post-only 우선
-POST_ONLY_TIMEOUT_SEC = 3        # post-only 체결 대기 (3초 — 스캘핑은 빠르게)
-POST_ONLY_MAX_RETRIES = 3        # 가격 추격 3회 (최대 9초 블록)
+POST_ONLY_TIMEOUT_SEC = 2        # post-only 체결 대기 (2초 — BTC 스프레드 내 체결 충분)
+POST_ONLY_MAX_RETRIES = 3        # 가격 추격 3회 (최대 6초 블록)
 
 
 class OrderExecutor:
