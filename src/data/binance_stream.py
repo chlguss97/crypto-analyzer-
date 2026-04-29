@@ -36,7 +36,7 @@ from src.data.storage import RedisClient
 
 logger = logging.getLogger(__name__)
 
-BINANCE_WS = "wss://ws-fapi.binance.com/ws-fapi/v1"  # 새 futures WS 엔드포인트
+BINANCE_WS = "wss://stream.binance.com:9443"  # spot WS (futures fstream 차단)
 SYMBOL = "btcusdt"
 WHALE_THRESHOLD_USD = 50_000  # $50k 이상 = 대형 체결
 WHALE_WINDOW_SEC = 300        # 최근 5분간 대형 체결 추적
@@ -93,7 +93,7 @@ class BinanceStream:
         self._reconnect_count = 0
 
         # 10 스트림: aggTrades + miniTicker + 캔들 7종 + 강제 청산
-        # Binance Futures WS — 구독 메시지 방식 (공식 라이브러리와 동일)
+        # Binance Spot WS — 구독 메시지 방식 (futures WS 차단)
         streams = [
             f"{SYMBOL}@aggTrade",
             f"{SYMBOL}@miniTicker",
@@ -104,9 +104,8 @@ class BinanceStream:
             f"{SYMBOL}@kline_4h",
             f"{SYMBOL}@kline_1d",
             f"{SYMBOL}@kline_1w",
-            f"{SYMBOL}@forceOrder",
         ]
-        url = BINANCE_WS
+        url = f"{BINANCE_WS}/ws"
 
         while self._running:
             try:

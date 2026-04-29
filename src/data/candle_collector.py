@@ -23,7 +23,7 @@ class CandleCollector:
     """캔들 데이터 수집 — 04-17: Binance 선물 기준 분석 + OKX 실행"""
 
     # Binance 심볼 매핑
-    BINANCE_SYMBOL = "BTC/USDT:USDT"  # futures
+    BINANCE_SYMBOL = "BTC/USDT"  # spot (futures WS 차단)
 
     def __init__(self, db: Database):
         self.db = db
@@ -60,7 +60,7 @@ class CandleCollector:
             # Binance Futures — 인증 불필요 (퍼블릭 캔들)
             self.binance = ccxt.binance({
                 "enableRateLimit": True,
-                "options": {"defaultType": "future"},
+                "options": {"defaultType": "spot"},
             })
             self.binance.aiohttp_resolver = "default"
             await self.binance.load_markets()
