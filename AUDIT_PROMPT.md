@@ -230,7 +230,24 @@ periodic_shadow_check()
 
 ---
 
-## 8단계: 자동 수정 정책
+## 8단계: 운영 상태 확인 (수정 전 필수)
+
+코드 수정 전 자동 점검:
+
+| 점검 항목 | 발견 시 동작 |
+|-----------|--------------|
+| 현재 포지션 보유 여부 | 보유 시 → **자동 중단**, 사용자 보고 |
+| 진행 중·미체결 주문 | 있으면 → **자동 중단** |
+| 봇 프로세스 실행 중 여부 | 실행 중이면 executor.py/position_manager.py 수정 시 → **경고** |
+
+체크 방법:
+- 포지션: Redis `pos:active:*` 키 / OKX fetch_positions
+- 봇 상태: Redis `sys:bot_status`
+- Docker: `docker compose ps`
+
+---
+
+## 9단계: 자동 수정 정책
 
 ### ✅ 자동 수정 OK
 
@@ -256,7 +273,7 @@ periodic_shadow_check()
 
 ---
 
-## 9단계: 변경 이력 문서화
+## 10단계: 변경 이력 문서화
 
 ### 1) CHANGELOG.md 갱신
 
@@ -280,7 +297,26 @@ periodic_shadow_check()
 
 ---
 
-## 10단계: Git 커밋
+## 11단계: Git 커밋
+
+### .gitignore 누락 체크 (커밋 전)
+
+다음 패턴이 stage에 들어갔으면 **자동 중단**:
+- `.env`, `.env.*`, `*.key`, `*.pem`
+- `*.db`, `*.sqlite`, `*.dump`, `*.bak`
+- `*.pkl`, `*.h5`, `*.pt` (ML 모델 바이너리)
+- `config/secret*`, `credentials*`
+- 100MB 초과 파일
+
+### 비밀값 패턴 grep (커밋 직전)
+
+```regex
+api_key\s*=\s*["'][^"']+["']
+secret\s*=\s*["'][^"']+["']
+password\s*=\s*["'][^"']+["']
+```
+
+발견 시 → **자동 중단**, 해당 라인 보고.
 
 ### 커밋 메시지 형식
 
