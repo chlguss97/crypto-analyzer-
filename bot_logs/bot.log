@@ -110,3 +110,4 @@ Traceback (most recent call last):
     with open(config_path, "r", encoding="utf-8") as f:
          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 FileNotFoundError: [Errno 2] No such file or directory: '/app/config/settings.yaml'
+2026-04-30 08:30:11 [WARNING] src.trading.executor: post-only 3회 추격 실패 → 진입 포기 (maker 강제 정책)
