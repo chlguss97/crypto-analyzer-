@@ -36,7 +36,7 @@ from src.data.storage import RedisClient
 
 logger = logging.getLogger(__name__)
 
-BINANCE_WS = "wss://fstream.binance.com/ws"  # futures WS (REST fapi 정상 확인)
+BINANCE_WS = "wss://fstream.binance.com"  # futures WS (구독 메시지 방식)
 SYMBOL = "btcusdt"
 WHALE_THRESHOLD_USD = 50_000  # $50k 이상 = 대형 체결
 WHALE_WINDOW_SEC = 300        # 최근 5분간 대형 체결 추적
@@ -93,6 +93,7 @@ class BinanceStream:
         self._reconnect_count = 0
 
         # 10 스트림: aggTrades + miniTicker + 캔들 7종 + 강제 청산
+        # Binance Futures WS — 구독 메시지 방식 (공식 라이브러리와 동일)
         streams = [
             f"{SYMBOL}@aggTrade",
             f"{SYMBOL}@miniTicker",
@@ -105,12 +106,22 @@ class BinanceStream:
             f"{SYMBOL}@kline_1w",
             f"{SYMBOL}@forceOrder",
         ]
-        url = f"wss://fstream.binance.com/stream?streams={'/'.join(streams)}"
+        url = f"{BINANCE_WS}/ws"
 
         while self._running:
             try:
                 ws = await websockets.connect(url, ping_interval=20, open_timeout=10)
                 self._reconnect_count = 0
+
+                # 구독 메시지 전송 (공식 방식)
+                subscribe_msg = json.dumps({
+                    "method": "SUBSCRIBE",
+                    "params": streams,
+                    "id": 1,
+                })
+                await ws.send(subscribe_msg)
+                logger.info(f"Binance WS 구독 전송: {len(streams)}개 스트림")
+
                 # 재연결 시 CVD/마이크로 버퍼 리셋 (stale 데이터 방지)
                 self._cvd_5m = 0.0
                 self._cvd_15m = 0.0

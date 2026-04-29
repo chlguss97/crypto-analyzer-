@@ -1,12 +1,13 @@
 # Commit Log
 
 > 자동 생성 — `scripts/update_commit_log.sh` (매 커밋 후 실행)
-> Updated: 2026-04-29 10:24:36    
-> Total commits: 263 (2026-04-03 → 2026-04-29)
+> Updated: 2026-04-29 10:26:13    
+> Total commits: 264 (2026-04-03 → 2026-04-29)
 
 Claude 가 질문/변경 작업 시 이 파일을 참고해서 과거 변경 이력 컨텍스트를 확보합니다. 수동 편집 금지 — 다음 커밋 시 덮어써집니다.
 
 ## 2026-04-29
+- `54cc1da` docs: 전수검사 프롬프트 보완 — 원본 대비 누락 3건 추가
 - `423894a` docs: 전수검사 프롬프트에 7단계(외부 API 스펙 검증) 추가
 - `bbc55b6` fix: CRITICAL — Binance combined stream URL 형식 수정
 - `8b5f210` fix: Binance futures WS 복원 + 디버그 로깅 강화

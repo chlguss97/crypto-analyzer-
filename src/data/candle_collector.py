@@ -23,7 +23,7 @@ class CandleCollector:
     """캔들 데이터 수집 — 04-17: Binance 선물 기준 분석 + OKX 실행"""
 
     # Binance 심볼 매핑
-    BINANCE_SYMBOL = "BTC/USDT:USDT"
+    BINANCE_SYMBOL = "BTC/USDT:USDT"  # futures
 
     def __init__(self, db: Database):
         self.db = db
