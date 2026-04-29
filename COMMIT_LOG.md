@@ -1,12 +1,13 @@
 # Commit Log
 
 > 자동 생성 — `scripts/update_commit_log.sh` (매 커밋 후 실행)
-> Updated: 2026-04-29 13:55:56    
-> Total commits: 271 (2026-04-03 → 2026-04-29)
+> Updated: 2026-04-29 14:06:49    
+> Total commits: 272 (2026-04-03 → 2026-04-29)
 
 Claude 가 질문/변경 작업 시 이 파일을 참고해서 과거 변경 이력 컨텍스트를 확보합니다. 수동 편집 금지 — 다음 커밋 시 덮어써집니다.
 
 ## 2026-04-29
+- `90aa805` debug: OKX 캔들 WS 디버그 로깅 추가 (임시)
 - `a8c9a4d` fix: OKX 캔들 WS → /business 엔드포인트 분리
 - `85806ad` refactor: OKX WS 단일 데이터 소스 전환 — Binance 의존 제거
 - `4d10cce` fix: Futures REST now 변수 스코프 에러

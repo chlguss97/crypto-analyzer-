@@ -220,6 +220,12 @@ class CryptoAnalyzer:
         candles_1d = await self.db.get_candles(self.symbol, "1d", limit=30)
 
         if not candles_5m or len(candles_5m) < 30:
+            if now - getattr(self, "_last_candle_warn", 0) >= 60:
+                self._last_candle_warn = now
+                logger.warning(
+                    f"[EVAL] 캔들 부족: 1m={len(candles_1m) if candles_1m else 0} "
+                    f"5m={len(candles_5m) if candles_5m else 0} → 스킵"
+                )
             return
 
         df_1m = BaseIndicator.to_dataframe(candles_1m) if candles_1m else None
@@ -244,6 +250,9 @@ class CryptoAnalyzer:
         )
 
         if not candidate:
+            if now - getattr(self, "_last_no_candidate_log", 0) >= 60:
+                self._last_no_candidate_log = now
+                logger.info(f"[EVAL] 후보 없음 (5m={len(candles_5m)}건, regime={regime_now})")
             return
 
         # 동일 캔들 중복 시그널 방지 (같은 5m 캔들에서 반복 감지 차단)
