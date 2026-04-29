@@ -36,7 +36,7 @@ from src.data.storage import RedisClient
 
 logger = logging.getLogger(__name__)
 
-BINANCE_WS = "wss://fstream.binance.com"  # futures WS (구독 메시지 방식)
+BINANCE_WS = "wss://ws-fapi.binance.com/ws-fapi/v1"  # 새 futures WS 엔드포인트
 SYMBOL = "btcusdt"
 WHALE_THRESHOLD_USD = 50_000  # $50k 이상 = 대형 체결
 WHALE_WINDOW_SEC = 300        # 최근 5분간 대형 체결 추적
@@ -106,7 +106,7 @@ class BinanceStream:
             f"{SYMBOL}@kline_1w",
             f"{SYMBOL}@forceOrder",
         ]
-        url = f"{BINANCE_WS}/ws"
+        url = BINANCE_WS
 
         while self._running:
             try:
