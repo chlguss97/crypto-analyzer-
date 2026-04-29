@@ -88,9 +88,12 @@ class BinanceStream:
         self._db_symbol = load_config().get("exchange", {}).get("symbol", "BTC/USDT:USDT")
 
     async def start(self):
-        """WebSocket 연결 시작 (무한 재시도)"""
+        """Spot WS + Futures REST 하이브리드 시작"""
         self._running = True
         self._reconnect_count = 0
+
+        # Futures REST 폴링 (청산/펀딩비/OI — fapi.binance.com 정상)
+        asyncio.create_task(self._poll_futures_rest())
 
         # 10 스트림: aggTrades + miniTicker + 캔들 7종 + 강제 청산
         # Binance Spot WS — 구독 메시지 방식 (futures WS 차단)
@@ -596,3 +599,108 @@ class BinanceStream:
 
         except Exception as e:
             logger.error(f"마이크로스트럭처 집계 에러: {e}", exc_info=True)
+
+    # ══════════════════════════════════════════════════
+    #  Futures REST 폴링 (fstream WS 차단 대응)
+    # ══════════════════════════════════════════════════
+
+    async def _poll_futures_rest(self):
+        """fapi.binance.com REST로 청산/펀딩비/OI 수집 (5초 간격)"""
+        import aiohttp
+        FAPI = "https://fapi.binance.com"
+
+        logger.info("Futures REST 폴링 시작 (fapi.binance.com)")
+
+        async with aiohttp.ClientSession() as session:
+            while self._running:
+                try:
+                    # 1. 최근 청산 (forceOrders)
+                    try:
+                        async with session.get(
+                            f"{FAPI}/fapi/v1/allForceOrders",
+                            params={"symbol": "BTCUSDT", "limit": 20},
+                            timeout=aiohttp.ClientTimeout(total=5),
+                        ) as resp:
+                            if resp.status == 200:
+                                orders = await resp.json()
+                                now = time.time()
+
+                                # 1분 윈도우 청산 합산
+                                cutoff_ms = int((now - 60) * 1000)
+                                recent = [o for o in orders if int(o.get("time", 0)) > cutoff_ms]
+
+                                long_liq = sum(
+                                    float(o.get("price", 0)) * float(o.get("origQty", 0))
+                                    for o in recent if o.get("side") == "SELL"
+                                )
+                                short_liq = sum(
+                                    float(o.get("price", 0)) * float(o.get("origQty", 0))
+                                    for o in recent if o.get("side") == "BUY"
+                                )
+                                total_liq = long_liq + short_liq
+
+                                await self.redis.set("flow:liq:1m_total", str(round(total_liq)), ttl=120)
+                                await self.redis.set("flow:liq:1m_long", str(round(long_liq)), ttl=120)
+                                await self.redis.set("flow:liq:1m_short", str(round(short_liq)), ttl=120)
+
+                                if total_liq >= 500_000:
+                                    bias = "long" if short_liq > long_liq else "short"
+                                    await self.redis.set("flow:liq:surge", json.dumps({
+                                        "total": round(total_liq),
+                                        "long_liq": round(long_liq),
+                                        "short_liq": round(short_liq),
+                                        "bias": bias,
+                                        "ts": now,
+                                    }), ttl=120)
+                                    logger.warning(
+                                        f"REST 청산 감지: ${total_liq:,.0f} "
+                                        f"(롱${long_liq:,.0f}/숏${short_liq:,.0f}) → {bias.upper()}"
+                                    )
+                    except Exception as e:
+                        logger.debug(f"청산 REST 실패: {e}")
+
+                    # 2. 펀딩비 + 마크가격 (30초마다)
+                    if now - getattr(self, '_last_funding_poll', 0) >= 30:
+                        self._last_funding_poll = now
+                        try:
+                            async with session.get(
+                                f"{FAPI}/fapi/v1/premiumIndex",
+                                params={"symbol": "BTCUSDT"},
+                                timeout=aiohttp.ClientTimeout(total=5),
+                            ) as resp:
+                                if resp.status == 200:
+                                    data = await resp.json()
+                                    funding = float(data.get("lastFundingRate", 0))
+                                    mark = float(data.get("markPrice", 0))
+                                    await self.redis.set("rt:funding:BTC-USDT-SWAP", str(round(funding, 6)), ttl=120)
+                                    if mark > 0:
+                                        # spot vs futures 프리미엄
+                                        spot_str = await self.redis.get("bn:price:BTCUSDT")
+                                        if spot_str:
+                                            premium = (mark - float(spot_str)) / float(spot_str) * 100
+                                            await self.redis.set("flow:okx_bn_premium", str(round(premium, 4)), ttl=120)
+                        except Exception as e:
+                            logger.debug(f"펀딩비 REST 실패: {e}")
+
+                    # 3. OI (30초마다)
+                    if now - getattr(self, '_last_oi_poll', 0) >= 30:
+                        self._last_oi_poll = now
+                        try:
+                            async with session.get(
+                                f"{FAPI}/fapi/v1/openInterest",
+                                params={"symbol": "BTCUSDT"},
+                                timeout=aiohttp.ClientTimeout(total=5),
+                            ) as resp:
+                                if resp.status == 200:
+                                    data = await resp.json()
+                                    oi = float(data.get("openInterest", 0))
+                                    await self.redis.set("rt:oi:BTC-USDT-SWAP", str(round(oi, 2)), ttl=120)
+                        except Exception as e:
+                            logger.debug(f"OI REST 실패: {e}")
+
+                except asyncio.CancelledError:
+                    raise
+                except Exception as e:
+                    logger.error(f"Futures REST 폴링 에러: {e}")
+
+                await asyncio.sleep(5)  # 5초 간격
