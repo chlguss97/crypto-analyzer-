@@ -262,7 +262,7 @@ class OrderExecutor:
                 await asyncio.sleep(0.5)
 
         # 모든 추격 실패 → 진입 포기 (taker 수수료 > 기대수익이면 안 치는 게 이득)
-        logger.warning("post-only 5회 추격 실패 → 진입 포기 (maker 강제 정책)")
+        logger.warning("post-only 3회 추격 실패 → 진입 포기 (maker 강제 정책)")
         return None
 
     async def _wait_for_fill_fast(self, order_id: str, timeout: int) -> dict | None:

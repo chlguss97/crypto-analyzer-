@@ -79,21 +79,21 @@ class CandidateDetector:
         mom = self._check_momentum_ignition(df_5m, price, atr, vol_20avg)
         if mom:
             mom["features_raw"] = await self._build_raw_features(
-                df_5m, df_15m, df_1h, df_4h, df_1d, price, atr, atr_pct, flow, vol_20avg, mom["direction"]
+                df_5m, df_15m, df_1h, df_4h, df_1d, price, atr, atr_pct, flow, vol_20avg, mom["direction"], df_1m=df_1m
             )
             candidates.append(mom)
 
         brk = self._check_volatility_breakout(df_5m, price, atr, vol_20avg)
         if brk:
             brk["features_raw"] = await self._build_raw_features(
-                df_5m, df_15m, df_1h, df_4h, df_1d, price, atr, atr_pct, flow, vol_20avg, brk["direction"]
+                df_5m, df_15m, df_1h, df_4h, df_1d, price, atr, atr_pct, flow, vol_20avg, brk["direction"], df_1m=df_1m
             )
             candidates.append(brk)
 
         cas = await self._check_liquidation_cascade(df_5m, price, atr, flow)
         if cas:
             cas["features_raw"] = await self._build_raw_features(
-                df_5m, df_15m, df_1h, df_4h, df_1d, price, atr, atr_pct, flow, vol_20avg, cas["direction"]
+                df_5m, df_15m, df_1h, df_4h, df_1d, price, atr, atr_pct, flow, vol_20avg, cas["direction"], df_1m=df_1m
             )
             candidates.append(cas)
 
@@ -102,7 +102,7 @@ class CandidateDetector:
             weak = self._check_weak_momentum(df_5m, price, atr, vol_20avg)
             if weak:
                 weak["features_raw"] = await self._build_raw_features(
-                    df_5m, df_15m, df_1h, df_4h, df_1d, price, atr, atr_pct, flow, vol_20avg, weak["direction"]
+                    df_5m, df_15m, df_1h, df_4h, df_1d, price, atr, atr_pct, flow, vol_20avg, weak["direction"], df_1m=df_1m
                 )
                 weak["atr"] = round(atr, 2)
                 weak["atr_pct"] = round(atr_pct, 4)
@@ -296,7 +296,8 @@ class CandidateDetector:
     # ════════════════════════════════════════
 
     async def _build_raw_features(self, df_5m, df_15m, df_1h, df_4h, df_1d,
-                                  price, atr, atr_pct, flow, vol_20avg, direction) -> dict:
+                                  price, atr, atr_pct, flow, vol_20avg, direction,
+                                  df_1m=None) -> dict:
         """ML용 피처 원시 데이터 구축 (8개 핵심 + 확장용)"""
         closes_5m = df_5m["close"].astype(float)
 
