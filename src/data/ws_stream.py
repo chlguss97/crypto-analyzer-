@@ -178,16 +178,6 @@ class WebSocketStream:
 
     async def _handle_message(self, data: dict):
         """수신 메시지 라우팅"""
-        # 첫 20메시지 전부 로깅
-        if not hasattr(self, '_msg_debug_count'):
-            self._msg_debug_count = 0
-        self._msg_debug_count += 1
-        if self._msg_debug_count <= 20:
-            keys = list(data.keys())[:5]
-            event = data.get("event", "")
-            channel = data.get("arg", {}).get("channel", "")
-            logger.warning(f"[MSG-DEBUG #{self._msg_debug_count}] keys={keys} event='{event}' channel='{channel}' data_len={len(data.get('data', []))}")
-
         if "event" in data:
             if data["event"] == "subscribe":
                 logger.info(f"OKX WS 구독 확인: {data.get('arg', {}).get('channel')}")
@@ -209,15 +199,12 @@ class WebSocketStream:
                 await self._handle_trade(trade)
         elif channel.startswith("candle"):
             tf = channel.replace("candle", "")
-            if self._msg_debug_count <= 50:
-                logger.warning(f"[CANDLE-DEBUG] channel={channel} tf={tf} items={len(items)} type={type(items[0]).__name__} first={str(items[0])[:100]}")
             for candle in items:
                 await self._handle_candle(candle, tf)
         elif channel == "books5":
             await self._handle_books(items[0])
         else:
-            if self._msg_debug_count <= 30:
-                logger.warning(f"[DEBUG] 알 수 없는 channel: {channel}")
+            logger.debug(f"알 수 없는 channel: {channel}")
 
     # ══════════════════════════════════════════
     #  Ticker
