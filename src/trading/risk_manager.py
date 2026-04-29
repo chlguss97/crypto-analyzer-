@@ -7,7 +7,7 @@ from src.utils.helpers import load_config
 logger = logging.getLogger(__name__)
 
 # SPEC v2 손실 한도
-MAX_DAILY_LOSS_PCT = 5.0    # 일일 -5% (10%→5%: 보수적)
+MAX_DAILY_LOSS_PCT = 10.0   # 일일 -10% (Phase A 데이터 수집)
 MAX_WEEKLY_LOSS_PCT = 10.0  # 주간 -10% (20%→10%)
 MAX_DRAWDOWN_PCT = 12.0     # DD -12%
 BOT_KILL_DRAWDOWN_PCT = 15.0  # DD -15%: 봇 완전 정지
