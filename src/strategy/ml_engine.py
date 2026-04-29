@@ -119,12 +119,8 @@ class MLDecisionEngine:
             return self._decide_ml(features_raw)
 
     def _decide_rule_based(self, features: dict) -> tuple[bool, float]:
-        """Phase A: 룰 기반 Go/NoGo (CVD 일치 + 거래량 평균 이상)"""
-        cvd_matches = features.get("cvd_matches", 0)
-        vol_ratio = features.get("vol_ratio", 0)
-
-        go = (cvd_matches == 1) and (vol_ratio > 1.0)
-        return go, -1.0  # 룰 기반이므로 확률 없음
+        """Phase A: 무조건 Go (데이터 수집 우선, 마진 최소)"""
+        return True, -1.0
 
     def _decide_ml(self, features_raw: dict) -> tuple[bool, float]:
         """Phase B: ML Go/NoGo"""
