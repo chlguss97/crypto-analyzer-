@@ -4128,3 +4128,4 @@ NameError: name 'df_1m' is not defined
 2026-04-29 05:11:23 [WARNING] src.data.ws_stream: [CANDLE-DEBUG] channel=candle15m tf=15m items=1 type=list first=['1777438800000', '77216.8', '77267.2', '77150.0', '77222.9', '97314.73', '973.1473', '75124061.4062
 2026-04-29 05:11:23 [WARNING] src.data.ws_stream: [CANDLE-DEBUG] channel=candle5m tf=5m items=1 type=list first=['1777439400000', '77218.8', '77239.5', '77202.1', '77223.0', '7247.46', '72.4746', '5596031.4596900
 2026-04-29 05:11:23 [WARNING] src.data.ws_stream: [CANDLE-DEBUG] channel=candle15m tf=15m items=1 type=list first=['1777438800000', '77216.8', '77267.2', '77150.0', '77223.0', '97314.77', '973.1477', '75124092.2954
+2026-04-29 15:35:21 [WARNING] src.trading.executor: post-only 3회 추격 실패 → 진입 포기 (maker 강제 정책)
