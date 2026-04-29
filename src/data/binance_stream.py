@@ -105,7 +105,7 @@ class BinanceStream:
             f"{SYMBOL}@kline_1w",
             f"{SYMBOL}@forceOrder",
         ]
-        url = f"{BINANCE_WS}/{'/'.join(streams)}"
+        url = f"wss://fstream.binance.com/stream?streams={'/'.join(streams)}"
 
         while self._running:
             try:
