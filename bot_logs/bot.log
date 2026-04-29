@@ -3999,3 +3999,4 @@ NameError: name 'df_1m' is not defined
 2026-04-29 02:03:26 [WARNING] src.data.binance_stream: [BN-DEBUG] raw keys=['e', 'E', 's', 'c', 'o'] event='24hrMiniTicker' stream=?
 2026-04-29 02:03:27 [WARNING] src.data.binance_stream: [BN-DEBUG] raw keys=['e', 'E', 's', 'c', 'o'] event='24hrMiniTicker' stream=?
 2026-04-29 02:03:27 [WARNING] src.data.binance_stream: [BN-DEBUG] raw keys=['e', 'E', 's', 'a', 'p'] event='aggTrade' stream=?
+2026-04-29 04:15:02 [ERROR] src.trading.executor: 잔고 조회 실패: okx {"msg":"Your IP 207.148.120.103 is not included in your API key's 62ef8325-8e8e-43e0-8555-494c9b724248 IP whitelist.","code":"50110"}
