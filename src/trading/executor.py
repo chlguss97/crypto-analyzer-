@@ -232,7 +232,7 @@ class OrderExecutor:
                 )
                 order_id = order.get("id")
                 logger.info(
-                    f"post-only ��입 시도 {attempt}/{POST_ONLY_MAX_RETRIES}: "
+                    f"post-only 진입 시도 {attempt}/{POST_ONLY_MAX_RETRIES}: "
                     f"{side.upper()} {size} @ ${price} id={order_id}"
                 )
 
@@ -245,7 +245,7 @@ class OrderExecutor:
                     )
                     return filled
 
-                # 미체결 → 취��� 후 가격 추���
+                # 미체결 → 취소 후 가격 추격
                 try:
                     await self.exchange.cancel_order(order_id, self.symbol)
                 except Exception:
@@ -254,7 +254,7 @@ class OrderExecutor:
 
             except Exception as e:
                 err_str = str(e)
-                # OKX 51121: post-only reject (크로싱) — 가격 다시 조정해서 재��도
+                # OKX 51121: post-only reject (크로싱) — 가격 다시 조정해서 재시도
                 if "51121" in err_str or "post only" in err_str.lower():
                     logger.debug(f"post-only 거부 (크로싱) → 재시도")
                     continue

@@ -475,8 +475,9 @@ class CryptoAnalyzer:
             logger.info(f"[EXEC] 사이즈 부족 ({size_btc} BTC)")
             return False
 
-        # 강한 시그널(strength >= 1.5)은 market 허용 (체결 우선)
-        use_market = strength >= 1.5
+        # strength >= 1.0: market 허용 (체결 우선, taker 0.05%)
+        # strength < 1.0: post-only (maker 0.02%, 미체결 시 포기)
+        use_market = strength >= 1.0
         entry_price_limit = None
 
         logger.info(
