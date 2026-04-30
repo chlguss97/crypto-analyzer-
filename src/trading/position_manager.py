@@ -53,9 +53,7 @@ class Position:
         # 사용자 수동 SL/TP 수정 → self_heal/트레일이 안 덮음
         self.manual_sl_override = False
         self.manual_tp_override = False
-        # 04-13: 시간 청산 반복 방지 플래그 (H12)
-        self.time_1h_done = False
-        self.time_2h_done = False
+        # 시간 청산 제거 (2026-04-30) — SL/TP에 위임, 소액계좌 부분청산 불가 문제 해결
 
         # OKX 알고 주문 ID 추적 (cancel/replace 용)
         # 러너 모드에서는 tp2/tp3 사용 안 함 — 호환용으로만 유지
@@ -720,13 +718,7 @@ class PositionManager:
         if symbol not in self.positions:
             return
 
-        # 4. 시간 청산
-        await self._check_time_exit(pos, current_price)
-
-        if symbol not in self.positions:
-            return
-
-        # 5. Self-heal — SL/TP 알고가 None 이면 재등록 시도 (네트워크 복구 시 자동 복원)
+        # 4. Self-heal — SL/TP 알고가 None 이면 재등록 시도 (네트워크 복구 시 자동 복원) — SL/TP 알고가 None 이면 재등록 시도 (네트워크 복구 시 자동 복원)
         await self._self_heal_algos(pos)
 
         # 6. Redis 상태 갱신 (대시보드 hold_minutes/current_sl 실시간 표시)
@@ -1063,59 +1055,6 @@ class PositionManager:
         # 정리는 _finalize_position 으로 일관화 (텔레그램/ML/DB/Redis)
         await self._finalize_position(pos, reason, last_price)
 
-    async def _check_time_exit(self, pos: Position, current_price: float) -> bool:
-        """
-        시간 기반 청산 (계좌 PnL % 기준)
-        러너 모드 활성화 시 = 큰 추세 잡고 있는 중이므로 시간 청산 완화 (트레일링 SL 에 위임)
-        """
-        hours = pos.hold_hours
-        pnl = pos.pnl_pct(current_price)  # 계좌 PnL %
-
-        # 러너 모드: 추세가 살아있는 한 트레일링 SL 에 맡기고, 8시간 hard limit 만 적용
-        if pos.runner_mode:
-            if hours >= 8:
-                await self._cancel_all_algos(pos)
-                await self._full_close(pos, "time_8h_runner")
-                return True
-            return False
-
-        # 6시간 → 무조건 전량 청산
-        if hours >= 6:
-            await self._cancel_all_algos(pos)
-            await self._full_close(pos, "time_6h")
-            return True
-
-        # 2시간 → TP1 미체결 시 75% 청산 (1회만)
-        if hours >= 2 and not pos.tp1_filled and not pos.time_2h_done:
-            # 잔여가 최소단위 미만 되면 전체 청산
-            close_pct = 0.75
-            if pos.remaining_size * (1 - close_pct) < self.MIN_ORDER_SIZE_BTC:
-                await self._cancel_all_algos(pos)
-                await self._full_close(pos, "time_2h_full")
-                return True
-            await self._partial_close(pos, close_pct, "time_2h")
-            pos.time_2h_done = True  # 04-13: 반복 방지 (H12)
-            if pos.remaining_size > 0:
-                # SL/TP1 전부 새 사이즈로 재등록 + TP2/TP3 정리
-                await self._resize_protection(pos, label="time_2h")
-            return False
-
-        # 1시간 → 수익 < 3% 시 50% 청산 (1회만)
-        if hours >= 1 and not pos.tp1_filled and pnl < 3.0 and not pos.time_1h_done:
-            close_pct = 0.5
-            if pos.remaining_size * (1 - close_pct) < self.MIN_ORDER_SIZE_BTC:
-                await self._cancel_all_algos(pos)
-                await self._full_close(pos, "time_1h_full")
-                return True
-            await self._partial_close(pos, close_pct, "time_1h")
-            pos.time_1h_done = True  # 04-13: 반복 방지 (H12)
-            if pos.remaining_size > 0:
-                # SL/TP1 전부 새 사이즈로 재등록 + TP2/TP3 정리
-                await self._resize_protection(pos, label="time_1h")
-            return False
-
-        return False
-
     async def signal_exit(self, symbol: str, reason: str):
         """시그널 기반 청산 (1H CHoCH, 반대 Grade A 등)"""
         async with self._get_lock(symbol):
@@ -1410,8 +1349,6 @@ class PositionManager:
             "sl_or_forced", "tp1_full_server",
             "runner_trail_hit", "runner_sl_hit",
             "breakeven_hit",
-            "time_1h_full", "time_2h_full", "time_6h",
-            "time_8h_runner", "time_1h", "time_2h",
         )
         if needs_fetch:
             try:

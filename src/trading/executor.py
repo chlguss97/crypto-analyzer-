@@ -620,7 +620,7 @@ class OrderExecutor:
         if is_urgent:
             return await self._market_order(side, size, pos_side, reduce_only=True)
 
-        # 일반 청산 (TP, time_exit, trail 등): post-only 강제
+        # 일반 청산 (TP, trail 등): post-only 강제
         order = await self._post_only_close(side, size, pos_side, reason)
         if order:
             return order

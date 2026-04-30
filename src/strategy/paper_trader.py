@@ -72,8 +72,6 @@ class PaperPosition:
     last_new_high_time: float = 0.0
     remaining_size: float = 0.0  # 초기값은 size_btc로 설정
     realized_pnl_usdt: float = 0.0  # TP1 부분청산 실현 손익
-    time_1h_done: bool = False
-    time_2h_done: bool = False
 
     def unrealized_pnl_pct(self, current_price: float) -> float:
         """미실현 마진 수익률 %"""
@@ -779,32 +777,7 @@ class PaperTrader:
                 if new_sl < pos.sl_price:
                     pos.sl_price = round(new_sl, 1)
 
-        # ── 5. 시간 청산 (실전 동일 — 단계별) ──
-        if not pos.runner_mode:
-            # 1h: TP1 미도달 + PnL < 3% → 청산
-            if hold_min >= 60 and not pos.time_1h_done:
-                pos.time_1h_done = True
-                pnl = pos.unrealized_pnl_pct(price)
-                if pnl < 3.0:
-                    return "time_exit_1h"
-
-            # 2h: TP1 미도달 → 청산
-            if hold_min >= 120 and not pos.time_2h_done:
-                pos.time_2h_done = True
-                return "time_exit_2h"
-        else:
-            # 러너 모드: 6h 강제 청산
-            if hold_min >= 360:
-                return "time_exit_6h"
-            # 8h 하드 리밋
-            if hold_min >= 480:
-                return "time_exit_8h"
-
-        # hold_mode 최대 보유 시간 (안전망)
-        hm_cfg = self.config.get("hold_modes", {}).get(pos.hold_mode, {})
-        max_hold = hm_cfg.get("max_hold_min", 60)
-        if hold_min >= max_hold and not pos.runner_mode:
-            return "time_exit"
+        # 시간 청산 제거 (2026-04-30) — SL/TP/트레일링에 위임
 
         return None
 
