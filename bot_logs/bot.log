@@ -116,3 +116,5 @@ FileNotFoundError: [Errno 2] No such file or directory: '/app/config/settings.ya
 2026-04-30 11:20:21 [ERROR] src.trading.position_manager: 🚨 청산 실패 (time_1h_full) 1/10 → SL 긴급 재등록 + 2초 후 재시도
 2026-04-30 14:10:05 [WARNING] src.trading.position_manager: ⚠️  사이즈 0.0100 BTC < 0.02 BTC → TP1 에서 100% 청산 (러너 비활성)
 2026-04-30 15:45:39 [WARNING] src.trading.executor: post-only 3회 추격 실패 → 진입 포기 (maker 강제 정책)
+2026-04-30 18:50:12 [WARNING] src.trading.executor: post-only 3회 추격 실패 → market 폴백 (taker 0.05%)
+2026-04-30 18:50:13 [WARNING] src.trading.position_manager: ⚠️  사이즈 0.0100 BTC < 0.02 BTC → TP1 에서 100% 청산 (러너 비활성)
