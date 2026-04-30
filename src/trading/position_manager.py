@@ -234,14 +234,24 @@ class PositionManager:
             return None
 
         # 주문 실행 (진입만, 보호 주문은 별도)
-        order = await self.executor.open_position(
-            direction=trade_request["direction"],
-            size=trade_request["size"],
-            grade=trade_request["grade"],
-            entry_price=trade_request.get("entry_price"),
-            sl_price=trade_request["sl_price"],
-            leverage=trade_request["leverage"],
-        )
+        # use_market=True: 강한 시그널 → 레버리지 설정 후 market 주문 (taker 즉시 체결)
+        use_market = trade_request.get("use_market", False)
+        if use_market:
+            await self.executor.set_leverage(trade_request["leverage"], trade_request["direction"])
+            side = "buy" if trade_request["direction"] == "long" else "sell"
+            pos_side = trade_request["direction"]
+            order = await self.executor._market_order(side, trade_request["size"], pos_side)
+            if order:
+                logger.info(f"Market 진입 체결: {side.upper()} {trade_request['size']} BTC (taker)")
+        else:
+            order = await self.executor.open_position(
+                direction=trade_request["direction"],
+                size=trade_request["size"],
+                grade=trade_request["grade"],
+                entry_price=trade_request.get("entry_price"),
+                sl_price=trade_request["sl_price"],
+                leverage=trade_request["leverage"],
+            )
 
         if not order:
             return None

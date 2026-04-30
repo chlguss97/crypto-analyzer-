@@ -1,10 +1,13 @@
 # Commit Log
 
 > 자동 생성 — `scripts/update_commit_log.sh` (매 커밋 후 실행)
-> Updated: 2026-04-29 17:11:23    
-> Total commits: 284 (2026-04-03 → 2026-04-29)
+> Updated: 2026-04-30 08:27:48    
+> Total commits: 285 (2026-04-03 → 2026-04-30)
 
 Claude 가 질문/변경 작업 시 이 파일을 참고해서 과거 변경 이력 컨텍스트를 확보합니다. 수동 편집 금지 — 다음 커밋 시 덮어써집니다.
+
+## 2026-04-30
+- `09e3b83` fix: CRITICAL — LeverageCalculator 매번 생성 → load_config FileNotFoundError
 
 ## 2026-04-29
 - `177b563` debug: DB 테이블 확인 스크립트

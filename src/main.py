@@ -475,11 +475,9 @@ class CryptoAnalyzer:
             logger.info(f"[EXEC] 사이즈 부족 ({size_btc} BTC)")
             return False
 
-        # 강한 시그널은 limit(taker) 허용
+        # 강한 시그널(strength >= 1.5)은 market 허용 (체결 우선)
+        use_market = strength >= 1.5
         entry_price_limit = None
-        if strength < 1.5:
-            entry_price_limit = None  # post-only only (CandidateDetector에서)
-        # strength >= 1.5: executor.py에서 처리 (현재 구조)
 
         logger.info(
             f"[EXEC] {ctype.upper()} {direction.upper()} @ ${price:.0f} | "
@@ -493,6 +491,7 @@ class CryptoAnalyzer:
             "size": size_btc,
             "leverage": leverage,
             "entry_price": entry_price_limit,
+            "use_market": use_market,
             "sl_price": round(sl, 1),
             "tp1_price": round(tp1, 1),
             "tp2_price": round(tp2, 1),
