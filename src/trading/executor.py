@@ -191,8 +191,8 @@ class OrderExecutor:
     async def _post_only_entry(self, side: str, size: float, pos_side: str) -> dict | None:
         """
         Post-only limit 진입 (maker 수수료 강제).
-        호가 추격 5회 → 실패 시 진입 포기 (market 폴백 없음).
-        수수료 > 수익 구조 근절: maker 0.02% 아니면 안 치는 게 이득.
+        호가 추격 5회 → 실패 시 market 폴백.
+        전략: 상대호가(ask/bid) 바로 안쪽에 걸어서 즉시 maker 체결 유도.
         """
         contracts = self._btc_to_contracts(size)
         for attempt in range(1, POST_ONLY_MAX_RETRIES + 1):
@@ -209,13 +209,18 @@ class OrderExecutor:
                 logger.warning("best bid/ask 0 → 진입 포기")
                 return None
 
-            # maker: 매 시도마다 호가 새로 조회 + 점진적 양보
-            # BTC $78k 기준 1$ = 0.0013% — 스프레드 수준
-            offset = 1.0 * (attempt - 1)  # 시도1: 0$, 시도2: +1$, ... 시도5: +4$
+            # 상대호가 바로 안쪽에 배치 → post-only 통과 + 즉시 체결 가능
+            # buy: best_ask - 0.1 (ask 바로 아래 = 최우선 bid 갱신)
+            # sell: best_bid + 0.1 (bid 바로 위 = 최우선 ask 갱신)
+            # 재시도마다 자기 호가쪽으로 1$ 양보 (체결 확률 유지)
+            tick = 0.1  # OKX BTC tick size
+            offset = 1.0 * (attempt - 1)  # 시도2+: 양보폭 증가
             if side == "buy":
-                price = round(best_bid - offset, 1)
+                price = round(best_ask - tick - offset, 1)
+                price = min(price, best_ask - tick)  # ask 이상 불가 (post-only 거부)
             else:
-                price = round(best_ask + offset, 1)
+                price = round(best_bid + tick + offset, 1)
+                price = max(price, best_bid + tick)  # bid 이하 불가 (post-only 거부)
 
             try:
                 order = await self.exchange.create_order(
@@ -261,9 +266,9 @@ class OrderExecutor:
                 logger.error(f"post-only 주문 에러 ({attempt}): {e}")
                 await asyncio.sleep(0.5)
 
-        # 모든 추격 실패 → 진입 포기 (taker 수수료 > 기대수익이면 안 치는 게 이득)
-        logger.warning("post-only 3회 추격 실패 → 진입 포기 (maker 강제 정책)")
-        return None
+        # post-only 전부 실패 → market 폴백 (기회 손실보다 taker 수수료가 나음)
+        logger.warning("post-only 3회 추격 실패 → market 폴백 (taker 0.05%)")
+        return await self._market_order(side, size, pos_side)
 
     async def _wait_for_fill_fast(self, order_id: str, timeout: int) -> dict | None:
         """체결 대기 (500ms 폴링 — post-only 용)"""

@@ -1410,6 +1410,8 @@ class PositionManager:
             "sl_or_forced", "tp1_full_server",
             "runner_trail_hit", "runner_sl_hit",
             "breakeven_hit",
+            "time_1h_full", "time_2h_full", "time_6h",
+            "time_8h_runner", "time_1h", "time_2h",
         )
         if needs_fetch:
             try:
@@ -1456,13 +1458,15 @@ class PositionManager:
         except Exception as e:
             logger.debug(f"펀딩비 조회 실패: {e}")
 
-        # P&L 계산: 잔여 포지션 PnL + TP1 등 부분청산 실현 PnL 합산
+        # P&L 계산: 잔여 포지션 PnL + TP1 등 부분청산 실현 PnL 합산 - 수수료/펀딩비
         pnl_pct = pos.pnl_pct(exit_price) if exit_price > 0 else 0
         pnl_usdt = 0.0
         if pos.entry_price > 0 and pos.leverage > 0:
             remaining_margin = pos.remaining_size * pos.entry_price / pos.leverage
             runner_pnl_usdt = remaining_margin * pnl_pct / 100
             pnl_usdt = runner_pnl_usdt + pos.realized_pnl_usdt
+            # 수수료 + 펀딩비 차감 (실제 순손익)
+            pnl_usdt -= (pos.total_fee + pos.funding_cost)
             # 전체 마진 기준 퍼센트로 재계산 (DB/ML 일관성)
             total_margin = pos.size * pos.entry_price / pos.leverage
             if total_margin > 0:
@@ -1527,15 +1531,13 @@ class PositionManager:
         # risk_manager.record_trade_result는 main._on_trade_closed 콜백에서 호출
         # (이중 호출 방지 — 2026-04-29 감사에서 발견)
 
-        # ML 학습 콜백 (실거래 시그널 데이터 포함 + 수수료율 + 방향/사유)
+        # ML 학습 콜백 (pnl_pct/pnl_usdt는 이미 수수료+펀딩비 차감된 net 값)
         if self.on_trade_closed:
             mode = "unified"  # TradeEngine 통합 모델
-            total_margin = pos.size * pos.entry_price / pos.leverage if pos.leverage > 0 else 0
-            fee_pct = (pos.total_fee + pos.funding_cost) / total_margin * 100 if total_margin > 0 else 0
             hold_min = (time.time() - pos.entry_time) / 60 if pos.entry_time > 0 else 0
             try:
                 await self.on_trade_closed(mode, pos.signals_snapshot, pnl_pct,
-                                           fee_pct=fee_pct, direction=pos.direction,
+                                           fee_pct=0.0, direction=pos.direction,
                                            exit_reason=reason, pnl_usdt=pnl_usdt,
                                            hold_min=hold_min)
             except Exception as e:
