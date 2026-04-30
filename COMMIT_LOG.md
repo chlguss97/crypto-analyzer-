@@ -1,12 +1,13 @@
 # Commit Log
 
 > 자동 생성 — `scripts/update_commit_log.sh` (매 커밋 후 실행)
-> Updated: 2026-04-30 09:59:23    
-> Total commits: 287 (2026-04-03 → 2026-04-30)
+> Updated: 2026-04-30 10:02:24    
+> Total commits: 288 (2026-04-03 → 2026-04-30)
 
 Claude 가 질문/변경 작업 시 이 파일을 참고해서 과거 변경 이력 컨텍스트를 확보합니다. 수동 편집 금지 — 다음 커밋 시 덮어써집니다.
 
 ## 2026-04-30
+- `f31ea1d` docs: AUDIT 12단계 깨진 문자 스캔 추가 + 메모리 저장
 - `2d367a8` fix: market 진입 기준 1.5→1.0 + 깨진 한글 수정
 - `2be86d8` feat: 강한 시그널(strength>=1.5) market 진입 허용
 - `09e3b83` fix: CRITICAL — LeverageCalculator 매번 생성 → load_config FileNotFoundError

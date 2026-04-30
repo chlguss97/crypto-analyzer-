@@ -132,6 +132,7 @@ class PositionManager:
         self.config = load_config()
         self.trailing_cfg = self.config["trailing"]
         self.risk_cfg = self.config["risk"]
+        self._as_cfg = self.config.get("adverse_selection", {})
 
         self.positions: dict[str, Position] = {}  # symbol → Position
         self.on_trade_closed = None  # 콜백: async def(mode, signals, pnl_pct, fee_pct)
@@ -553,11 +554,6 @@ class PositionManager:
     async def _process_position(self, symbol: str, pos: "Position", current_price: float):
         """단일 포지션 처리 — lock 안에서 호출됨"""
         # 0. Adverse Selection — 진입 후 90초 내 구조적 역행 감지
-        if not hasattr(self, '_as_cfg'):
-            try:
-                self._as_cfg = load_config().get("adverse_selection", {})
-            except Exception:
-                self._as_cfg = {}
         as_cfg = self._as_cfg
         if as_cfg.get("enabled", False) and not pos.runner_mode:
             elapsed = pos.hold_minutes * 60  # 초 단위

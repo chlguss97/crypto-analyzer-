@@ -314,7 +314,29 @@ periodic_shadow_check()
 
 ---
 
-## 12단계: 깨진 문자 스캔
+## 12단계: 런타임 위험 패턴 검사
+
+코드 읽기로 못 잡는 버그 유형:
+
+### 파일 I/O 검사
+- `load_config()`, `open()`, `Path()` 호출하는 모든 곳 찾기
+- **hot path(매 거래/매 초 호출)에서 파일 읽기하면 → CRITICAL**
+  - 해결: 초기화 시 1회 로드, 이후 캐싱
+- Docker 볼륨 마운트 경로 확인 (/app/config, /app/data)
+
+### 객체 재생성 검사
+- 매 호출마다 `ClassName()` 새로 생성하는 패턴 찾기
+- 생성자에서 무거운 작업(파일 읽기, DB 연결, API 호출) 하면 → HIGH
+  - 해결: 한 번 생성 후 재사용 (self에 저장)
+
+### 환경 의존성 검사
+- 환경변수 참조 (`os.getenv`, `get_env`)
+- 파일 경로 하드코딩 (`/app/`, `/root/`)
+- Docker 안팎에서 다르게 동작할 수 있는 코드
+
+---
+
+## 13단계: 깨진 문자 스캔
 
 ```bash
 grep -rn "��" src/ --include="*.py"
@@ -324,7 +346,7 @@ grep -rn "��" src/ --include="*.py"
 
 ---
 
-## 13단계: Git 커밋
+## 14단계: Git 커밋
 
 ### .gitignore 누락 체크 (커밋 전)
 
