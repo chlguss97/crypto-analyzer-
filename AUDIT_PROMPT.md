@@ -314,7 +314,17 @@ periodic_shadow_check()
 
 ---
 
-## 12단계: Git 커밋
+## 12단계: 깨진 문자 스캔
+
+```bash
+grep -rn "��" src/ --include="*.py"
+```
+
+발견 시 → 즉시 수정. 한글이 깨진 replacement character(U+FFFD).
+
+---
+
+## 13단계: Git 커밋
 
 ### .gitignore 누락 체크 (커밋 전)
 
