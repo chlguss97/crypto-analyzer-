@@ -121,3 +121,6 @@ FileNotFoundError: [Errno 2] No such file or directory: '/app/config/settings.ya
 2026-05-01 10:48:27 [WARNING] src.trading.position_manager: 포지션 외부 종료 감지 (사이즈≈0) → 정리: BTC/USDT:USDT
 2026-05-02 10:05:12 [WARNING] src.trading.executor: post-only 3회 추격 실패 → market 폴백 (taker 0.05%)
 2026-05-02 10:05:13 [WARNING] src.trading.position_manager: ⚠️  사이즈 0.0100 BTC < 0.02 BTC → TP1 에서 100% 청산 (러너 비활성)
+2026-05-03 06:37:21 [ERROR] src.trading.position_manager: 🛑 SL failsafe 발동: SHORT 가격 $78664 vs SL $78648 | 보유 1232분 | runner=False | size=0.0100/0.0100 | algo_debug={'pending_count': 1, 'pending_ids': [{'clOrdId': 'tp117776839139304542', 'id': '3529305962458796032', 'triggerPx': '77734.7', 'sz': '7.93', 'state': 'live'}], 'pos_sl_algo_id': 'sl17776839136257540'}
+2026-05-03 06:37:24 [WARNING] src.trading.risk_manager: 손실 기록: -10.84% | 연패: 1
+2026-05-03 06:37:24 [ERROR] src.trading.risk_manager: [RISK] 일일 손실 한도 -10.0% 도달: -10.84% → 당일 매매 중단
