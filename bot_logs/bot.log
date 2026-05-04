@@ -148,3 +148,4 @@ FileNotFoundError: [Errno 2] No such file or directory: '/app/config/settings.ya
 2026-05-04 19:08:21 [WARNING] src.data.ws_stream: OKX WS public 수신 끊김: sent 1011 (internal error) keepalive ping timeout; no close frame received → 재연결
 2026-05-04 19:25:51 [WARNING] src.data.ws_stream: OKX WS business 수신 끊김: no close frame received or sent → 재연결
 2026-05-04 23:49:10 [WARNING] src.data.ws_stream: OKX WS public 수신 끊김: sent 1011 (internal error) keepalive ping timeout; no close frame received → 재연결
+2026-05-05 00:20:46 [WARNING] src.data.ws_stream: OKX WS public 수신 끊김: sent 1011 (internal error) keepalive ping timeout; no close frame received → 재연결
