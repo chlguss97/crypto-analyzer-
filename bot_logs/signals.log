@@ -8,3 +8,4 @@
 2026-05-03 06:37:24 | EXIT  | SHORT sl_failsafe | $78,255.6 -> $78,645.6 | -10.84% ($-5.66) | 1232min | fee $1.76
 2026-05-03 11:05:15 | ENTRY | MOMENTUM SHORT | $78,204.1 | SL $78,615.0 | 15x | margin $154 | score 0.5
 2026-05-03 20:43:28 | EXIT  | SHORT sl_failsafe | $78,204.1 -> $78,722.7 | -10.70% ($-24.89) | 578min | fee $1.76
+2026-05-04 09:30:05 | ENTRY | MOMENTUM SHORT | $78,307.8 | SL $78,710.8 | 15x | margin $144 | score 0.6
