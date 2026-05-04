@@ -13,3 +13,4 @@
 2026-05-04 11:05:13 | ENTRY | MOMENTUM LONG | $79,723.0 | SL $79,310.0 | 15x | margin $140 | score 0.6
 2026-05-04 14:16:38 | EXIT  | LONG runner_trail_hit | $79,723.0 -> $80,055.0 | +0.05% ($+2.92) | 30min | fee $0.40
 2026-05-04 14:30:09 | ENTRY | BREAKOUT SHORT | $79,961.6 | SL $80,361.5 | 20x | margin $285 | score 1.0
+2026-05-04 15:45:32 | EXIT  | SHORT runner_trail_hit | $79,961.6 -> $79,664.1 | +7.72% ($+21.61) | 75min | fee $2.79
