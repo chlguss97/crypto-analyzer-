@@ -145,9 +145,11 @@ class WebSocketStream:
             }))
             logger.info("OKX WS 구독: Public 3채널 + Business 7채널")
 
-            # 두 WS에서 동시 수신 (asyncio.gather)
+            # 두 WS에서 동시 수신 — 한쪽이라도 끊기면 양쪽 다 재연결
+            self._ws_tasks_done = asyncio.Event()
+
             async def _recv_loop(ws_conn, name):
-                while self._running:
+                while self._running and not self._ws_tasks_done.is_set():
                     try:
                         message = await asyncio.wait_for(ws_conn.recv(), timeout=30)
                     except asyncio.TimeoutError:
@@ -157,7 +159,8 @@ class WebSocketStream:
                         except Exception:
                             logger.warning(f"OKX WS {name} ping 실패 → 재연결")
                             break
-                    except Exception:
+                    except Exception as e:
+                        logger.warning(f"OKX WS {name} 수신 끊김: {e} → 재연결")
                         break
                     try:
                         data = json.loads(message)
@@ -167,6 +170,8 @@ class WebSocketStream:
                         await self._handle_message(data)
                     except Exception as e:
                         logger.error(f"OKX WS {name} 처리 에러: {e}", exc_info=True)
+                # 한쪽이 끊기면 다른 쪽도 종료시킴
+                self._ws_tasks_done.set()
 
             await asyncio.gather(
                 _recv_loop(ws, "public"),
