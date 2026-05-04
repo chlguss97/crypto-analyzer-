@@ -49,38 +49,38 @@ risk:
 
 hold_modes:
   momentum:
-    max_hold_min: 45
+    max_hold_min: 240
     sl_margin_pct: 5.0
     tp1_margin_pct: 10.0
     tp2_mult: 2.5
     tp3_mult: 4.0
   breakout:
-    max_hold_min: 90
+    max_hold_min: 240
     sl_margin_pct: 5.0
     tp1_margin_pct: 10.0
     tp2_mult: 3.0
     tp3_mult: 5.0
   cascade:
-    max_hold_min: 20
+    max_hold_min: 120
     sl_margin_pct: 4.0
     tp1_margin_pct: 8.0
     tp2_mult: 2.0
     tp3_mult: 3.0
   # 레거시 호환
   quick:
-    max_hold_min: 20
+    max_hold_min: 120
     sl_margin_pct: 4.0
     tp1_margin_pct: 8.0
     tp2_mult: 2.5
     tp3_mult: 4.0
   standard:
-    max_hold_min: 45
+    max_hold_min: 240
     sl_margin_pct: 5.0
     tp1_margin_pct: 10.0
     tp2_mult: 2.5
     tp3_mult: 4.0
   runner:
-    max_hold_min: 90
+    max_hold_min: 240
     sl_margin_pct: 5.0
     tp1_margin_pct: 10.0
     tp2_mult: 3.0
@@ -116,7 +116,7 @@ candidate:
     min_price_change_pct: 0.2
 
 ml:
-  phase_a_min_samples: 200
+  phase_a_min_samples: 100
   retrain_interval: 100
   window_size: 500
   min_oos_accuracy: 0.52
