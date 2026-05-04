@@ -19,7 +19,7 @@ timeframes:
 
 risk:
   sizing_mode: "margin_loss_cap"
-  margin_pct: 0.40
+  margin_pct: 0.80
   leverage_range: [15, 20]
   max_positions: 1
   max_daily_loss: 0.10
