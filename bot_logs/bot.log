@@ -130,3 +130,5 @@ FileNotFoundError: [Errno 2] No such file or directory: '/app/config/settings.ya
 2026-05-03 20:43:28 [ERROR] src.trading.risk_manager: [RISK] 일일 손실 한도 -10.0% 도달: -10.70% → 당일 매매 중단
 2026-05-03 20:43:28 [ERROR] src.trading.risk_manager: [RISK] 주간 손실 한도 -10.0% 도달: -10.67% → 주간 매매 중단
 2026-05-03 20:43:28 [ERROR] src.trading.risk_manager: 최대 드로다운 도달: 14.2% → 전체 매매 중단
+2026-05-04 10:23:11 [WARNING] CryptoAnalyzer: 미청산: BTC/USDT:USDT SHORT @ $78307.8
+2026-05-04 10:23:24 [WARNING] src.trading.position_manager: 거래소 포지션 발견 (봇 미추적): BTC/USDT:USDT short 2.000000 @ $78307.8
