@@ -136,3 +136,4 @@ FileNotFoundError: [Errno 2] No such file or directory: '/app/config/settings.ya
 2026-05-04 10:30:52 [ERROR] src.trading.executor: 시장가 주문 실패 (1/3): okx {"code":"1","data":[{"clOrdId":"6b9ad766b55dBCDEc6f7f4be814fdf17","ordId":"","sCode":"51169","sMsg":"Order failed because you don't have any positions in this direction for this contract to reduce or close. ","subCode":"","tag":"6b9ad766b55dBCDE","ts":"1777858252037"}],"inTime":"1777858252037599","msg":"All operations failed","outTime":"1777858252037961"}
 2026-05-04 10:30:53 [WARNING] src.trading.risk_manager: 손실 기록: -0.09% | 연패: 1
 2026-05-04 10:30:53 [ERROR] src.trading.risk_manager: [RISK] 주간 손실 한도 -10.0% 도달: -10.76% → 주간 매매 중단
+2026-05-04 11:05:10 [WARNING] src.trading.executor: post-only 3회 추격 실패 → market 폴백 (taker 0.05%)
