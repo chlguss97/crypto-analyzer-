@@ -670,6 +670,19 @@ class PositionManager:
                     pos.tp1_filled = True
                     pos.algo_ids["tp1"] = None
 
+                    # TP1 부분청산 실현 PnL 누적 (CRITICAL fix 2026-04-30)
+                    if pos.entry_price > 0 and pos.leverage > 0:
+                        partial_margin = closed_amount * pos.entry_price / pos.leverage
+                        if pos.direction == "long":
+                            partial_pnl_pct = (pos.tp1_price - pos.entry_price) / pos.entry_price * pos.leverage * 100
+                        else:
+                            partial_pnl_pct = (pos.entry_price - pos.tp1_price) / pos.entry_price * pos.leverage * 100
+                        pos.realized_pnl_usdt += partial_margin * partial_pnl_pct / 100
+                        logger.info(
+                            f"서버 TP1 실현 PnL 누적: {partial_pnl_pct:+.2f}% "
+                            f"(${pos.realized_pnl_usdt:+.2f})"
+                        )
+
                     # 🔒 기존 SL 먼저 취소 — 서버 TP1이 체결되면 OKX가 기존 SL을
                     # 자동 취소하거나 사이즈 불일치로 무효화할 수 있음.
                     # 명시적으로 취소 후 새 사이즈(remaining)로 재등록.

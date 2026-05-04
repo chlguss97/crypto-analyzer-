@@ -406,10 +406,11 @@ class OrderExecutor:
         algo_id = self._gen_algo_id(prefix)
 
         # prefix 로 TP/SL/러너SL 구분 → orderPx 결정
-        # 04-28: 전 주문 maker 강제 — SL도 limit-on-trigger
-        # SL 미체결 위험은 sl_failsafe(폴링)가 백업
-        is_limit_trigger = True  # 모든 알고를 limit-on-trigger (maker)
-        order_px = str(round(trigger_price, 1))
+        # SL(sl/rsl): market-on-trigger (반드시 체결 — 손실 확대 방지)
+        # TP(tp): limit-on-trigger (maker 수수료, 미체결 시 러너가 백업)
+        is_sl = prefix in ("sl", "rsl")
+        is_limit_trigger = not is_sl  # SL만 market, 나머지는 limit
+        order_px = "-1" if is_sl else str(round(trigger_price, 1))
 
         try:
             await self.exchange.create_order(
