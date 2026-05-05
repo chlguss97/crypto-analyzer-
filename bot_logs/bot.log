@@ -11,3 +11,8 @@
 2026-05-06 00:00:20 [WARNING] src.data.ws_stream: OKX WS business 수신 끊김: no close frame received or sent → 재연결
 2026-05-06 01:28:20 [WARNING] src.data.ws_stream: OKX WS public 수신 끊김: no close frame received or sent → 재연결
 2026-05-06 04:12:16 [WARNING] src.data.ws_stream: OKX WS public 수신 끊김: no close frame received or sent → 재연결
+2026-05-06 05:03:39 [WARNING] src.trading.position_manager: 포지션 외부 종료 감지 (사이즈≈0) → 정리: BTC/USDT:USDT
+2026-05-06 05:03:41 [WARNING] src.trading.risk_manager: 손실 기록: -7.24% | 연패: 1
+2026-05-06 05:07:01 [WARNING] src.trading.position_manager: ⚡ Adverse Selection 발동: LONG 마진 -2.5% (한도 -2.5%) | 60초 경과
+2026-05-06 05:07:10 [WARNING] src.trading.executor: post-only 청산 실패 → 다음 사이클 재시도 (adverse_selection)
+2026-05-06 05:07:10 [ERROR] src.trading.position_manager: 🚨 청산 실패 (adverse_selection) 1/10 → SL 긴급 재등록 + 2초 후 재시도
