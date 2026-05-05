@@ -21,3 +21,4 @@
 2026-05-06 07:32:03 [WARNING] src.trading.risk_manager: 손실 기록: -8.88% | 연패: 2
 2026-05-06 07:32:03 [ERROR] src.trading.risk_manager: [RISK] 일일 손실 한도 -10.0% 도달: -15.64% → 당일 매매 중단
 2026-05-06 07:32:03 [ERROR] src.trading.risk_manager: [RISK] 주간 손실 한도 -10.0% 도달: -18.62% → 주간 매매 중단
+2026-05-06 08:21:57 [WARNING] src.data.ws_stream: OKX WS public 수신 끊김: no close frame received or sent → 재연결
