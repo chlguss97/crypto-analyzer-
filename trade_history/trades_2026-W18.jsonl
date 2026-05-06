@@ -119,3 +119,4 @@
 {"type": "hourly_snapshot", "balance": 322.37, "autotrading": "on", "regime": "unknown", "streak": 0, "daily_pnl": 0.0, "positions": 1, "pending_algos": 0, "paper_balance": 6980.2608, "paper_total": 8, "ml_phase": "A", "ml_labeled": 28, "ts": 1778047060, "ts_iso": "2026-05-06T05:57:40+00:00"}
 {"type": "paper_equity", "paper": true, "ts": 1778047808, "balance": 6980.26, "equity": 7000.88, "unrealized": 20.62, "positions": 1, "total_trades": 8, "ts_iso": "2026-05-06T06:10:08+00:00"}
 {"type": "hourly_snapshot", "balance": 314.57, "autotrading": "on", "regime": "unknown", "streak": 0, "daily_pnl": 0.0, "positions": 1, "pending_algos": 0, "paper_balance": 6980.2608, "paper_total": 8, "ml_phase": "A", "ml_labeled": 28, "ts": 1778050678, "ts_iso": "2026-05-06T06:57:58+00:00"}
+{"type": "paper_equity", "paper": true, "ts": 1778051409, "balance": 6980.26, "equity": 6698.61, "unrealized": -281.65, "positions": 1, "total_trades": 8, "ts_iso": "2026-05-06T07:10:09+00:00"}
