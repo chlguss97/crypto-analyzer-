@@ -29,3 +29,4 @@
 2026-05-06 17:40:14 [WARNING] src.trading.executor: post-only 3회 추격 실패 → market 폴백 (taker 0.05%)
 2026-05-06 20:43:46 [WARNING] src.trading.position_manager: 포지션 외부 종료 감지 (사이즈≈0) → 정리: BTC/USDT:USDT
 2026-05-06 20:43:48 [ERROR] src.trading.risk_manager: [RISK] 주간 손실 한도 -10.0% 도달: -15.94% → 주간 매매 중단
+2026-05-07 00:00:07 [WARNING] src.trading.executor: post-only 3회 추격 실패 → market 폴백 (taker 0.05%)
