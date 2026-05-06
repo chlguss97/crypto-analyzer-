@@ -272,11 +272,11 @@ class Database:
         return [dict(r) for r in reversed(rows)]
 
     async def get_pending_shadows(self) -> list[dict]:
-        """라벨 미확정 + 미진입 시그널 (shadow 추적 대상)"""
+        """라벨 미확정 시그널 (진입 여부 무관, 모든 후보 shadow 추적)"""
         cursor = await self._db.execute(
             """SELECT id, ts, candidate_type, direction, price, features
                FROM signals
-               WHERE label = -1 AND entry_executed = 0
+               WHERE label = -1
                ORDER BY ts ASC"""
         )
         rows = await cursor.fetchall()
