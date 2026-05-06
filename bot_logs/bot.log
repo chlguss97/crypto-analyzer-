@@ -36,3 +36,10 @@
 2026-05-07 08:03:22 [WARNING] src.trading.position_manager: 포지션 외부 종료 감지 (사이즈≈0) → 정리: BTC/USDT:USDT
 2026-05-07 08:03:24 [WARNING] src.trading.risk_manager: 손실 기록: -9.09% | 연패: 1
 2026-05-07 08:03:24 [ERROR] src.trading.risk_manager: [RISK] 주간 손실 한도 -10.0% 도달: -25.02% → 주간 매매 중단
+2026-05-07 08:30:52 [WARNING] src.data.ws_stream: OKX WS public 수신 끊김: no close frame received or sent → 재연결
+2026-05-07 08:35:03 [WARNING] src.data.ws_stream: OKX WS public 수신 끊김: sent 1011 (internal error) keepalive ping timeout; no close frame received → 재연결
+2026-05-07 08:35:03 [WARNING] src.data.ws_stream: OKX WS business 수신 끊김: sent 1011 (internal error) keepalive ping timeout; no close frame received → 재연결
+2026-05-07 08:40:01 [WARNING] src.data.ws_stream: OKX WS business 수신 끊김: sent 1011 (internal error) keepalive ping timeout; no close frame received → 재연결
+2026-05-07 08:40:28 [WARNING] src.trading.executor: post-only 3회 추격 실패 → market 폴백 (taker 0.05%)
+2026-05-07 08:40:44 [WARNING] CryptoAnalyzer: 미청산: BTC/USDT:USDT SHORT @ $81270.1
+2026-05-07 08:42:10 [WARNING] src.trading.position_manager: 거래소 포지션 발견 (봇 미추적): BTC/USDT:USDT short 4.000000 @ $81270.1
