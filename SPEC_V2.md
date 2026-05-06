@@ -15,7 +15,7 @@
 | 2 | 점수 시스템 차별력 없음 | 6.0~7.5 범위에 몰림 | 점수 폐지, ML Go/NoGo |
 | 3 | ML이 장식 (±2점 보정) | 결정권 없이 보조만 | ML이 진입 최종 결정 |
 | 4 | 역추세(PB/DIV/LVL) 전패 | 떨어지는데 삼 | 모멘텀 추종만 |
-| 5 | RR 0.25 (이기면 작게 지면 크게) | SL -8% vs 실현 TP 낮음 | SL -5%, TP +10%, RR 2.0 |
+| 5 | RR 0.25 (이기면 작게 지면 크게) | SL -8% vs 실현 TP 낮음 | SL -5%, TP ATR기반(RR 1.3~2.4) |
 | 6 | 수수료 > 수익 | taker 0.05% 양쪽 | maker 강제 (완료) |
 | 7 | 게이트 13개가 기회 살해 | 과도한 필터 | 게이트 5개로 축소, 나머지는 ML이 학습 |
 
@@ -260,7 +260,7 @@ CREATE INDEX IF NOT EXISTS idx_signals_label ON signals(label);
 
 ## 5. ML DecisionEngine — Meta-Labeling
 
-### 5.1 Phase A: 룰 기반 (0~200건)
+### 5.1 Phase A: 룰 기반 (0~100건)
 
 ```
 Go 조건 (2개 AND):
@@ -274,7 +274,7 @@ Go 조건 (2개 AND):
 자본: $100~200 micro.
 ```
 
-### 5.2 Phase B: ML Go/NoGo (200건+)
+### 5.2 Phase B: ML Go/NoGo (100건+)
 
 ```python
 model = GradientBoostingClassifier(
@@ -300,21 +300,24 @@ P(Win) ≤ 55% → NoGo (shadow 추적)
 
 **ML이 NoGo 한 후보도 shadow 추적 → 라벨 확정 → 재학습 데이터**
 
-### 5.3 Triple Barrier 라벨링 (Shadow + 실거래 공통)
+### 5.3 Triple Barrier 라벨링 (Shadow 전용)
 
 ```
-후보 시점 가격 P, 후보 유형별 barrier:
+후보 시점 가격 P, 고정 레버리지 15x, 후보 유형별 barrier:
 
-  momentum:  TP = P × (1 + 0.0067),  SL = P × (1 - 0.0033),  Time = 45분
-  breakout:  TP = P × (1 + 0.0067),  SL = P × (1 - 0.0033),  Time = 90분
-  cascade:   TP = P × (1 + 0.0053),  SL = P × (1 - 0.0027),  Time = 20분
+  momentum:  TP = P × (1 + 0.0067),  SL = P × (1 - 0.0033),  Time = 240분
+  breakout:  TP = P × (1 + 0.0067),  SL = P × (1 - 0.0033),  Time = 240분
+  cascade:   TP = P × (1 + 0.0053),  SL = P × (1 - 0.0027),  Time = 120분
 
   (short은 TP/SL 반대)
 
-이후 가격 관찰 (1초 간격, Redis bn:price):
+이후 가격 관찰 (5초 간격, Redis bn:price):
   TP 먼저 → label = 1
   SL 먼저 → label = 0
   시간 초과 → label = 0
+
+※ Shadow는 고정 barrier로 일관된 라벨 수집.
+※ 실거래/페이퍼 TP1은 ATR 기반 (§7.2 참조) — Phase B 전환 시 shadow도 ATR 전환 검토.
 ```
 
 ### 5.4 Walk-Forward 재학습
@@ -398,30 +401,37 @@ $1,000 자본, 마진 30%, 레버리지 15x
 ```yaml
 hold_modes:
   momentum:       # 후보 A
-    max_hold_min: 45
+    max_hold_min: 240
     sl_margin_pct: 5.0          # 마진 -5%
-    tp1_margin_pct: 10.0        # 마진 +10% (RR 2.0)
-    tp2_mult: 2.5               # tp1_dist × 2.5
+    tp1_margin_pct: 10.0        # shadow 라벨용 (실거래는 ATR 기반)
+    tp2_mult: 2.5               # sl_dist × 2.5
     tp3_mult: 4.0
 
   breakout:       # 후보 B
-    max_hold_min: 90            # 돌파는 더 오래 보유
+    max_hold_min: 240
     sl_margin_pct: 5.0
     tp1_margin_pct: 10.0
-    tp2_mult: 3.0
+    tp2_mult: 3.0               # sl_dist × 3.0
     tp3_mult: 5.0
 
   cascade:        # 후보 C
-    max_hold_min: 20            # 캐스케이드는 빠르게
+    max_hold_min: 120
     sl_margin_pct: 4.0          # 타이트
-    tp1_margin_pct: 8.0         # RR 2.0
-    tp2_mult: 2.0
+    tp1_margin_pct: 8.0
+    tp2_mult: 2.0               # sl_dist × 2.0
     tp3_mult: 3.0
 ```
 
 ### 7.2 TP 구조
 
 ```
+TP1 거리 계산 (실거래 + 페이퍼):
+  tp1_dist = price × clamp(ATR_5m × 1.5, 0.25%, 0.80%)
+  RR 최소 1.3 보장: tp1_dist = max(tp1_dist, sl_dist × 1.3)
+
+  횡보장 (ATR 0.3%): TP1 ≈ 0.45%, RR ≈ 1.35
+  추세장 (ATR 0.6%): TP1 ≈ 0.80%, RR ≈ 2.4
+
 TP1 도달 시:
   50% 포지션 청산 (확정 수익)
   SL → 진입가 + 수수료 (본절)
@@ -449,7 +459,7 @@ TP1 도달 시:
 
 ## 8. 리스크 관리
 
-### 8.1 게이트 5개
+### 8.1 게이트 7개
 
 | # | 게이트 | 임계값 | 복구 |
 |---|--------|--------|------|
@@ -458,6 +468,16 @@ TP1 도달 시:
 | 3 | 봇 정지 DD | -15% | 봇 완전 정지 (수동 재시작만) |
 | 4 | 연패 쿨다운 | 5연패 → 1시간 | 시간 경과 |
 | 5 | 포지션/간격 | 1개 + 30초 | 청산/경과 |
+| 6 | 레짐-방향 | trending역방향(momentum/cascade) 차단, ranging+breakout 차단 | 레짐 전환 |
+| 7 | 모멘텀 소진 | 최근 3캔들 이동 > TP1의 50% | 다음 후보 |
+
+**게이트 6 상세 (레짐-방향):**
+- `trending_up` + short momentum/cascade → 차단
+- `trending_down` + long momentum/cascade → 차단
+- `trending` + breakout 역방향 → 허용 (전환 시그널)
+- `ranging` + breakout → 차단 (가짜 돌파)
+- shadow: 게이트 무시 (ML 라벨 수집 유지)
+- paper + 실거래: 차단
 
 ### 8.2 연패 사이즈 축소
 

@@ -5,6 +5,32 @@
 
 ---
 
+## 2026-05-06
+
+### 매매 복기 기반 3중 게이트 + TP1 ATR 전환
+
+5/4~5/5 실거래 7건 복기 (-$25.11): 레짐 역행 진입, TP1 과대, 늦은 진입이 주 손실 원인.
+
+**1. 레짐-방향 게이트** (실거래+페이퍼 차단, shadow 허용)
+- `main.py` — `_is_regime_aligned()`: trending_up+short(momentum/cascade) 차단, trending_down+long 차단
+- ranging+breakout 차단 (가짜 돌파 방지)
+- breakout 역방향은 허용 (전환 시그널)
+
+**2. TP1 ATR 기반 전환** (고정 RR 2.0 → 가변 RR 1.3~2.4)
+- `main.py`, `paper_trader.py` — `tp1_dist = price × clamp(ATR×1.5, 0.25%, 0.80%)`
+- RR 최소 1.3 보장 (`tp1_dist >= sl_dist × 1.3`)
+- 횡보장(ATR 0.3%): 0.67%→0.45%로 축소 → TP1 도달률 대폭 상승
+
+**3. 모멘텀 소진 체크**
+- `main.py`, `paper_trader.py` — 최근 3캔들 이동 > TP1의 50% → 진입 차단
+- `candidate_detector.py` — `recent_move_pct` 필드 추가
+
+**4. 코드 순서 수정**: `min_sl` 보정을 TP1 RR 계산 전으로 이동
+
+**5. MD 전수조사 갱신**: SPEC_V2(§5.1/5.3/7.1/7.2/8.1), MANUAL(margin_loss_cap), CLAUDE.md
+
+---
+
 ## 2026-04-28
 
 ### Maker 강제 + Ranging 차단 — 수수료/횡보장 손실 근절

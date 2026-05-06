@@ -361,6 +361,11 @@ class CryptoAnalyzer:
         # ── 기록 + 실행 ──
         sig_id = await self.db.insert_signal(signal_record)
 
+        # ── 레짐-방향 게이트 (shadow는 통과, paper+실거래만 차단) ──
+        if not self._is_regime_aligned(regime_now, direction, ctype):
+            logger.info(f"[GATE] 레짐 불일치 차단: {regime_now} vs {direction} ({ctype} score={strength:.2f})")
+            return
+
         # 페이퍼
         if self.paper_trader:
             await self.paper_trader.try_candidate_entry(candidate, regime_now)
@@ -386,6 +391,18 @@ class CryptoAnalyzer:
                 "streak": self.risk_manager.get_streak(),
                 "daily_pnl": round(daily_pnl, 1),
             }, ttl=30)
+
+    def _is_regime_aligned(self, regime: str, direction: str, ctype: str = "") -> bool:
+        """레짐과 방향/셋업이 일치하는지 확인"""
+        # trending에서 역방향: breakout은 전환 시그널이므로 허용
+        if regime == "trending_up" and direction == "short" and ctype != "breakout":
+            return False
+        if regime == "trending_down" and direction == "long" and ctype != "breakout":
+            return False
+        # 횡보에서 breakout: 가짜 돌파 확률 높음
+        if regime == "ranging" and ctype == "breakout":
+            return False
+        return True
 
     async def _execute(self, candidate: dict, balance: float,
                        regime: str, daily_pnl: float) -> bool:
@@ -418,12 +435,18 @@ class CryptoAnalyzer:
 
         # SL/TP 거리
         sl_dist = price * (sl_margin_pct / leverage / 100)
-        tp1_dist = price * (tp1_margin_pct / leverage / 100)
-        tp2_dist = sl_dist * tp2_mult
-        tp3_dist = sl_dist * tp3_mult
-
         min_sl = price * 0.005  # 0.5% 최소 SL
         sl_dist = max(sl_dist, min_sl)
+
+        # TP1: ATR 기반 (하한 0.25%, 상한 0.80%)
+        atr_tp1 = price * min(max(atr_pct * 1.5 / 100, 0.0025), 0.008)
+        tp1_dist = atr_tp1
+        # RR 최소 1.3 보장: TP1 >= SL × 1.3
+        if tp1_dist < sl_dist * 1.3:
+            tp1_dist = sl_dist * 1.3
+
+        tp2_dist = sl_dist * tp2_mult
+        tp3_dist = sl_dist * tp3_mult
 
         if direction == "long":
             sl = price - sl_dist
@@ -435,6 +458,13 @@ class CryptoAnalyzer:
             tp1 = price - tp1_dist
             tp2 = price - tp2_dist
             tp3 = price - tp3_dist
+
+        # 모멘텀 소진 체크: 최근 3캔들 이동이 TP1의 50% 이상이면 스킵
+        recent_move_pct = candidate.get("recent_move_pct", 0)
+        tp1_pct = tp1_dist / price * 100
+        if recent_move_pct > tp1_pct * 0.5 and recent_move_pct > 0:
+            logger.info(f"[EXEC] 모멘텀 소진: 최근이동 {recent_move_pct:.3f}% > TP1의 50% ({tp1_pct*0.5:.3f}%) → 차단")
+            return False
 
         # 수수료 필터
         maker_fee = self.config.get("fees", {}).get("maker", 0.0002)

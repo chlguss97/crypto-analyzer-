@@ -366,25 +366,24 @@ docker compose exec redis redis-cli  # Redis CLI
 #### `margin_loss_cap` (기본값, 작은 계좌 권장)
 ```yaml
 sizing_mode: margin_loss_cap
-margin_pct: 0.95              # 잔고 대비 마진 비율 (작은 계좌 95%)
-max_margin_loss_pct: 10.0     # SL 손실 한도 (마진의 %)
-use_indicator_sl: true        # 매물대 SL 우선 사용
-tp1_margin_gain_pct: 15.0     # TP1 마진 +15% 익절
-trail_margin_pct: 5.0         # 러너 트레일 마진 5% 거리
-trail_min_price_pct: 0.2      # 트레일 최소 가격 거리 (노이즈 방어)
-min_indicator_sl_price_pct: 0.05  # 매물대 SL 최소 가격 거리 (즉시청산 방지)
+margin_pct: 0.80              # 잔고 대비 마진 비율 (80%)
+max_margin_loss_pct: 5.0      # SL 손실 한도 (마진의 -5%)
+sl_margin_pct: 5.0            # hold_mode별 SL 마진% (기본 5%)
+# TP1: ATR 기반 동적 계산 (tp1_margin_pct는 shadow 라벨 전용)
+trail_margin_pct: 3.0         # 러너 트레일 마진 3% 거리
+trail_min_price_pct: 0.15     # 트레일 최소 가격 거리 (노이즈 방어)
 ```
 
 작동:
-- SL 가격 거리 = `max_margin_loss_pct / leverage` (예: 25x + 10% → 가격 0.4%)
-- 매물대 SL 이 더 가까우면 매물대 사용 (보수적), 더 멀면 마진 한도 사용
-- TP/트레일도 모두 마진 % 기준 → 가격 거리 = `% / leverage`
+- SL 가격 거리 = `sl_margin_pct / leverage` (예: 15x + 5% → 가격 0.33%)
+- TP1 가격 거리 = ATR(5m) × 1.5, 하한 0.25%, 상한 0.80% (RR 최소 1.3 보장)
+- 횡보장: TP1 ≈ 0.45% / 추세장: TP1 ≈ 0.80%
 
-예시 — 잔고 $30, 25x 레버리지:
-- 마진 = $30 × 0.95 = $28.5
-- 사이즈 = floor($28.5 × 25 / $70k / 0.01) × 0.01 = 0.01 BTC
-- SL 가격 거리 = 0.4% (마진 -10% = -$2.85)
-- TP1 가격 거리 = 0.6% (마진 +15% = +$4.27)
+예시 — 잔고 $350, 15x 레버리지, ATR 0.3%:
+- 마진 = $350 × 0.80 = $280
+- 사이즈 = floor($280 × 15 / $80k / 0.01) × 0.01 = 0.05 BTC
+- SL 가격 거리 = 0.33% (마진 -5% = -$14)
+- TP1 가격 거리 = 0.45% (ATR×1.5, RR 1.35)
 
 #### `risk_per_trade` (옛 모드, 큰 계좌 권장)
 ```yaml

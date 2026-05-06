@@ -117,6 +117,15 @@ class CandidateDetector:
         best["atr_pct"] = round(atr_pct, 4)
         best["price"] = round(price, 1)
         best["weak"] = False
+
+        # 최근 3캔들 대비 소진된 모멘텀 비율
+        recent_highs = df_5m["high"].astype(float).iloc[-4:-1]
+        recent_lows = df_5m["low"].astype(float).iloc[-4:-1]
+        if best["direction"] == "long":
+            recent_move = price - float(recent_lows.min())
+        else:
+            recent_move = float(recent_highs.max()) - price
+        best["recent_move_pct"] = round(recent_move / price * 100, 4)
         return best
 
     # ════════════════════════════════════════

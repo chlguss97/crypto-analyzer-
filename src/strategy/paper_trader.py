@@ -507,14 +507,18 @@ class PaperTrader:
 
         if sl_dist <= 0:
             sl_dist = current_price * (sl_margin_pct / leverage / 100)
-        if tp_dist <= 0:
-            tp_dist = current_price * (tp1_margin_pct / leverage / 100)
 
         # 최소 SL 0.35%
         min_sl = current_price * 0.005  # 5m 노이즈 밖으로 (0.35%→0.5%)
         sl_dist = max(sl_dist, min_sl)
 
-        tp1_dist = tp_dist
+        # TP1: ATR 기반 (하한 0.25%, 상한 0.80%)
+        atr_tp1 = current_price * min(max(atr_pct * 1.5 / 100, 0.0025), 0.008)
+        tp1_dist = atr_tp1
+        # RR 최소 1.3 보장
+        if tp1_dist < sl_dist * 1.3:
+            tp1_dist = sl_dist * 1.3
+
         tp2_dist = sl_dist * tp2_mult
         tp3_dist = sl_dist * tp3_mult
 
@@ -528,6 +532,12 @@ class PaperTrader:
             tp1 = current_price - tp1_dist
             tp2 = current_price - tp2_dist
             tp3 = current_price - tp3_dist
+
+        # 모멘텀 소진 체크
+        recent_move_pct = signal_result.get("recent_move_pct", 0)
+        tp1_pct = tp1_dist / current_price * 100
+        if recent_move_pct > tp1_pct * 0.5 and recent_move_pct > 0:
+            return None
 
         # 수수료 필터 (04-28: maker 강제 정책)
         fee_cost = self.FEE_MAKER * 2 * leverage * 100
