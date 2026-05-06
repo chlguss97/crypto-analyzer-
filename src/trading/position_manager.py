@@ -183,9 +183,10 @@ class PositionManager:
         elif stale_min > 5:
             giveback *= 0.75
 
-        # 트레일 거리: max(ATR*2, 이익*반납) with cap
+        # 트레일 거리: max(ATR*1.5, 이익*반납) with cap
+        trail_mult = self.config.get("trailing", {}).get("trail_atr_mult", 1.5)
         atr = getattr(self, '_cached_atr', current_price * 0.002)
-        trail = max(atr * 2, profit * giveback)
+        trail = max(atr * trail_mult, profit * giveback)
         trail = min(trail, current_price * 0.008)  # 최대 0.8% cap
         trail = max(trail, current_price * 0.001)  # 최소 0.1% floor
 
@@ -564,7 +565,7 @@ class PositionManager:
                     margin_pct = (pos.entry_price - current_price) / pos.entry_price * pos.leverage * 100
                 threshold = -as_cfg.get("margin_threshold_pct", 2.5)
                 if margin_pct <= threshold:
-                    # 추가 조건 확인 (CVD 반전 + 거래량 역행) — AND 조건
+                    # 추가 조건 확인 (CVD 반전 + 거래량 급증) — AND 조건
                     as_triggered = True
                     if as_cfg.get("require_cvd_reversal") and self.redis:
                         try:
@@ -577,6 +578,15 @@ class PositionManager:
                                 as_triggered = False
                         except Exception:
                             as_triggered = False  # CVD 확인 불가 시 비발동
+
+                    if as_triggered and as_cfg.get("require_vol_surge") and self.redis:
+                        try:
+                            vol_raw = await self.redis.get("bn:vol_ratio_1m")
+                            vol_ratio = float(vol_raw) if vol_raw else 0
+                            if vol_ratio < 1.5:
+                                as_triggered = False  # 거래량 급증 없으면 비발동
+                        except Exception:
+                            as_triggered = False
 
                     if as_triggered:
                         logger.warning(

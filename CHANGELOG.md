@@ -29,6 +29,22 @@
 
 **5. MD 전수조사 갱신**: SPEC_V2(§5.1/5.3/7.1/7.2/8.1), MANUAL(margin_loss_cap), CLAUDE.md
 
+### 전수검사 — SPEC vs 코드 4건 CRITICAL 수정
+
+**C1. Market 허용 threshold** (main.py:510)
+- `strength >= 1.0` → `>= 1.5` (SPEC §6.1 준수, maker 수수료 절감)
+
+**C2. Trail ATR 배수** (position_manager.py:188)
+- `atr * 2` → `atr * trail_atr_mult(1.5)` (SPEC §7.2 준수, 수익 반납 축소)
+
+**C3. Adverse Selection vol_surge 미구현** (position_manager.py:569)
+- vol_ratio_1m ≥ 1.5 체크 추가 (SPEC §7.3 AND 조건 3개 완성)
+
+**C4. ML min_samples default** (ml_engine.py:74)
+- default 200 → 100 (settings.yaml과 일치)
+
+**SPEC 갱신**: §6.1(SL market-on-trigger, retry 3회), §6.2(margin Phase A/B), §7.2(trail 상세), §8.1(daily loss Phase A/B)
+
 ---
 
 ## 2026-04-28

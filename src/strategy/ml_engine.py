@@ -71,7 +71,7 @@ class MLDecisionEngine:
 
     def __init__(self, config=None):
         ml_cfg = (config or {}).get("ml", {})
-        self.min_samples = ml_cfg.get("phase_a_min_samples", 200)
+        self.min_samples = ml_cfg.get("phase_a_min_samples", 100)
         self.retrain_interval = ml_cfg.get("retrain_interval", 100)
         self.window_size = ml_cfg.get("window_size", 500)
         self.min_oos_accuracy = ml_cfg.get("min_oos_accuracy", 0.52)
