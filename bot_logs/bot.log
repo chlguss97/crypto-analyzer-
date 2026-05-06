@@ -33,3 +33,6 @@
 2026-05-07 02:35:02 [WARNING] src.data.ws_stream: OKX WS business 수신 끊김: no close frame received or sent → 재연결
 2026-05-07 04:20:49 [WARNING] src.data.ws_stream: OKX WS public 수신 끊김: no close frame received or sent → 재연결
 2026-05-07 05:03:30 [WARNING] src.data.ws_stream: OKX WS public 수신 끊김: no close frame received or sent → 재연결
+2026-05-07 08:03:22 [WARNING] src.trading.position_manager: 포지션 외부 종료 감지 (사이즈≈0) → 정리: BTC/USDT:USDT
+2026-05-07 08:03:24 [WARNING] src.trading.risk_manager: 손실 기록: -9.09% | 연패: 1
+2026-05-07 08:03:24 [ERROR] src.trading.risk_manager: [RISK] 주간 손실 한도 -10.0% 도달: -25.02% → 주간 매매 중단
