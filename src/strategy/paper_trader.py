@@ -300,7 +300,13 @@ class PaperTrader:
         # SL/TP (min SL 0.5% — 실전과 동일)
         sl_dist = current_price * (sl_margin_pct / leverage / 100)
         sl_dist = max(sl_dist, current_price * 0.005)
-        tp1_dist = current_price * (tp1_margin_pct / leverage / 100)
+
+        # TP1: ATR 기반 (하한 0.25%, 상한 0.80%)
+        atr_pct = candidate.get("atr_pct", 0.3)
+        atr_tp1 = current_price * min(max(atr_pct * 1.5 / 100, 0.0025), 0.008)
+        tp1_dist = atr_tp1
+        if tp1_dist < sl_dist * 1.3:
+            tp1_dist = sl_dist * 1.3
 
         if direction == "long":
             sl = current_price - sl_dist
@@ -312,6 +318,12 @@ class PaperTrader:
             tp1 = current_price - tp1_dist
             tp2 = current_price - sl_dist * tp2_mult
             tp3 = current_price - sl_dist * tp3_mult
+
+        # 모멘텀 소진 체크
+        recent_move_pct = candidate.get("recent_move_pct", 0)
+        tp1_pct = tp1_dist / current_price * 100
+        if recent_move_pct > tp1_pct * 0.5 and recent_move_pct > 0:
+            return None
 
         # 수수료 필터
         fee_cost = self.FEE_MAKER * 2 * leverage * 100

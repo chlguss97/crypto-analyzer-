@@ -195,19 +195,12 @@ class CryptoAnalyzer:
         """메인 평가 — 후보 감지 → 리스크 → ML → 실행"""
         now = _time.time()
 
-        # ── 리스크 게이트 (5개만) ──
+        # ── 리스크 게이트 ──
 
-        # 1. 일일 손실 -5%
-        daily_limit = self.config.get("risk", {}).get("max_daily_loss", 0.05) * 100
+        # 1~3. 일일/주간 손실 + DD + 쿨다운 (risk_manager 통합)
         daily_pnl = self.risk_manager.get_daily_pnl()
-        if daily_pnl <= -daily_limit:
-            return
-
-        # 2. DD 한도
-        # (risk_manager에서 체크 — bot_kill_drawdown은 별도)
-
-        # 3. 연패 쿨다운
-        if now < self.risk_manager.get_cooldown_until():
+        allowed, reason = self.risk_manager.is_trading_allowed()
+        if not allowed:
             return
 
         # 4. 포지션 1개 제한
