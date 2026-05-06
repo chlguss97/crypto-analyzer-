@@ -6,3 +6,4 @@
 2026-05-06 05:03:41 | EXIT  | SHORT sl_or_forced | $81,377.0 -> $81,712.7 | -7.24% ($-19.64) | 378min | fee $2.86
 2026-05-06 05:05:07 | ENTRY | BREAKOUT LONG | $81,666.0 | SL $81,261.2 | 16x | margin $279 | score 1.2
 2026-05-06 07:32:03 | EXIT  | LONG sl_failsafe | $81,666.0 -> $81,253.5 | -8.88% ($-22.65) | 146min | fee $2.03
+2026-05-06 14:10:16 | ENTRY | MOMENTUM SHORT | $81,249.1 | SL $81,655.4 | 15x | margin $259 | score 0.4
