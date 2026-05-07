@@ -7,6 +7,22 @@
 
 ## 2026-05-07
 
+### Binance CVD + 1분 고속 감지 + 마이크로 비활성
+
+**CVD/Whale Binance 이관** — OKX → Binance Futures WS (fstream.binancefuture.com)
+- 거래량 3~5배 → CVD 신뢰도 대폭 상승. OKX는 캔들/가격/호가만 담당.
+
+**1분 고속 모멘텀 감지** — detect_fast(df_1m)
+- ATR_1m×1.5 엄격 기준, hold_mode=quick, 5분 감지와 병행
+- TP = ATR_1m × 배수 (자동으로 짧은 목표). 지연 5분→1분 단축.
+
+**마이크로스트럭처 비활성** — 15개 지표 2초 계산 중단 (Phase B+까지)
+
+### JSONL 로그 정리 + 텔레그램 개편
+
+**JSONL**: candidate에 h1/h4, entry에 conviction, gate_block 신설, hourly에 lab/adaptive
+**텔레그램**: /adaptive, /lab, /shadow 신설. /status ML+Lab. /risk DD%+daily.
+
 ### AdaptiveParams 수치 자동 보정 엔진
 
 SPEC §10 신설 + 구현. 거래 결과로부터 TP/SL/방향/사이즈 수치를 이동 통계로 자동 보정.

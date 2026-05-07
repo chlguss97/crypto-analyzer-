@@ -78,39 +78,50 @@
 
 ---
 
-## 2. 데이터 — 전부 Binance, 매매만 OKX
+## 2. 데이터 소스
 
-### 2.1 Binance WebSocket (기존 binance_stream.py)
+### 2.1 Binance Futures WS (binance_stream.py — CVD/Whale)
 
-| 스트림 | Redis 키 | TTL | 용도 |
+> URL: `wss://fstream.binancefuture.com/ws/btcusdt@aggTrade`
+> (fstream.binance.com 싱가포르 차단 → 대체 도메인)
+
+| 데이터 | Redis 키 | TTL | 계산 |
 |--------|----------|-----|------|
-| aggTrade | `flow:combined:cvd_5m/15m/1h` | 400/1200/4800s | CVD (피처 9,10) |
-| aggTrade | `flow:combined:whale_bias` | 600s | 고래 편향 (피처 12) |
-| miniTicker | `bn:price:BTCUSDT` | 30s | 기준 가격 |
-| kline_1m~1w | DB + `bn:kline:*` | - | 캔들 (후보 감지 + 피처) |
-| forceOrder | `flow:liq:surge` | 120s | 청산 캐스케이드 (후보 C) |
-| forceOrder | `flow:liq:1m_total/long/short` | 120s | 청산 수치 (피처 13) |
+| CVD 5m | `flow:combined:cvd_5m` | 400s | aggTrade delta 누적 (300초 리셋) |
+| CVD 15m | `flow:combined:cvd_15m` | 1200s | 900초 리셋 |
+| CVD 1h | `flow:combined:cvd_1h` | 4800s | 3600초 리셋 |
+| Whale Bias | `flow:combined:whale_bias` | 600s | $50K+ 거래 5분 윈도우 |
+| Vol Ratio 1m | `bn:vol_ratio_1m` | 120s | 1분 거래수 / 20분 평균 |
 
-### 2.2 추가 필요 (Phase 3)
+### 2.2 Binance REST (binance_stream.py — 청산/펀딩/OI)
 
-| 스트림 | Redis 키 | 용도 |
-|--------|----------|------|
-| depth20@100ms | `bn:depth:BTCUSDT` | 호가 불균형 (피처 확장용) |
+| 데이터 | 주기 | Redis 키 | TTL |
+|--------|------|----------|-----|
+| 청산 (allForceOrders) | 5초 | `flow:liq:1m_total/long/short`, `flow:liq:surge` | 120s |
+| 펀딩비 (premiumIndex) | 30초 | `rt:funding:BTC-USDT-SWAP` | 120s |
+| OI (openInterest) | 30초 | `rt:oi:BTC-USDT-SWAP` | 120s |
 
-### 2.3 OKX (executor.py만 사용)
+### 2.3 OKX WS (ws_stream.py — 캔들/가격/호가)
 
-- `create_order` — 진입/청산 주문
-- `fetch_positions` — 포지션 확인
-- `fetch_balance` — 잔고 조회
-- `private_post_trade_cancel_algos` — 알고 취소
+| 채널 | Redis 키 | 용도 |
+|------|----------|------|
+| tickers | `rt:price:*`, `rt:ticker:*` | 현재가, bid/ask (주문 기준) |
+| books5 | `rt:micro:book_*` | 호가 5단계 (실행 스프레드) |
+| candle 1m~1w (7TF) | DB + `ch:kline:ready` | 후보 감지, SL/TP 기준가 |
 
-> 차트 분석, 시그널 감지는 OKX API를 일절 사용하지 않음.
+> CVD/Whale은 Binance WS 담당. OKX trades는 마이크로스트럭처용 (현재 비활성).
+
+### 2.4 OKX REST (executor.py + candle_collector.py)
+
+- 주문 실행: `create_order`, `fetch_positions`, `fetch_balance`
+- 캔들 백업: 30초마다 7TF × 5캔들 (WS 끊김 대비)
+- 시작 시 백필: 1m~1w (3일~365일)
 
 ---
 
 ## 3. CandidateDetector — 3종 후보 감지
 
-### 3.1 구현 위치: `src/strategy/flow_engine.py` (전면 교체)
+### 3.1 구현 위치: `src/strategy/candidate_detector.py`
 
 ```python
 class CandidateDetector:
@@ -200,6 +211,28 @@ strength: total_liq / 1,000,000 (1.0 = $1M, 2.0 = $2M)
 | B. Breakout | 4~6 | 2~4 | 1~2 |
 | C. Cascade | 2~4 | 0~2 | 0 |
 | **합계** | **21~30** | **12~21** | **6~10** |
+
+### 3.6 1분 고속 감지 (Fast Momentum)
+
+```
+detect_fast(df_1m, df_5m) — 5분 detect() 앞에서 호출
+
+감지 조건 (AND, 엄격):
+  1. 직전 완성 1m 캔들 body > ATR_1m(14) × 1.5
+  2. 해당 캔들 거래량 > 20봉 평균 × 1.5
+  3. body / (high - low) > 0.6
+  4. body > ATR_5m × 0.5 (5분 기준으로도 의미 있는 움직임)
+
+type: "fast_momentum"
+hold_mode: "quick" (max_hold 120분, SL 4%)
+TP: ATR_1m 기반 (자동으로 5분보다 짧은 목표)
+
+평가 순서:
+  1분 detect_fast() → 잡히면 즉시 진행
+  못 잡으면 → 5분 detect() → 정규 평가
+
+빈도: 하루 2~5건 (강한 움직임만)
+```
 
 ---
 
