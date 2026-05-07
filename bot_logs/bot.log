@@ -72,3 +72,4 @@
 2026-05-08 01:05:09 [WARNING] src.trading.executor: post-only 3회 추격 실패 → 진입 포기 (maker 강제)
 2026-05-08 01:10:15 [WARNING] src.trading.executor: post-only 3회 추격 실패 → 진입 포기 (maker 강제)
 2026-05-08 01:34:37 [ERROR] src.trading.executor: 포지션 사이즈 조회 실패: okx GET https://www.okx.com/api/v5/account/positions?instId=BTC-USDT-SWAP
+2026-05-08 02:30:18 [WARNING] src.data.ws_stream: OKX WS public 수신 끊김: no close frame received or sent → 재연결
