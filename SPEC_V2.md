@@ -300,24 +300,24 @@ P(Win) ≤ 55% → NoGo (shadow 추적)
 
 **ML이 NoGo 한 후보도 shadow 추적 → 라벨 확정 → 재학습 데이터**
 
-### 5.3 Triple Barrier 라벨링 (Shadow 전용)
+### 5.3 Triple Barrier 라벨링 (Shadow — 모든 시그널 추적)
 
 ```
-후보 시점 가격 P, 고정 레버리지 15x, 후보 유형별 barrier:
+모든 후보 (진입 여부 무관) shadow 추적. 레버리지 15x 가정.
 
-  momentum:  TP = P × (1 + 0.0067),  SL = P × (1 - 0.0033),  Time = 240분
-  breakout:  TP = P × (1 + 0.0067),  SL = P × (1 - 0.0033),  Time = 240분
-  cascade:   TP = P × (1 + 0.0053),  SL = P × (1 - 0.0027),  Time = 120분
+SL: sl_margin_pct / 15 (momentum/breakout 0.333%, cascade 0.267%)
+TP: ATR 기반 = clamp(ATR_5m × 1.5, 0.25%, 0.80%), RR ≥ 1.3
+Time: hold_mode별 max_hold_min (momentum/breakout 240분, cascade 120분)
+
+  횡보(ATR 0.3%): TP 0.45% / SL 0.33% / RR 1.35
+  추세(ATR 0.6%): TP 0.80% / SL 0.33% / RR 2.40
 
   (short은 TP/SL 반대)
 
-이후 가격 관찰 (5초 간격, Redis bn:price):
+이후 가격 관찰 (5초 간격, Redis rt:price):
   TP 먼저 → label = 1
   SL 먼저 → label = 0
-  시간 초과 → label = 0
-
-※ Shadow는 고정 barrier로 일관된 라벨 수집.
-※ 실거래/페이퍼 TP1은 ATR 기반 (§7.2 참조) — Phase B 전환 시 shadow도 ATR 전환 검토.
+  시간 초과 → PnL > 0이면 1, 아니면 0
 ```
 
 ### 5.4 Walk-Forward 재학습

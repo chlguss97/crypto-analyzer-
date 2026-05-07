@@ -253,9 +253,7 @@ class PaperTrader:
         if direction == "neutral":
             return None
 
-        # ── 리스크 게이트 (paper는 벤치마크용 — 포지션 제한만) ──
-        if len(self.positions) >= self.max_positions:
-            return None
+        # ── paper는 벤치마크용 — 게이트 없음 (모든 후보 진입) ──
 
         # ── ML Go/NoGo ──
         features = candidate.get("features_raw", {})

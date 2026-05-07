@@ -639,12 +639,20 @@ class CryptoAnalyzer:
                     # hold_mode 에서 barrier 계산
                     hm_cfg = self.config.get("hold_modes", {}).get(ctype, {})
                     sl_pct = hm_cfg.get("sl_margin_pct", 5.0)
-                    tp_pct = hm_cfg.get("tp1_margin_pct", 10.0)
                     max_hold = hm_cfg.get("max_hold_min", 45) * 60  # 초
 
                     leverage = 15  # shadow는 고정 레버리지 가정
-                    tp_dist = sig_price * (tp_pct / leverage / 100)
                     sl_dist = sig_price * (sl_pct / leverage / 100)
+
+                    # TP1: ATR 기반 (실거래와 동일)
+                    try:
+                        feat = json.loads(sig.get("features", "{}"))
+                        atr_pct = feat.get("atr_pct", 0.3)
+                    except Exception:
+                        atr_pct = 0.3
+                    tp_dist = sig_price * min(max(atr_pct * 1.5 / 100, 0.0025), 0.008)
+                    if tp_dist < sl_dist * 1.3:
+                        tp_dist = sl_dist * 1.3
 
                     if sig_dir == "long":
                         tp_price = sig_price + tp_dist
@@ -666,11 +674,11 @@ class CryptoAnalyzer:
                     if hit_tp:
                         label = 1
                         barrier = "tp"
-                        pnl = tp_pct
+                        pnl = tp_dist / sig_price * leverage * 100
                     elif hit_sl:
                         label = 0
                         barrier = "sl"
-                        pnl = -sl_pct
+                        pnl = -(sl_dist / sig_price * leverage * 100)
                     elif elapsed >= max_hold:
                         barrier = "time"
                         # 시간 초과 시 현재 PnL로 라벨 결정 (수익이면 1, 손실이면 0)
