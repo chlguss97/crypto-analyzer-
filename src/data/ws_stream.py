@@ -276,10 +276,10 @@ class WebSocketStream:
         # CVD/Whale → Binance Futures WS로 이관 (binance_stream.py)
         # OKX trades는 마이크로스트럭처 + 속도 계산에만 사용
 
-        # 마이크로 Redis (2초마다)
-        if now_f - self._last_micro_flush >= 2:
-            self._last_micro_flush = now_f
-            await self._flush_microstructure(price)
+        # 마이크로 — Phase B+ 까지 비활성 (CPU 절약, 사용처 없음)
+        # if now_f - self._last_micro_flush >= 2:
+        #     self._last_micro_flush = now_f
+        #     await self._flush_microstructure(price)
 
         # ── 가격 변속도 ──
         if price > 0 and ts > 0:
