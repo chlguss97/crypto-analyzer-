@@ -158,37 +158,18 @@ class CryptoAnalyzer:
     # ══════════════════════════════════════════════════
 
     async def periodic_eval(self):
-        """후보 감지 → ML → 실행 루프"""
+        """후보 감지 → ML → 실행 루프 (1초 폴링)"""
         await asyncio.sleep(5)
-
-        sub = None
-        try:
-            if self.redis.connected:
-                sub = self.redis._client.pubsub()
-                await sub.subscribe("ch:kline:ready")
-                logger.info("[EVAL] 이벤트 드리븐 활성화")
-        except Exception:
-            sub = None
+        logger.info("[EVAL] 평가 루프 시작 (1초 폴링)")
 
         while self._running:
             try:
-                if sub:
-                    try:
-                        msg = await asyncio.wait_for(
-                            sub.get_message(ignore_subscribe_messages=True, timeout=1.0),
-                            timeout=1.5,
-                        )
-                    except (asyncio.TimeoutError, Exception):
-                        pass
-
                 await self._evaluate()
-
-                await asyncio.sleep(1)
             except asyncio.CancelledError:
                 raise
             except Exception as e:
                 logger.error(f"[EVAL] 에러: {e}", exc_info=True)
-                await asyncio.sleep(1)
+            await asyncio.sleep(1)
 
     async def _evaluate(self):
         """메인 평가 — 후보 감지 → 리스크 → ML → 실행"""
