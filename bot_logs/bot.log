@@ -74,3 +74,6 @@
 2026-05-08 01:34:37 [ERROR] src.trading.executor: 포지션 사이즈 조회 실패: okx GET https://www.okx.com/api/v5/account/positions?instId=BTC-USDT-SWAP
 2026-05-08 02:30:18 [WARNING] src.data.ws_stream: OKX WS public 수신 끊김: no close frame received or sent → 재연결
 2026-05-08 02:50:38 [WARNING] src.data.ws_stream: OKX WS public 수신 끊김: no close frame received or sent → 재연결
+2026-05-08 03:00:55 [WARNING] src.trading.position_manager: 포지션 외부 종료 감지 (사이즈≈0) → 정리: BTC/USDT:USDT
+2026-05-08 03:00:58 [WARNING] src.trading.risk_manager: 손실 기록: -11.07% | 연패: 1
+2026-05-08 03:00:58 [ERROR] src.trading.position_manager: ML 콜백 에러: name 'MAX_DAILY_LOSS_PCT' is not defined
