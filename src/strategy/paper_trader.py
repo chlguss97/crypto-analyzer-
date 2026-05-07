@@ -878,6 +878,36 @@ class PaperTrader:
             "loss_streak": self._loss_streak,
         })
 
+        # ── AdaptiveParams TP/SL 데이터 (paper도 기여) ──
+        if hasattr(self, '_adaptive') and self._adaptive:
+            ep = pos.entry_price
+            tp1_dist = abs(pos.tp1_price - ep) if pos.tp1_price > 0 else 1
+            hold_min = pos.hold_minutes()
+            if pos.direction == "long":
+                reach = (pos.best_price - ep) / tp1_dist * 100 if tp1_dist > 0 else 0
+                mae_pct = (ep - pos.worst_price) / ep * 100 if pos.worst_price > 0 else 0
+            else:
+                reach = (ep - pos.best_price) / tp1_dist * 100 if tp1_dist > 0 else 0
+                mae_pct = (pos.worst_price - ep) / ep * 100 if pos.worst_price > 0 else 0
+            try:
+                await self._adaptive.record_trade({
+                    "direction": pos.direction,
+                    "pnl_pct": net_pnl_pct,
+                    "hold_min": hold_min,
+                    "exit_reason": reason,
+                    "tp1_reach_pct": round(reach, 1),
+                    "mae_pct": round(mae_pct, 4),
+                    "time_to_first_profit_sec": 0,
+                    "entry_atr": getattr(pos, 'entry_atr', 0.3),
+                    "entry_h1_trend": "unknown",
+                    "entry_h4_trend": "unknown",
+                    "regime": regime,
+                    "entry_ts": pos.entry_time,
+                    "leverage": pos.leverage,
+                })
+            except Exception:
+                pass
+
     # ══════════════════════════════════════════
     #  Shadow (미진입 추적)
     # ══════════════════════════════════════════

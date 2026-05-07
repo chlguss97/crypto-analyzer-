@@ -158,6 +158,7 @@ class CryptoAnalyzer:
             setup_tracker=self.setup_tracker,
         )
         await self.paper_trader.restore_from_db()
+        self.paper_trader._adaptive = self.adaptive  # TP/SL 데이터 공유
         logger.info(f"페이퍼 잔고: ${self.paper_trader.balance:,.0f}")
 
     # ══════════════════════════════════════════════════

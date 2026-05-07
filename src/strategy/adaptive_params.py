@@ -314,7 +314,7 @@ class AdaptiveParams:
     """거래 결과 기반 수치 자동 보정 엔진"""
 
     MIN_TRADES_PHASE1 = 30   # Direction + EntryQuality 활성
-    MIN_TRADES_PHASE2 = 100  # + TP/SL Calibrator
+    MIN_TRADES_PHASE2 = 10   # + TP/SL Calibrator (paper 데이터 포함, 빠른 보정)
     MIN_TRADES_PHASE3 = 300  # 전체 활성
 
     def __init__(self, config: dict = None, redis=None):
