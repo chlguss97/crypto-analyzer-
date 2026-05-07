@@ -181,6 +181,9 @@ class CryptoAnalyzer:
         daily_pnl = self.risk_manager.get_daily_pnl()
         allowed, reason = self.risk_manager.is_trading_allowed()
         if not allowed:
+            if now - getattr(self, "_last_gate_log", 0) >= 60:
+                self._last_gate_log = now
+                logger.info(f"[EVAL] 리스크 게이트 차단: {reason}")
             return
 
         # 4. 포지션 1개 제한
