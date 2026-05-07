@@ -357,25 +357,25 @@ class CryptoAnalyzer:
         if self.paper_lab:
             await self.paper_lab.on_candidate(candidate, regime_now)
 
-        # ── 레짐-방향 게이트 (shadow+paper는 통과, 실거래만 차단) ──
-        if not self._is_regime_aligned(regime_now, direction, ctype):
-            logger.info(f"[GATE] 레짐 불일치 차단: {regime_now} vs {direction} ({ctype} score={strength:.2f})")
-            return
-
-        # ── 상위 TF 추세 게이트 (1h+4h EMA20 방향 일치 필수) ──
-        htf_block, htf_reason = self._check_htf_trend(df_1h, df_4h, direction)
-        # 추세 캐시 (AdaptiveParams 진입 추적용)
+        # ── 확신도 점수 (0~5점 → 사이즈 비율) ──
         self._cached_h1_trend = self._get_tf_trend(df_1h)
         self._cached_h4_trend = self._get_tf_trend(df_4h)
-        if htf_block:
-            logger.info(f"[GATE] 상위TF 역행 차단: {direction} vs {htf_reason}")
+        conviction, conv_detail = self._calc_conviction(
+            regime_now, direction, ctype, strength, candidate, df_1h, df_4h
+        )
+
+        if conviction <= 0:
+            logger.info(f"[GATE] 확신도 0점 차단: {direction} {ctype} | {conv_detail}")
             return
 
         # 실거래
         if autotrading:
             balance = await self.executor.get_balance()
             if balance > 0:
-                executed = await self._execute(candidate, balance, regime_now, daily_pnl)
+                executed = await self._execute(
+                    candidate, balance, regime_now, daily_pnl,
+                    conviction=conviction
+                )
                 if executed and sig_id:
                     await self.db.update_signal_entry(sig_id)
 
@@ -439,8 +439,72 @@ class CryptoAnalyzer:
             return True, " ".join(reasons)
         return False, ""
 
+    def _calc_conviction(self, regime: str, direction: str, ctype: str,
+                         strength: float, candidate: dict,
+                         df_1h=None, df_4h=None) -> tuple[int, str]:
+        """확신도 점수 계산 (0~5점). 0점=차단, 1점+=진입(사이즈 비례)."""
+        score = 0
+        details = []
+
+        # +1: 1h 추세 일치
+        h1 = self._cached_h1_trend
+        expected = "UP" if direction == "long" else "DOWN"
+        if h1 == expected:
+            score += 1
+            details.append("1h:O")
+        elif h1 != "FLAT" and h1 != "unknown" and h1 != expected:
+            details.append("1h:X")
+        else:
+            details.append("1h:-")
+
+        # +1: 4h 추세 일치
+        h4 = self._cached_h4_trend
+        if h4 == expected:
+            score += 1
+            details.append("4h:O")
+        elif h4 != "FLAT" and h4 != "unknown" and h4 != expected:
+            details.append("4h:X")
+        else:
+            details.append("4h:-")
+
+        # +1: 15m 레짐 일치
+        regime_ok = self._is_regime_aligned(regime, direction, ctype)
+        if regime_ok:
+            score += 1
+            details.append("reg:O")
+        else:
+            details.append("reg:X")
+
+        # +1: strength >= 0.8
+        if strength >= 0.8:
+            score += 1
+            details.append(f"str:{strength:.1f}")
+        else:
+            details.append(f"str:{strength:.1f}")
+
+        # +1: CVD 방향 지지
+        cvd_matches = candidate.get("features_raw", {}).get("cvd_matches", 0)
+        if cvd_matches >= 1:
+            score += 1
+            details.append("cvd:O")
+        else:
+            details.append("cvd:X")
+
+        # 완전 역행 차단 (1h AND 4h 모두 반대)
+        if h1 == ("DOWN" if direction == "long" else "UP") and \
+           h4 == ("DOWN" if direction == "long" else "UP"):
+            score = 0  # 강제 0점
+
+        detail_str = " ".join(details) + f" → {score}점"
+        logger.info(f"[CONVICTION] {direction} {ctype}: {detail_str}")
+        return score, detail_str
+
+    # 확신도 → 사이즈 배수 변환
+    CONVICTION_MULT = {0: 0.0, 1: 0.15, 2: 0.30, 3: 0.60, 4: 0.80, 5: 1.0}
+
     async def _execute(self, candidate: dict, balance: float,
-                       regime: str, daily_pnl: float) -> bool:
+                       regime: str, daily_pnl: float,
+                       conviction: int = 5) -> bool:
         """후보 → OKX 주문 실행"""
         direction = candidate["direction"]
         ctype = candidate["type"]
@@ -468,15 +532,17 @@ class CryptoAnalyzer:
         lev_result = self.leverage_calc.calculate(grade, atr_pct, self.risk_manager.get_streak())
         leverage = lev_result["leverage"]
 
-        # SL/TP 거리
-        sl_dist = price * (sl_margin_pct / leverage / 100)
-        min_sl = price * 0.005  # 0.5% 최소 SL
+        # SL/TP 거리 (AdaptiveParams 보정 적용)
+        adaptive_sl = self.adaptive.get_sl_margin_pct()
+        sl_margin_used = adaptive_sl if adaptive_sl != 5.0 else sl_margin_pct
+        sl_dist = price * (sl_margin_used / leverage / 100)
+        min_sl = price * 0.005
         sl_dist = max(sl_dist, min_sl)
 
-        # TP1: ATR 기반 (하한 0.25%, 상한 0.80%)
-        atr_tp1 = price * min(max(atr_pct * 1.5 / 100, 0.0025), 0.008)
+        # TP1: ATR 기반 (AdaptiveParams 보정 적용)
+        adaptive_tp_mult = self.adaptive.get_tp_mult(regime)
+        atr_tp1 = price * min(max(atr_pct * adaptive_tp_mult / 100, 0.0025), 0.008)
         tp1_dist = atr_tp1
-        # RR 최소 1.3 보장: TP1 >= SL × 1.3
         if tp1_dist < sl_dist * 1.3:
             tp1_dist = sl_dist * 1.3
 
@@ -528,17 +594,26 @@ class CryptoAnalyzer:
             size_mult *= 0.5
             logger.info(f"[EXEC] 수익 보호 발동 (+{daily_pnl_now:.1f}%) → 마진 50%")
 
-        margin = balance * margin_pct * size_mult
+        # 확신도 사이즈 배수
+        conviction_mult = self.CONVICTION_MULT.get(conviction, 0.15)
+        # AdaptiveParams Phase 1+ 보정 (데이터 기반 override)
+        adaptive_mult = self.adaptive.get_entry_size_mult(
+            direction, self._cached_h1_trend, self._cached_h4_trend, regime
+        )
+        if adaptive_mult < 1.0 and adaptive_mult > 0:
+            conviction_mult = min(conviction_mult, adaptive_mult)
+
+        margin = balance * margin_pct * size_mult * conviction_mult
         if margin <= 0:
             return False
 
-        # OKX 사이즈
+        # OKX 사이즈 (최소 0.01 BTC 보장)
         raw_size = margin * leverage / price
         size_btc = math.floor(raw_size / 0.01) * 0.01
-        size_btc = round(size_btc, 4)
-        if size_btc < 0.01:
-            logger.info(f"[EXEC] 사이즈 부족 ({size_btc} BTC)")
-            return False
+        size_btc = max(round(size_btc, 4), 0.01)  # 확신 낮아도 최소 진입
+
+        logger.info(f"[SIZE] conviction={conviction}({conviction_mult:.0%}) "
+                    f"adaptive={adaptive_mult:.2f} → {size_btc} BTC (${margin:.0f})")
 
         # strength >= 1.5: market 허용 (체결 우선, taker 0.05%)
         # strength < 1.5: post-only (maker 0.02%, 미체결 시 포기)
