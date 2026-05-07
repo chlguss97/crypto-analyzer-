@@ -357,8 +357,10 @@ class OrderExecutor:
         """미체결/부분체결 처리"""
         try:
             order = await self.exchange.fetch_order(order_id, self.symbol)
-            filled = order.get("filled", 0)
-            fill_ratio = filled / original_size if original_size > 0 else 0
+            filled = order.get("filled", 0)  # ccxt: contracts 단위
+            # original_size는 BTC → contracts로 변환하여 비교
+            original_contracts = self._btc_to_contracts(original_size)
+            fill_ratio = filled / original_contracts if original_contracts > 0 else 0
 
             if fill_ratio >= 0.7:
                 # 70% 이상 체결 → 나머지 취소, 체결분으로 진행

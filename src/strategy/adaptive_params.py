@@ -212,10 +212,9 @@ class SLCalibrator:
         idx = int(len(sorted_mae) * 0.95)
         mae_95 = sorted_mae[min(idx, len(sorted_mae) - 1)]
 
-        # SL = MAE_95 × 1.2 × leverage (마진% 단위)
-        optimal_pct = mae_95 * 1.2 * leverage / 100 * leverage
-        # 실제로는: optimal_sl_price_pct = mae_95_atr × 1.2 × atr → margin_pct = price_pct × leverage
-        # 단순화: optimal_margin_pct = mae_95 × 1.2
+        # mae_95 = ATR 배수 (예: 1.5 = ATR의 1.5배 역행)
+        # SL margin% = mae_95 × 1.2 (여유 20%)
+        # 예: mae_95=3.0 → SL margin 3.6% → 가격거리 = 3.6/15/100 = 0.24%
         optimal_pct = mae_95 * 1.2
 
         new_pct = max(3.0, min(8.0, optimal_pct))
@@ -439,7 +438,8 @@ class AdaptiveParams:
                 self.sl_cal.winning_mae_atr.add(v)
 
             for k, vals in state.get("direction_results", {}).items():
-                key = eval(k) if k.startswith("(") else k
+                import ast as _ast
+                key = _ast.literal_eval(k) if k.startswith("(") else k
                 self.direction.results[key] = vals
             for k, vals in state.get("regime_results", {}).items():
                 self.regime.results[k] = vals

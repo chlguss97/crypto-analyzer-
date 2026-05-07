@@ -329,10 +329,12 @@ class CryptoAnalyzer:
         signal_record["ml_go"] = 1 if go else 0
         signal_record["ml_prob"] = round(prob, 4) if prob >= 0 else 0.0
 
-        # JSONL 기록 (모든 후보 — Go/NoGo 무관)
+        # 추세 캐시 (JSONL + 확신도에서 공유)
         from src.monitoring.trade_logger import _append_jsonl
-        h1_trend = self._get_tf_trend(df_1h)
-        h4_trend = self._get_tf_trend(df_4h)
+        self._cached_h1_trend = self._get_tf_trend(df_1h)
+        self._cached_h4_trend = self._get_tf_trend(df_4h)
+        h1_trend = self._cached_h1_trend
+        h4_trend = self._cached_h4_trend
         _append_jsonl({
             "type": "candidate",
             "candidate_type": ctype,
@@ -349,6 +351,10 @@ class CryptoAnalyzer:
             "vol_ratio": round(features.get("vol_ratio", 0), 2),
         })
 
+        # reject_reason 사전 설정 (DB insert 전에)
+        if not go:
+            signal_record["reject_reason"] = "ml_nogo"
+
         # ── 기록 ──
         sig_id = await self.db.insert_signal(signal_record)
 
@@ -357,7 +363,6 @@ class CryptoAnalyzer:
             await self.paper_lab.on_candidate(candidate, regime_now)
 
         if not go:
-            signal_record["reject_reason"] = "ml_nogo"
             return
 
         # ── 수익 보호 ──
@@ -370,8 +375,6 @@ class CryptoAnalyzer:
         autotrading = (await self.redis.get("sys:autotrading") or "off") == "on"
 
         # ── 확신도 점수 (0~5점 → 사이즈 비율) ──
-        self._cached_h1_trend = self._get_tf_trend(df_1h)
-        self._cached_h4_trend = self._get_tf_trend(df_4h)
         conviction, conv_detail = self._calc_conviction(
             regime_now, direction, ctype, strength, candidate, df_1h, df_4h
         )
