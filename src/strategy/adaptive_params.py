@@ -313,9 +313,9 @@ class TimeOfDayTracker:
 class AdaptiveParams:
     """거래 결과 기반 수치 자동 보정 엔진"""
 
-    MIN_TRADES_PHASE1 = 30   # Direction + EntryQuality 활성
-    MIN_TRADES_PHASE2 = 10   # + TP/SL Calibrator (paper 데이터 포함, 빠른 보정)
-    MIN_TRADES_PHASE3 = 300  # 전체 활성
+    MIN_TRADES_TP_SL = 10    # TP/SL Calibrator (paper+shadow 빠른 보정)
+    MIN_TRADES_DIRECTION = 30  # Direction + EntryQuality
+    MIN_TRADES_FULL = 300    # 전체 활성 (Hold/Time)
 
     def __init__(self, config: dict = None, redis=None):
         self.config = config or {}
@@ -358,20 +358,20 @@ class AdaptiveParams:
 
     def get_tp_mult(self, regime: str = "other") -> float:
         """TP1 ATR 배수 (Phase 2+에서 보정)"""
-        if self.total_trades < self.MIN_TRADES_PHASE2:
+        if self.total_trades < self.MIN_TRADES_TP_SL:
             return 1.5  # 기본값
         return self.tp_cal.get_mult(regime)
 
     def get_sl_margin_pct(self) -> float:
         """SL 마진% (Phase 2+에서 보정)"""
-        if self.total_trades < self.MIN_TRADES_PHASE2:
+        if self.total_trades < self.MIN_TRADES_TP_SL:
             return 5.0  # 기본값
         return self.sl_cal.get_sl_margin_pct()
 
     def get_entry_size_mult(self, direction: str, h1_trend: str, h4_trend: str,
                             regime: str) -> float:
         """진입 사이즈 배수 (0=차단). Phase 1+에서 활성."""
-        if self.total_trades < self.MIN_TRADES_PHASE1:
+        if self.total_trades < self.MIN_TRADES_DIRECTION:
             return 1.0  # 기본값 (기존 하드코딩 게이트가 처리)
 
         d_mult = self.direction.get_size_mult(direction, h1_trend, h4_trend)
@@ -383,7 +383,7 @@ class AdaptiveParams:
 
     def should_tighten_trail(self, hold_min: float, pnl_pct: float) -> bool:
         """보유시간 기반 트레일 축소 (Phase 3+)"""
-        if self.total_trades < self.MIN_TRADES_PHASE3:
+        if self.total_trades < self.MIN_TRADES_FULL:
             return False
         return self.hold_opt.should_tighten_trail(hold_min, pnl_pct)
 
@@ -391,9 +391,9 @@ class AdaptiveParams:
         """대시보드/텔레그램용 상태"""
         return {
             "total_trades": self.total_trades,
-            "phase": ("collect" if self.total_trades < self.MIN_TRADES_PHASE1
-                      else "phase1" if self.total_trades < self.MIN_TRADES_PHASE2
-                      else "phase2" if self.total_trades < self.MIN_TRADES_PHASE3
+            "phase": ("collect" if self.total_trades < self.MIN_TRADES_TP_SL
+                      else "tp_sl" if self.total_trades < self.MIN_TRADES_DIRECTION
+                      else "direction" if self.total_trades < self.MIN_TRADES_FULL
                       else "full"),
             "tp_mult": round(self.tp_cal.current_mult, 3),
             "sl_pct": round(self.sl_cal.current_pct, 1),

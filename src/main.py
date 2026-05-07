@@ -333,29 +333,25 @@ class CryptoAnalyzer:
             },
         })
 
+        # ── 기록 ──
+        sig_id = await self.db.insert_signal(signal_record)
+
+        # PaperLab (A/B 테스트: ML/게이트 무관하게 모든 후보 진입)
+        if self.paper_lab:
+            await self.paper_lab.on_candidate(candidate, regime_now)
+
         if not go:
             signal_record["reject_reason"] = "ml_nogo"
-            sig_id = await self.db.insert_signal(signal_record)
             return
 
         # ── 수익 보호 ──
         profit_protect = self.config.get("risk", {}).get("profit_protect_pct", 0.03) * 100
         profit_stop = self.config.get("risk", {}).get("profit_stop_pct", 0.05) * 100
         if daily_pnl >= profit_stop:
-            signal_record["reject_reason"] = "profit_stop"
-            await self.db.insert_signal(signal_record)
             return
-        # profit_protect 상태에서는 마진 축소로 처리 (아래 _execute에서)
 
         # ── 자동매매 확인 ──
         autotrading = (await self.redis.get("sys:autotrading") or "off") == "on"
-
-        # ── 기록 + 실행 ──
-        sig_id = await self.db.insert_signal(signal_record)
-
-        # PaperLab (A/B 테스트: 게이트 무관하게 모든 후보 진입)
-        if self.paper_lab:
-            await self.paper_lab.on_candidate(candidate, regime_now)
 
         # ── 확신도 점수 (0~5점 → 사이즈 비율) ──
         self._cached_h1_trend = self._get_tf_trend(df_1h)
@@ -816,7 +812,7 @@ class CryptoAnalyzer:
                     # barrier 계산
                     hm_cfg = self.config.get("hold_modes", {}).get(ctype, {})
                     sl_pct = hm_cfg.get("sl_margin_pct", 5.0)
-                    max_hold = hm_cfg.get("max_hold_min", 45) * 60
+                    max_hold = hm_cfg.get("max_hold_min", 240) * 60  # default 4시간
 
                     leverage = 15
                     sl_dist = sig_price * (sl_pct / leverage / 100)

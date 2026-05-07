@@ -711,7 +711,7 @@ async def get_engine_overview():
     ml_stats = {}
     try:
         from src.strategy.ml_engine import MLDecisionEngine
-        ml_stats = FlowML().get_stats()
+        ml_stats = MLDecisionEngine().get_stats()
     except Exception:
         pass
 
