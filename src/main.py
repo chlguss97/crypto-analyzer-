@@ -40,7 +40,7 @@ from src.monitoring.trade_logger import TradeLogger
 from src.strategy.signal_tracker import SignalTracker
 from src.strategy.setup_tracker import SetupTracker
 from src.engine.regime_detector import MarketRegimeDetector
-from src.strategy.paper_trader import PaperTrader
+from src.strategy.paper_lab import PaperLab
 
 import os
 os.environ["TZ"] = "Asia/Seoul"
@@ -69,7 +69,7 @@ logger = logging.getLogger("CryptoAnalyzer")
 
 
 class CryptoAnalyzer:
-    """메인 봇 — CandidateDetector + ML DecisionEngine + PaperTrader"""
+    """메인 봇 — CandidateDetector + ML DecisionEngine + PaperLab"""
 
     def __init__(self):
         load_env()
@@ -105,8 +105,8 @@ class CryptoAnalyzer:
         self.signal_tracker = SignalTracker()
         self.setup_tracker = SetupTracker()
 
-        # 페이퍼 트레이더
-        self.paper_trader = None
+        # 페이퍼 랩 (A/B 테스터)
+        self.paper_lab = None
 
         # 상태
         self._running = False
@@ -149,17 +149,9 @@ class CryptoAnalyzer:
         await self.candle_collector.backfill_all()
         logger.info("캔들 백필 완료")
 
-        # PaperTrader
-        self.paper_trader = PaperTrader(
-            db=self.db, redis=self.redis,
-            flow_ml=self.ml_engine,
-            regime_detector=self.regime_detector,
-            signal_tracker=self.signal_tracker,
-            setup_tracker=self.setup_tracker,
-        )
-        await self.paper_trader.restore_from_db()
-        self.paper_trader._adaptive = self.adaptive  # TP/SL 데이터 공유
-        logger.info(f"페이퍼 잔고: ${self.paper_trader.balance:,.0f}")
+        # PaperLab (A/B 파라미터 테스터)
+        self.paper_lab = PaperLab(config=self.config, adaptive=self.adaptive)
+        logger.info(f"PaperLab: {len(self.paper_lab.variants)} variants 활성")
 
     # ══════════════════════════════════════════════════
     #  메인 평가 루프 — 새 구조
@@ -361,9 +353,9 @@ class CryptoAnalyzer:
         # ── 기록 + 실행 ──
         sig_id = await self.db.insert_signal(signal_record)
 
-        # 페이퍼 (벤치마크: 게이트 무관하게 모든 후보 진입)
-        if self.paper_trader:
-            await self.paper_trader.try_candidate_entry(candidate, regime_now)
+        # PaperLab (A/B 테스트: 게이트 무관하게 모든 후보 진입)
+        if self.paper_lab:
+            await self.paper_lab.on_candidate(candidate, regime_now)
 
         # ── 레짐-방향 게이트 (shadow+paper는 통과, 실거래만 차단) ──
         if not self._is_regime_aligned(regime_now, direction, ctype):
@@ -898,8 +890,8 @@ class CryptoAnalyzer:
                     price = float(price_str)
                     if self.position_manager.positions:
                         await self.position_manager.check_positions(price)
-                    if self.paper_trader and (self.paper_trader.positions or self.paper_trader.shadows):
-                        await self.paper_trader.check_positions(price)
+                    if self.paper_lab and self.paper_lab.has_positions:
+                        await self.paper_lab.check_positions(price)
 
                 # 킬스위치
                 bot_status = await self.redis.get("sys:bot_status")
@@ -930,7 +922,7 @@ class CryptoAnalyzer:
                 try:
                     ml_stats = self.ml_engine.get_stats()
                     bal = await self.executor.get_balance()
-                    paper_bal = self.paper_trader.balance if self.paper_trader else 0
+                    paper_bal = self.paper_lab.balance if self.paper_lab else 0
                     sig_count = await self.db.get_signal_count(labeled_only=True)
 
                     report = (
@@ -960,8 +952,8 @@ class CryptoAnalyzer:
 
             # 스냅샷 (페이퍼 포함)
             try:
-                if self.paper_trader:
-                    await self.paper_trader._update_redis_state()
+                if self.paper_lab:
+                    await self.redis.set("lab:stats", json.dumps(self.paper_lab.get_stats()), ttl=300)
 
                 # 1시간마다 JSONL 기록
                 if _time.time() - getattr(self, "_last_snap_jsonl", 0) >= 3600:
@@ -976,8 +968,8 @@ class CryptoAnalyzer:
                         "daily_pnl": round(self.risk_manager.get_daily_pnl(), 2),
                         "positions": len(self.position_manager.positions),
                         "pending_algos": 0,
-                        "paper_balance": self.paper_trader.balance if self.paper_trader else 0,
-                        "paper_total": self.paper_trader._stats.get("total", 0) if self.paper_trader else 0,
+                        "paper_balance": self.paper_lab.balance if self.paper_lab else 0,
+                        "paper_total": sum(v.trades for v in self.paper_lab.variants) if self.paper_lab else 0,
                         "ml_phase": self.ml_engine.phase,
                         "ml_labeled": self.ml_engine.total_labeled,
                     })
@@ -1056,7 +1048,7 @@ class CryptoAnalyzer:
             await self.telegram._send(
                 f"\U0001f7e2 <b>CryptoAnalyzer v2 — Momentum Scalping</b>\n"
                 f"ML: Phase {self.ml_engine.phase} ({self.ml_engine.total_labeled} labeled)\n"
-                f"Real: ${bal:,.2f} | Paper: ${self.paper_trader.balance:,.0f}\n"
+                f"Real: ${bal:,.2f} | Lab: {sum(v.trades for v in self.paper_lab.variants)} trades\n"
                 f"Signals: Momentum + Breakout + Cascade"
             )
         except Exception:
