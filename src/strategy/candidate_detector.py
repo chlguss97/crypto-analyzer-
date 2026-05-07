@@ -97,6 +97,14 @@ class CandidateDetector:
             )
             candidates.append(cas)
 
+        # 4종: Drift (점진적 추세 — 단일 캔들은 작지만 누적 이동 큼)
+        dft = self._check_drift(df_5m, price, atr, vol_20avg)
+        if dft:
+            dft["features_raw"] = await self._build_raw_features(
+                df_5m, df_15m, df_1h, df_4h, df_1d, price, atr, atr_pct, flow, vol_20avg, dft["direction"], df_1m=df_1m
+            )
+            candidates.append(dft)
+
         if not candidates:
             # 약한 후보 감지 (shadow 전용 — ML 데이터 가속)
             weak = self._check_weak_momentum(df_5m, price, atr, vol_20avg)
@@ -366,6 +374,77 @@ class CandidateDetector:
             "hold_mode": "cascade",
             "liq_total": round(liq_total, 0),
             "liq_bias": round(bias, 2),
+        }
+
+    # ════════════════════════════════════════
+    #  후보 D: Drift (점진적 추세)
+    # ════════════════════════════════════════
+
+    def _check_drift(self, df_5m, price, atr, vol_20avg) -> dict | None:
+        """6캔들(30분) 누적 이동 감지 — 캔들 하나는 작지만 방향 일관.
+        급변이 아닌 "천천히 꾸준히" 움직이는 추세를 잡음.
+        """
+        # 최소 8봉 필요 (6봉 lookback + 현재봉 + 여유)
+        if df_5m is None or len(df_5m) < 8:
+            return None
+        if atr <= 0 or price <= 0:
+            return None
+
+        # 직전 완성 6봉 (iloc[-7:-1] = 7번째 전 ~ 2번째 전)
+        lookback = df_5m.iloc[-7:-1]
+        if len(lookback) < 6:
+            return None
+
+        # 1. 누적 이동
+        start_price = float(lookback.iloc[0]["open"])
+        end_price = float(lookback.iloc[-1]["close"])
+        drift = end_price - start_price
+        drift_abs = abs(drift)
+
+        # ATR × 1.0 이상 이동해야 함
+        if drift_abs < atr * 1.0:
+            return None
+
+        # 2. 방향 일관성: 6봉 중 4봉 이상 같은 방향
+        same_dir_count = 0
+        for _, c in lookback.iterrows():
+            body = float(c["close"]) - float(c["open"])
+            if drift > 0 and body > 0:
+                same_dir_count += 1
+            elif drift < 0 and body < 0:
+                same_dir_count += 1
+
+        if same_dir_count < 4:
+            return None
+
+        # 3. 마지막 캔들도 같은 방향 (반전 시작이면 진입 X)
+        last_candle = lookback.iloc[-1]
+        last_body = float(last_candle["close"]) - float(last_candle["open"])
+        if drift > 0 and last_body <= 0:
+            return None
+        if drift < 0 and last_body >= 0:
+            return None
+
+        # 4. 거래량: 평균의 0.5배 이상 (유동성 확인)
+        avg_vol_recent = 0
+        for _, c in lookback.iterrows():
+            avg_vol_recent += float(c["volume"])
+        avg_vol_recent /= 6
+        vol_ratio = avg_vol_recent / vol_20avg if vol_20avg > 0 else 0
+
+        if vol_ratio < 0.5:
+            return None
+
+        direction = "long" if drift > 0 else "short"
+        strength = round(drift_abs / atr, 2)  # ATR 대비 이동 크기
+
+        return {
+            "type": "drift",
+            "direction": direction,
+            "strength": min(5.0, strength),
+            "hold_mode": "momentum",
+            "vol_ratio": round(vol_ratio, 2),
+            "drift_pct": round(drift_abs / price * 100, 4),
         }
 
     # ════════════════════════════════════════
