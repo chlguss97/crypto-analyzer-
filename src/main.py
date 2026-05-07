@@ -359,6 +359,12 @@ class CryptoAnalyzer:
             logger.info(f"[GATE] 레짐 불일치 차단: {regime_now} vs {direction} ({ctype} score={strength:.2f})")
             return
 
+        # ── 상위 TF 추세 게이트 (1h+4h EMA20 방향 일치 필수) ──
+        htf_block, htf_reason = self._check_htf_trend(df_1h, df_4h, direction)
+        if htf_block:
+            logger.info(f"[GATE] 상위TF 역행 차단: {direction} vs {htf_reason}")
+            return
+
         # 페이퍼
         if self.paper_trader:
             await self.paper_trader.try_candidate_entry(candidate, regime_now)
@@ -396,6 +402,26 @@ class CryptoAnalyzer:
         if regime == "ranging" and ctype == "breakout":
             return False
         return True
+
+    def _check_htf_trend(self, df_1h, df_4h, direction: str) -> tuple[bool, str]:
+        """1h/4h EMA20 기반 추세 방향 체크. 역행 시 (True, reason) 반환."""
+        reasons = []
+        for label, df in [("1h", df_1h), ("4h", df_4h)]:
+            if df is None or len(df) < 25:
+                continue
+            closes = df["close"].astype(float).values
+            ema20 = closes[-20:].mean()  # SMA 근사 (빠른 계산)
+            price = closes[-1]
+            slope = (closes[-1] - closes[-5]) / closes[-5] * 100 if closes[-5] > 0 else 0
+
+            if direction == "long" and price < ema20 and slope < -0.05:
+                reasons.append(f"{label}=DOWN")
+            elif direction == "short" and price > ema20 and slope > 0.05:
+                reasons.append(f"{label}=UP")
+
+        if reasons:
+            return True, " ".join(reasons)
+        return False, ""
 
     async def _execute(self, candidate: dict, balance: float,
                        regime: str, daily_pnl: float) -> bool:
