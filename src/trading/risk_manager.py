@@ -6,15 +6,12 @@ from src.utils.helpers import load_config
 
 logger = logging.getLogger(__name__)
 
-# SPEC v2 손실 한도
-MAX_DAILY_LOSS_PCT = 10.0   # 일일 -10% (Phase A 데이터 수집)
-MAX_WEEKLY_LOSS_PCT = 10.0  # 주간 -10% (20%→10%)
-MAX_DRAWDOWN_PCT = 12.0     # DD -12%
-BOT_KILL_DRAWDOWN_PCT = 15.0  # DD -15%: 봇 완전 정지
+# 확신도 사이즈 시스템에서는 게이트 최소화 — 사이즈가 리스크 관리
+BOT_KILL_DRAWDOWN_PCT = 20.0  # DD -20%: 봇 완전 정지 (유일한 DD 게이트)
 
 
 class RiskManager:
-    """리스크 관리: 일일/주간 한도, 드로다운, 연패 쿨다운"""
+    """리스크 관리: 봇킬 DD + 포지션/간격 제한 (확신도 사이즈가 주 리스크 관리)"""
 
     def __init__(self, redis_client: RedisClient, executor=None):
         self.redis = redis_client
@@ -253,20 +250,11 @@ class RiskManager:
         return self._state["trade_count_today"]
 
     def is_trading_allowed(self) -> tuple[bool, str]:
-        """매매 가능 여부 판단"""
-        # 일일 손실 -10%
-        if self._state["daily_pnl_pct"] <= -MAX_DAILY_LOSS_PCT:
-            return False, f"일일 손실 한도 (-10%): {self._state['daily_pnl_pct']:.2f}%"
-
-        # 드로다운
+        """매매 가능 여부 판단 — 봇킬 DD만 체크 (나머지는 확신도 사이즈가 관리)"""
+        # 봇 킬: DD -20% → 완전 정지
         peak = self._state["peak_balance"]
         current = self._state["current_balance"]
-        if peak > 0 and (peak - current) / peak >= self.risk_cfg["max_drawdown"]:
-            return False, "최대 드로다운"
-
-        # 쿨다운
-        if int(time.time()) < self._state["cooldown_until"]:
-            remaining = self._state["cooldown_until"] - int(time.time())
-            return False, f"쿨다운 중 ({remaining//60}분 남음)"
+        if peak > 0 and (peak - current) / peak >= BOT_KILL_DRAWDOWN_PCT / 100:
+            return False, f"봇 킬 DD (-{BOT_KILL_DRAWDOWN_PCT}%)"
 
         return True, "OK"

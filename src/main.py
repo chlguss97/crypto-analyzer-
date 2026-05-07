@@ -175,9 +175,7 @@ class CryptoAnalyzer:
         """메인 평가 — 후보 감지 → 리스크 → ML → 실행"""
         now = _time.time()
 
-        # ── 리스크 게이트 ──
-
-        # 1~3. 일일/주간 손실 + DD + 쿨다운 (risk_manager 통합)
+        # ── 리스크 게이트 (3개만: 봇킬DD + 포지션 + 간격) ──
         daily_pnl = self.risk_manager.get_daily_pnl()
         allowed, reason = self.risk_manager.is_trading_allowed()
         if not allowed:
@@ -186,11 +184,9 @@ class CryptoAnalyzer:
                 logger.info(f"[EVAL] 리스크 게이트 차단: {reason}")
             return
 
-        # 4. 포지션 1개 제한
         if self.position_manager.positions:
             return
 
-        # 5. 최소 진입 간격 30초
         min_interval = self.config.get("risk", {}).get("min_entry_interval_sec", 30)
         if now - self._last_trade_time < min_interval:
             return
