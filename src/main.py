@@ -360,7 +360,11 @@ class CryptoAnalyzer:
         # ── 기록 + 실행 ──
         sig_id = await self.db.insert_signal(signal_record)
 
-        # ── 레짐-방향 게이트 (shadow는 통과, paper+실거래만 차단) ──
+        # 페이퍼 (벤치마크: 게이트 무관하게 모든 후보 진입)
+        if self.paper_trader:
+            await self.paper_trader.try_candidate_entry(candidate, regime_now)
+
+        # ── 레짐-방향 게이트 (shadow+paper는 통과, 실거래만 차단) ──
         if not self._is_regime_aligned(regime_now, direction, ctype):
             logger.info(f"[GATE] 레짐 불일치 차단: {regime_now} vs {direction} ({ctype} score={strength:.2f})")
             return
@@ -373,10 +377,6 @@ class CryptoAnalyzer:
         if htf_block:
             logger.info(f"[GATE] 상위TF 역행 차단: {direction} vs {htf_reason}")
             return
-
-        # 페이퍼
-        if self.paper_trader:
-            await self.paper_trader.try_candidate_entry(candidate, regime_now)
 
         # 실거래
         if autotrading:

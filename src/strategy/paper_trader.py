@@ -253,14 +253,7 @@ class PaperTrader:
         if direction == "neutral":
             return None
 
-        # ── paper는 벤치마크용 — 게이트 없음 (모든 후보 진입) ──
-
-        # ── ML Go/NoGo ──
-        features = candidate.get("features_raw", {})
-        if self.flow_ml:
-            go, prob = self.flow_ml.decide(features)
-            if not go:
-                return None
+        # ── paper는 벤치마크용 — 모든 게이트/필터 없음 ──
 
         # ── 사이징 ──
         hold_mode = candidate.get("hold_mode", "momentum")
@@ -304,18 +297,6 @@ class PaperTrader:
             tp1 = current_price - tp1_dist
             tp2 = current_price - sl_dist * tp2_mult
             tp3 = current_price - sl_dist * tp3_mult
-
-        # 모멘텀 소진 체크
-        recent_move_pct = candidate.get("recent_move_pct", 0)
-        tp1_pct = tp1_dist / current_price * 100
-        if recent_move_pct > tp1_pct * 0.5 and recent_move_pct > 0:
-            return None
-
-        # 수수료 필터
-        fee_cost = self.FEE_MAKER * 2 * leverage * 100
-        tp1_gain = tp1_dist / current_price * leverage * 100
-        if tp1_gain <= fee_cost:
-            return None
 
         # 마진
         margin_pct = self.config.get("risk", {}).get("margin_pct", 0.40)
