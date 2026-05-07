@@ -83,3 +83,5 @@
 2026-05-08 04:29:47 [WARNING] src.data.ws_stream: OKX WS public 수신 끊김: no close frame received or sent → 재연결
 2026-05-08 05:02:23 [WARNING] src.data.ws_stream: OKX WS business 수신 끊김: no close frame received or sent → 재연결
 2026-05-08 05:21:55 [WARNING] src.data.ws_stream: OKX WS public 수신 끊김: no close frame received or sent → 재연결
+2026-05-08 07:12:46 [WARNING] src.trading.position_manager: 포지션 외부 종료 감지 (사이즈≈0) → 정리: BTC/USDT:USDT
+2026-05-08 07:12:49 [ERROR] src.trading.position_manager: ML 콜백 에러: name 'MAX_DAILY_LOSS_PCT' is not defined
