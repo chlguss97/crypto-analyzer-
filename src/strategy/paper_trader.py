@@ -253,21 +253,9 @@ class PaperTrader:
         if direction == "neutral":
             return None
 
-        # ── 리스크 게이트 (축소) ──
-        daily_pnl_pct = (self._daily_pnl_usdt / self.balance * 100) if self.balance > 0 else 0
-        if daily_pnl_pct <= -5.0:  # SPEC v2: -5%
-            return None
-        if now < self._cooldown_until:
-            return None
+        # ── 리스크 게이트 (paper는 벤치마크용 — 포지션 제한만) ──
         if len(self.positions) >= self.max_positions:
             return None
-        if now - self._last_trade_time < 30:  # 30초 간격
-            return None
-
-        # 같은 방향 포지션 중복 방지
-        for pos in self.positions.values():
-            if pos.direction == direction:
-                return None
 
         # ── ML Go/NoGo ──
         features = candidate.get("features_raw", {})
