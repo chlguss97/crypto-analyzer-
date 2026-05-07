@@ -78,20 +78,15 @@ class TradeLogger:
 
     def log_entry(self, direction: str, grade: str, score: float,
                   entry_price: float, sl_price: float, leverage: int,
-                  margin: float, signals: dict = None):
+                  margin: float, tp1_price: float = 0,
+                  conviction: int = 0, conviction_mult: float = 1.0,
+                  h1_trend: str = "?", h4_trend: str = "?",
+                  regime: str = "?"):
         self.logger.info(
             f"ENTRY | {grade} {direction.upper()} | "
-            f"${entry_price:,.1f} | SL ${sl_price:,.1f} | "
-            f"{leverage}x | margin ${margin:,.0f} | score {score:.1f}"
+            f"${entry_price:,.1f} | SL ${sl_price:,.1f} | TP1 ${tp1_price:,.1f} | "
+            f"{leverage}x | ${margin:,.0f} | conv={conviction}({conviction_mult:.0%})"
         )
-        if signals:
-            active = {
-                k: f"{v.get('direction','?')}({v.get('strength',0):.1f})"
-                for k, v in signals.items()
-                if v.get("strength", 0) > 0
-            }
-            self.logger.debug(f"SIGNALS | {active}")
-        # JSONL 영구 기록 (DB 손상 무관)
         _append_jsonl({
             "type": "entry",
             "direction": direction,
@@ -99,8 +94,14 @@ class TradeLogger:
             "score": round(float(score), 2),
             "entry_price": round(float(entry_price), 1),
             "sl_price": round(float(sl_price), 1),
+            "tp1_price": round(float(tp1_price), 1),
             "leverage": int(leverage),
             "margin": round(float(margin), 2),
+            "conviction": conviction,
+            "conviction_mult": round(conviction_mult, 2),
+            "h1_trend": h1_trend,
+            "h4_trend": h4_trend,
+            "regime": regime,
         })
 
     def log_exit(self, direction: str, exit_reason: str,

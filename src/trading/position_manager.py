@@ -1498,9 +1498,10 @@ class PositionManager:
                     pos.direction, reason, pos.entry_price, exit_price,
                     pnl_pct, pnl_usdt, pos.hold_minutes, pos.total_fee,
                     grade=pos.grade, score=pos.score, leverage=pos.leverage,
-                    setup=pos.signals_snapshot.get("setup") if isinstance(pos.signals_snapshot, dict) else None,
                     runner_mode=pos.runner_mode, remaining_size=round(pos.remaining_size, 6),
                     original_size=round(pos.size, 6),
+                    h1_trend=pos.entry_h1_trend, h4_trend=pos.entry_h4_trend,
+                    regime=pos.params_snapshot.get("regime", "?"),
                 )
             except Exception as e:
                 logger.error(f"trade_logger.log_exit 실패: {e}")

@@ -315,6 +315,8 @@ class CryptoAnalyzer:
 
         # JSONL 기록 (모든 후보 — Go/NoGo 무관)
         from src.monitoring.trade_logger import _append_jsonl
+        h1_trend = self._get_tf_trend(df_1h)
+        h4_trend = self._get_tf_trend(df_4h)
         _append_jsonl({
             "type": "candidate",
             "candidate_type": ctype,
@@ -322,15 +324,13 @@ class CryptoAnalyzer:
             "strength": round(strength, 2),
             "price": round(candidate["price"], 1),
             "ml_go": 1 if go else 0,
-            "ml_prob": round(prob, 4) if prob >= 0 else -1,
             "ml_phase": self.ml_engine.phase,
             "regime": regime_now,
-            "daily_pnl": round(daily_pnl, 2),
-            "features_summary": {
-                "cvd_matches": features.get("cvd_matches", 0),
-                "vol_ratio": features.get("vol_ratio", 0),
-                "adx": features.get("adx", 0),
-            },
+            "h1_trend": h1_trend,
+            "h4_trend": h4_trend,
+            "atr_pct": round(candidate.get("atr_pct", 0), 4),
+            "cvd_matches": features.get("cvd_matches", 0),
+            "vol_ratio": round(features.get("vol_ratio", 0), 2),
         })
 
         # ── 기록 ──
@@ -362,6 +362,16 @@ class CryptoAnalyzer:
 
         if conviction <= 0:
             logger.info(f"[GATE] 확신도 0점 차단: {direction} {ctype} | {conv_detail}")
+            _append_jsonl({
+                "type": "gate_block",
+                "reason": "conviction_0",
+                "direction": direction,
+                "candidate_type": ctype,
+                "detail": conv_detail,
+                "regime": regime_now,
+                "h1_trend": self._cached_h1_trend,
+                "h4_trend": self._cached_h4_trend,
+            })
             return
 
         # 실거래
@@ -651,8 +661,13 @@ class CryptoAnalyzer:
             try:
                 self.trade_logger.log_entry(
                     direction, ctype.upper(), strength,
-                    pos.entry_price, pos.sl_price,
-                    leverage, margin
+                    pos.entry_price, pos.sl_price, leverage, margin,
+                    tp1_price=pos.tp1_price,
+                    conviction=conviction,
+                    conviction_mult=self.CONVICTION_MULT.get(conviction, 1.0),
+                    h1_trend=self._cached_h1_trend,
+                    h4_trend=self._cached_h4_trend,
+                    regime=regime,
                 )
             except Exception as e:
                 logger.error(f"trade_logger 실패: {e}")
@@ -1032,6 +1047,8 @@ class CryptoAnalyzer:
                 if _time.time() - getattr(self, "_last_snap_jsonl", 0) >= 3600:
                     self._last_snap_jsonl = _time.time()
                     from src.monitoring.trade_logger import _append_jsonl
+                    lab_stats = self.paper_lab.get_stats() if self.paper_lab else {}
+                    adaptive_stats = self.adaptive.get_stats() if self.adaptive else {}
                     _append_jsonl({
                         "type": "hourly_snapshot",
                         "balance": round(bal, 2) if bal else 0,
@@ -1040,11 +1057,12 @@ class CryptoAnalyzer:
                         "streak": self.risk_manager.get_streak(),
                         "daily_pnl": round(self.risk_manager.get_daily_pnl(), 2),
                         "positions": len(self.position_manager.positions),
-                        "pending_algos": 0,
-                        "paper_balance": self.paper_lab.balance if self.paper_lab else 0,
-                        "paper_total": sum(v.trades for v in self.paper_lab.variants) if self.paper_lab else 0,
                         "ml_phase": self.ml_engine.phase,
                         "ml_labeled": self.ml_engine.total_labeled,
+                        "lab_total": lab_stats.get("total_trades", 0),
+                        "lab_best": lab_stats.get("best", {}).get("name", "-") if lab_stats.get("best") else "-",
+                        "adaptive_phase": adaptive_stats.get("phase", "collect"),
+                        "adaptive_tp_mult": adaptive_stats.get("tp_mult", 1.5),
                     })
             except Exception as e:
                 logger.debug(f"스냅샷 에러: {e}")
