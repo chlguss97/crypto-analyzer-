@@ -129,6 +129,74 @@ class CandidateDetector:
         return best
 
     # ════════════════════════════════════════
+    #  1분 고속 감지 (Fast Momentum)
+    # ════════════════════════════════════════
+
+    def detect_fast(self, df_1m, df_5m=None) -> dict | None:
+        """1분 캔들 기반 고속 모멘텀 감지 (ATR×1.5 이상만)
+        5분 detect()보다 빠르게 강한 움직임 포착.
+        """
+        if df_1m is None or len(df_1m) < 20:
+            return None
+
+        price = float(df_1m["close"].iloc[-1])
+        atr_1m = self._atr(df_1m, 14)
+        if atr_1m <= 0 or price <= 0:
+            return None
+
+        c = df_1m.iloc[-2]  # 직전 완성 1분봉
+        o, h, l, cl = float(c["open"]), float(c["high"]), float(c["low"]), float(c["close"])
+        vol = float(c["volume"])
+        body = cl - o
+        candle_range = h - l
+        if candle_range <= 0:
+            return None
+
+        body_ratio = abs(body) / candle_range
+        body_atr_ratio = abs(body) / atr_1m if atr_1m > 0 else 0
+        vol_20avg = float(df_1m["volume"].astype(float).tail(20).mean()) if len(df_1m) >= 20 else 1.0
+        vol_ratio = vol / vol_20avg if vol_20avg > 0 else 0
+
+        # 엄격 기준: ATR×1.5 + 거래량 1.5배 + 몸통비 0.6 (노이즈 방지)
+        if body_atr_ratio < 1.5:
+            return None
+        if vol_ratio < 1.5:
+            return None
+        if body_ratio < 0.6:
+            return None
+
+        direction = "long" if body > 0 else "short"
+        atr_pct = atr_1m / price * 100
+
+        # 5분 ATR 대비 확인 (5분 기준으로도 의미 있는 움직임인지)
+        if df_5m is not None and len(df_5m) >= 14:
+            atr_5m = self._atr(df_5m, 14)
+            if abs(body) < atr_5m * 0.5:
+                return None  # 5분 ATR의 절반도 안 되면 무시
+
+        # 최근 3캔들 모멘텀 소진 체크
+        recent_lows = df_1m["low"].astype(float).iloc[-4:-1]
+        recent_highs = df_1m["high"].astype(float).iloc[-4:-1]
+        if direction == "long":
+            recent_move = price - float(recent_lows.min())
+        else:
+            recent_move = float(recent_highs.max()) - price
+        recent_move_pct = round(recent_move / price * 100, 4)
+
+        return {
+            "type": "fast_momentum",
+            "direction": direction,
+            "strength": round(body_atr_ratio, 2),
+            "hold_mode": "quick",
+            "vol_ratio": round(vol_ratio, 2),
+            "price": round(price, 1),
+            "atr": round(atr_1m, 2),
+            "atr_pct": round(atr_pct, 4),
+            "weak": False,
+            "recent_move_pct": recent_move_pct,
+        }
+
+    # ════════════════════════════════════════
     #  약한 후보 (Shadow 전용 — ML 데이터 가속)
     # ════════════════════════════════════════
 

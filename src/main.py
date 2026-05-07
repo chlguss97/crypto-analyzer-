@@ -244,10 +244,26 @@ class CryptoAnalyzer:
 
         regime_now = self._current_regime["regime"] if self._current_regime else "unknown"
 
-        # ── 후보 감지 ──
-        candidate = await self.detector.detect(
-            df_1m, df_5m, df_15m, df_1h, df_4h=df_4h, df_1d=df_1d
-        )
+        # ── 후보 감지 (1분 고속 → 5분 정규) ──
+        # 1분: 강한 모멘텀 즉시 포착 (ATR_1m × 1.5, 엄격)
+        candidate = self.detector.detect_fast(df_1m, df_5m)
+        if candidate:
+            # 1분 후보에 features_raw 추가 (ML용)
+            atr_5m = self.detector._atr(df_5m, 14) if df_5m is not None and len(df_5m) >= 14 else 0
+            vol_20avg = float(df_5m["volume"].astype(float).tail(20).mean()) if df_5m is not None and len(df_5m) >= 20 else 1.0
+            flow = await self.detector._get_flow_data()
+            candidate["features_raw"] = await self.detector._build_raw_features(
+                df_5m, df_15m, df_1h, df_4h, df_1d,
+                candidate["price"], atr_5m, candidate["atr_pct"],
+                flow, vol_20avg, candidate["direction"], df_1m=df_1m
+            )
+            logger.info(f"[FAST] 1분 모멘텀 감지: {candidate['direction']} str={candidate['strength']:.1f} ATR_1m={candidate['atr_pct']:.3f}%")
+
+        # 5분: 정규 평가 (1분에서 못 잡으면)
+        if not candidate:
+            candidate = await self.detector.detect(
+                df_1m, df_5m, df_15m, df_1h, df_4h=df_4h, df_1d=df_1d
+            )
 
         if not candidate:
             if now - getattr(self, "_last_no_candidate_log", 0) >= 60:
