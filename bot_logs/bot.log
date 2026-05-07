@@ -65,3 +65,7 @@
 2026-05-07 11:29:34 [WARNING] src.trading.position_manager: 거래소 포지션 발견 (봇 미추적): BTC/USDT:USDT short 4.000000 @ $81270.1
 2026-05-07 13:05:38 [WARNING] CryptoAnalyzer: 미청산: BTC/USDT:USDT SHORT @ $81270.1
 2026-05-07 13:05:49 [WARNING] src.trading.position_manager: 거래소 포지션 발견 (봇 미추적): BTC/USDT:USDT short 4.000000 @ $81270.1
+2026-05-07 13:21:42 [WARNING] CryptoAnalyzer: 미청산: BTC/USDT:USDT SHORT @ $81270.1
+2026-05-07 13:22:05 [WARNING] src.trading.position_manager: 거래소 포지션 발견 (봇 미추적): BTC/USDT:USDT short 2.000000 @ $81270.1
+2026-05-07 13:25:51 [WARNING] src.trading.position_manager: 포지션 외부 종료 감지 (사이즈≈0) → 정리: BTC/USDT:USDT
+2026-05-07 13:25:53 [ERROR] src.trading.risk_manager: [RISK] 주간 손실 한도 -10.0% 도달: -24.97% → 주간 매매 중단
