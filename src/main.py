@@ -664,7 +664,9 @@ class CryptoAnalyzer:
             await self.telegram.notify_entry(
                 direction, ctype.upper(), strength,
                 pos.entry_price, pos.sl_price, pos.tp1_price, pos.tp2_price,
-                leverage, margin, tp3_price=pos.tp3_price
+                leverage, margin, tp3_price=pos.tp3_price,
+                conviction=conviction,
+                conviction_mult=self.CONVICTION_MULT.get(conviction, 1.0),
             )
             return True
 
