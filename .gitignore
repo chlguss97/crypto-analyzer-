@@ -36,3 +36,5 @@ docker-compose.override.yml
 # 디버깅 임시 로그 (실제 운영 로그는 logs 브랜치 디지스트 사용)
 log.txt
 *.log
+data/trades_*.jsonl
+tmp_*.py

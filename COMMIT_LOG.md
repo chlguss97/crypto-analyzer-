@@ -1,12 +1,40 @@
 # Commit Log
 
 > 자동 생성 — `scripts/update_commit_log.sh` (매 커밋 후 실행)
-> Updated: 2026-04-30 10:02:24    
-> Total commits: 288 (2026-04-03 → 2026-04-30)
+> Updated: 2026-05-07 13:54:04    
+> Total commits: 310 (2026-04-03 → 2026-05-07)
 
 Claude 가 질문/변경 작업 시 이 파일을 참고해서 과거 변경 이력 컨텍스트를 확보합니다. 수동 편집 금지 — 다음 커밋 시 덮어써집니다.
 
+## 2026-05-07
+- `247ba23` docs: SPEC v2 전수검사 갱신 — 아키텍처/게이트/Phase/PaperLab 반영
+- `773cec0` feat: 확신도 기반 사이즈 + AdaptiveParams 실거래 연결
+- `953f0dd` feat: PaperTrader → PaperLab 전면 교체 (A/B 파라미터 테스터)
+- `deb3b5a` feat: shadow 연속값 추적 (reach%, MAE, best_move) + 회귀 전환 트리거
+- `9acc79a` fix: TPCalibrator 조기 활성화 + paper 데이터 기여
+- `146736b` fix: paper 벤치마크 완전 순수화 — 게이트 전 위치 이동 + 내부 필터 제거
+- `6878af4` fix: 전수검사 — post-only market 폴백 제거 + paper 레거시 게이트 정리
+- `145533a` feat: AdaptiveParams 수치 자동 보정 엔진 (SPEC §10)
+- `9601d6b` feat: 상위 TF 추세 게이트 — 1h/4h EMA20 역행 차단
+- `46f0a6f` fix: shadow ATR barrier + paper 포지션 무제한
+- `6a83de9` fix: paper 리스크 게이트 제거 — 벤치마크 목적 순수화
+- `8e54e3b` fix: shadow 라벨 수집 가속 — entry_executed 필터 제거
+
+## 2026-05-06
+- `52dae59` fix: DD gate 활성화 + paper_trader TP1 ATR 누락 경로 수정
+- `40c23a7` fix: 전수검사 CRITICAL 4건 — market threshold, trail ATR, AS vol_surge, ML default
+- `37df5de` feat: 3중 게이트 + TP1 ATR 전환 — 매매 복기 기반 손실 방지
+
+## 2026-05-04
+- `1f35647` config: ML Phase B 가속 — shadow max_hold 4시간 + min_samples 100
+- `583234e` fix: WS 한쪽 끊김 시 양쪽 재연결 + 끊김 로그 추가
+- `1bfae44` config: margin_pct 0.40→0.80 (잔고 80% 사용)
+- `a94b59b` fix: CRITICAL SL market-on-trigger 복원 + 서버 TP1 realized_pnl 누적
+
 ## 2026-04-30
+- `6db9951` refactor: 시간 청산 로직 전면 제거 — SL/TP/트레일링에 위임
+- `beaca80` fix: CRITICAL PnL 수수료 미차감 + post-only 호가 반전 + market 폴백
+- `65eac43` fix: Adverse Selection config → __init__로 이동 (hot path load_config 제거)
 - `f31ea1d` docs: AUDIT 12단계 깨진 문자 스캔 추가 + 메모리 저장
 - `2d367a8` fix: market 진입 기준 1.5→1.0 + 깨진 한글 수정
 - `2be86d8` feat: 강한 시그널(strength>=1.5) market 진입 허용

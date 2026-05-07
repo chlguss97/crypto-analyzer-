@@ -49,11 +49,12 @@ docker compose logs bot | grep ERROR    # 에러만
 ### 코드 업데이트
 ```bash
 cd /root/crypto-bot
-git pull
-docker compose up -d --build
+git pull origin main
+docker compose build bot
+docker compose up -d bot
 ```
 
-> ⚠️ 빌드 없이 코드만 반영하면 되는 경우 `docker compose restart bot` 으로 충분.
+> ⚠️ `docker compose restart`는 구 이미지 재사용 — 반드시 `build` 포함.
 
 ### 헬스체크 (한 줄 상태)
 ```bash
@@ -347,14 +348,11 @@ docker compose exec redis redis-cli  # Redis CLI
 - 수동 편집 금지 — `git log` 의 단일 미러
 - 새 PC/서버 셋업 직후 한 번 수동 실행해서 초기 생성: `bash scripts/update_commit_log.sh`
 
-### 학습 스케줄 (현재)
-| 시간 (UTC) | 시간 (KST) | 종류 |
-|---|---|---|
-| 22:00 | 07:00 (다음날) | 일일 대량 학습 + 백테스트 (+ 일요일 메타 학습) |
-| 04:00 | 13:00 | 세션 경량 학습 (Asia 점심) |
-| 11:00 | 20:00 | 세션 경량 학습 (EU 피크 직후) |
-
-**학습 중 보호**: `redis sys:learning=1` 동안 가상매매만 차단, **실거래는 학습 중에도 정상 실행** (04-13 변경). 활성 포지션은 5초 폴링으로 가속화.
+### ML 학습
+- Phase A (<100건): 무조건 Go, 데이터 수집 우선
+- Phase B (100건+): GBM Walk-Forward, 100건마다 자동 재학습
+- Shadow가 모든 시그널 추적 → label + reach%/mae% 동시 수집
+- AdaptiveParams: 10건+ TP/SL 보정 시작, 매 거래 종료 시 자동 갱신
 
 ---
 
@@ -379,29 +377,18 @@ trail_min_price_pct: 0.15     # 트레일 최소 가격 거리 (노이즈 방어
 - TP1 가격 거리 = ATR(5m) × 1.5, 하한 0.25%, 상한 0.80% (RR 최소 1.3 보장)
 - 횡보장: TP1 ≈ 0.45% / 추세장: TP1 ≈ 0.80%
 
-예시 — 잔고 $350, 15x 레버리지, ATR 0.3%:
-- 마진 = $350 × 0.80 = $280
-- 사이즈 = floor($280 × 15 / $80k / 0.01) × 0.01 = 0.05 BTC
-- SL 가격 거리 = 0.33% (마진 -5% = -$14)
+예시 — 잔고 $315, 15x 레버리지, ATR 0.3%, 확신도 3점:
+- 마진 = $315 × 0.80 × 0.60(확신도) = $151
+- 사이즈 = floor($151 × 15 / $81k / 0.01) × 0.01 = 0.02 BTC
+- SL 가격 거리 = 0.33% (마진 -5% = -$7.5)
 - TP1 가격 거리 = 0.45% (ATR×1.5, RR 1.35)
+- AdaptiveParams 10건+ 후: tp_mult, sl_pct 자동 보정
 
 #### `risk_per_trade` (옛 모드, 큰 계좌 권장)
 ```yaml
 sizing_mode: risk_per_trade
 risk_per_trade: 0.005   # 잔고의 0.5%
 ```
-
-### 활성 모델 (Swing/Scalp)
-```bash
-# 현재 설정 확인
-docker compose exec redis redis-cli get sys:active_model
-
-# 변경
-docker compose exec redis redis-cli set sys:active_model scalp   # scalp 만
-docker compose exec redis redis-cli set sys:active_model swing   # swing 만
-docker compose exec redis redis-cli set sys:active_model both    # 둘 다
-```
-**기본값: `scalp`** (스캘핑 중점, `fbb6985` 변경)
 
 ### 자동매매 ON/OFF
 ```bash
