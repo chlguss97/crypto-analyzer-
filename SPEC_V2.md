@@ -574,7 +574,138 @@ streak_sizing:
 
 ---
 
-## 10. settings.yaml 전체
+## 10. AdaptiveParams — 수치 자동 보정 엔진
+
+### 10.1 목적
+
+매 거래 결과로부터 TP/SL/방향/사이즈 수치를 이동 통계로 자동 보정.
+ML Go/NoGo와 독립 — ML은 "들어갈까", AdaptiveParams는 "어떻게 들어갈까".
+
+### 10.2 모듈 구조
+
+```
+src/strategy/adaptive_params.py
+
+AdaptiveParams:
+  ├── EntryQualityScorer    # 진입 품질 (time_to_first_profit, initial_speed)
+  ├── DirectionScorer       # 방향 EV (regime × htf × direction)
+  ├── TPCalibrator          # TP1 ATR 배수 보정 (reach% 기반)
+  ├── SLCalibrator          # SL 거리 보정 (MAE 기반)
+  ├── HoldOptimizer         # 보유시간 vs 승률 → 트레일 강도
+  ├── RegimeScorer          # 레짐별 EV → 사이즈 배수
+  └── TimeOfDayTracker      # 시간대별 EV → 사이즈 배수
+```
+
+### 10.3 각 모듈 상세
+
+**EntryQualityScorer** (최우선)
+```
+측정: time_to_first_profit, 진입 후 5분 이동속도
+활용: avg_time_to_profit > 30분 → "진입 타이밍 늦음" 경고 + 소진 체크 강화
+대체: 기존 모멘텀 소진 하드코딩 50% → 적응형 threshold
+```
+
+**DirectionScorer** (계층적 EV)
+```
+키: (1h_trend, 4h_trend, direction) → 기대값(EV) 추적
+EV = win_rate × avg_win - loss_rate × avg_loss
+  EV < -1.0 → 차단
+  EV < 0    → 사이즈 50%
+  EV > 2.0  → 사이즈 120%
+계층 폴백: Level3(regime+htf+dir) → Level2(htf+dir) → Level1(dir), 최소 10건
+대체: 기존 _is_regime_aligned + _check_htf_trend 하드코딩 → EV 기반
+```
+
+**TPCalibrator** (레짐별)
+```
+측정: tp1_reach_pct = best_price_move / tp1_dist × 100
+보정:
+  패배 near_miss_rate(reach 60~99%) > 40% → atr_mult × 0.95
+  승리 avg_overshoot > 80% → atr_mult × 1.05
+  레짐별 분리 (trending vs ranging 별도 배수)
+범위: atr_mult clamp(0.8, 2.5), 1회 ±5%
+대체: 기존 하드코딩 atr_mult=1.5 → 적응형
+```
+
+**SLCalibrator** (MAE 기반)
+```
+측정: winning MAE (승리 거래의 최대 역행, ATR 배수)
+보정: optimal_sl = mae_95pct × 1.2 × current_atr
+경고: winning_mae와 losing_mae 분포 80%+ 겹침 → "진입 품질 문제"
+범위: sl_margin_pct clamp(3.0, 8.0)
+대체: 기존 하드코딩 sl_margin_pct=5.0 → 적응형
+필수 추가: Position.worst_price 추적
+```
+
+**HoldOptimizer**
+```
+측정: 시간대별 승률 커브 (0~30분, 30~120분, 120분+)
+활용: hold_min > optimal_max + 미실현 손실 → 트레일 축소 신호
+대체: 기존 giveback 35/25/15% → 적응형 (Phase 3에서)
+```
+
+**RegimeScorer**
+```
+측정: 레짐별 EV
+활용: ranging EV < -1 → 사이즈 50% 축소
+대체: 기존 leverage_mult 0.7/0.5 하드코딩 → EV 기반
+```
+
+**TimeOfDayTracker**
+```
+측정: UTC 4시간 구간별 EV
+활용: 나쁜 시간대 사이즈 축소
+```
+
+### 10.4 페이즈별 활성화
+
+| 거래 수 | 활성 모듈 | 비활성 (수집만) |
+|---------|----------|---------------|
+| 0~30건 | 없음 (전체 수집만) | 전부 |
+| 30~100건 | Direction + Entry Quality | TP/SL/Hold/Time |
+| 100~300건 | + TP/SL Calibrator | Hold/Time |
+| 300건+ | 전체 | 없음 |
+
+### 10.5 Position 추가 필드
+
+```python
+worst_price: float       # SL 방향 최대 역행 (MAE 계산용)
+first_profit_ts: float   # 처음 수익 전환 시점
+entry_atr: float         # 진입 시점 ATR
+entry_h1_trend: str      # 진입 시점 1h EMA 방향
+entry_h4_trend: str      # 진입 시점 4h EMA 방향
+params_snapshot: dict    # 진입 시 사용된 파라미터 (자기참조 방지)
+```
+
+### 10.6 기존 코드 대체 관계
+
+| 기존 | 파일:라인 | AdaptiveParams | 시점 |
+|------|-----------|---------------|------|
+| `_is_regime_aligned()` | main.py:394 | DirectionScorer | 30건+ |
+| `_check_htf_trend()` | main.py:406 | DirectionScorer | 30건+ |
+| 모멘텀 소진 50% | main.py:481 | EntryQualityScorer | 30건+ |
+| ATR mult 1.5 | main.py:461 | TPCalibrator | 100건+ |
+| sl_margin_pct 5.0 | main.py:455 | SLCalibrator | 100건+ |
+| min_sl 0.5% | main.py:457 | SLCalibrator | 100건+ |
+| giveback 35/25/15% | pos_mgr:172 | HoldOptimizer | 300건+ |
+
+기존 하드코딩은 **초기값(default)으로 유지** — AdaptiveParams가 충분한 데이터 모으면 override.
+
+### 10.7 안전장치
+
+```
+- 최소 샘플: 모듈별 10건 이상일 때만 보정
+- 1회 변동: ±5% 이내
+- 하드 범위: 각 파라미터별 min/max cap
+- 감쇠: 지수 이동 평균 (최근 20건 가중)
+- 저장: Redis persist (재시작 생존)
+- 로깅: 보정 시 JSONL 기록 + 텔레그램 알림
+- 유지 안 되는 것: RR 최소 1.3, R-lock 2R/3R, trail cap/floor (구조적 안전장치)
+```
+
+---
+
+## 11. settings.yaml 전체
 
 ```yaml
 exchange:

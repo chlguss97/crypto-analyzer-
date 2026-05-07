@@ -86,6 +86,8 @@ class CryptoAnalyzer:
         # ── 새 구조 ──
         self.detector = CandidateDetector(redis=self.redis, config=self.config)
         self.ml_engine = MLDecisionEngine(config=self.config)
+        from src.strategy.adaptive_params import AdaptiveParams
+        self.adaptive = AdaptiveParams(config=self.config, redis=self.redis)
 
         # 매매 엔진
         self.leverage_calc = LeverageCalculator()
@@ -125,6 +127,10 @@ class CryptoAnalyzer:
         # ML 상태 + Phase 전환 알림 콜백
         self.ml_engine.on_phase_change = self._on_ml_phase_change
         logger.info(f"ML: Phase {self.ml_engine.phase}, labeled={self.ml_engine.total_labeled}")
+
+        # AdaptiveParams 복원
+        await self.adaptive.load_state()
+        logger.info(f"Adaptive: {self.adaptive.total_trades}건, tp_mult={self.adaptive.tp_cal.current_mult:.3f}")
 
         # 잔고 + 리스크
         balance = await self.executor.get_balance()
@@ -361,6 +367,9 @@ class CryptoAnalyzer:
 
         # ── 상위 TF 추세 게이트 (1h+4h EMA20 방향 일치 필수) ──
         htf_block, htf_reason = self._check_htf_trend(df_1h, df_4h, direction)
+        # 추세 캐시 (AdaptiveParams 진입 추적용)
+        self._cached_h1_trend = self._get_tf_trend(df_1h)
+        self._cached_h4_trend = self._get_tf_trend(df_4h)
         if htf_block:
             logger.info(f"[GATE] 상위TF 역행 차단: {direction} vs {htf_reason}")
             return
@@ -402,6 +411,20 @@ class CryptoAnalyzer:
         if regime == "ranging" and ctype == "breakout":
             return False
         return True
+
+    def _get_tf_trend(self, df) -> str:
+        """DataFrame에서 EMA20 기반 추세 방향 반환"""
+        if df is None or len(df) < 25:
+            return "unknown"
+        closes = df["close"].astype(float).values
+        ema20 = closes[-20:].mean()
+        price = closes[-1]
+        slope = (closes[-1] - closes[-5]) / closes[-5] * 100 if closes[-5] > 0 else 0
+        if price > ema20 and slope > 0.05:
+            return "UP"
+        elif price < ema20 and slope < -0.05:
+            return "DOWN"
+        return "FLAT"
 
     def _check_htf_trend(self, df_1h, df_4h, direction: str) -> tuple[bool, str]:
         """1h/4h EMA20 기반 추세 방향 체크. 역행 시 (True, reason) 반환."""
@@ -551,6 +574,14 @@ class CryptoAnalyzer:
 
         pos = await self.position_manager.open_position(trade_req)
         if pos:
+            # AdaptiveParams 추적 데이터 세팅
+            pos.entry_atr = atr_pct
+            pos.entry_h1_trend = getattr(self, "_cached_h1_trend", "unknown")
+            pos.entry_h4_trend = getattr(self, "_cached_h4_trend", "unknown")
+            pos.params_snapshot = {
+                "regime": regime, "atr_mult": atr_pct * 1.5,
+                "sl_margin_pct": sl_margin_pct, "tp1_dist": round(tp1_dist, 1),
+            }
             self._last_trade_time = _time.time()
 
             try:
@@ -598,11 +629,11 @@ class CryptoAnalyzer:
     async def _on_trade_closed(self, mode: str, signals: dict, pnl_pct: float,
                                fee_pct: float = 0.0, direction: str = "",
                                exit_reason: str = "", pnl_usdt: float = 0.0,
-                               hold_min: float = 0.0):
-        """실거래 결과 → 리스크 + ML + 추적"""
+                               hold_min: float = 0.0, pos_data: dict = None):
+        """실거래 결과 → 리스크 + ML + AdaptiveParams"""
         await self.risk_manager.record_trade_result(pnl_pct, pnl_usdt)
 
-        # ML 결과 기록 (pnl_pct는 이미 수수료+펀딩비 차감된 net 값)
+        # ML 결과 기록
         label = 1 if pnl_pct > 0 else 0
         self.ml_engine.record_decision_result(True, label)
 
@@ -612,6 +643,39 @@ class CryptoAnalyzer:
             self.ml_engine.check_and_train(labeled)
         except Exception as e:
             logger.debug(f"ML retrain check 실패: {e}")
+
+        # AdaptiveParams 결과 기록
+        if pos_data:
+            ep = pos_data.get("entry_price", 0)
+            tp1 = pos_data.get("tp1_price", 0)
+            best = pos_data.get("best_price", 0)
+            worst = pos_data.get("worst_price", ep)
+            tp1_dist = abs(tp1 - ep) if tp1 > 0 else 1
+            if direction == "long":
+                reach = (best - ep) / tp1_dist * 100 if tp1_dist > 0 else 0
+                mae_pct = (ep - worst) / ep * 100
+            else:
+                reach = (ep - best) / tp1_dist * 100 if tp1_dist > 0 else 0
+                mae_pct = (worst - ep) / ep * 100
+
+            ttp = pos_data.get("first_profit_ts", 0)
+            ttp_sec = ttp - pos_data.get("entry_time", 0) if ttp > 0 else 0
+
+            await self.adaptive.record_trade({
+                "direction": direction,
+                "pnl_pct": pnl_pct,
+                "hold_min": hold_min,
+                "exit_reason": exit_reason,
+                "tp1_reach_pct": round(reach, 1),
+                "mae_pct": round(mae_pct, 4),
+                "time_to_first_profit_sec": round(ttp_sec, 0),
+                "entry_atr": pos_data.get("entry_atr", 0.3),
+                "entry_h1_trend": pos_data.get("entry_h1_trend", "unknown"),
+                "entry_h4_trend": pos_data.get("entry_h4_trend", "unknown"),
+                "regime": pos_data.get("regime", "unknown"),
+                "entry_ts": pos_data.get("entry_time", 0),
+                "leverage": pos_data.get("leverage", 15),
+            })
 
         regime = self._current_regime["regime"] if self._current_regime else "unknown"
 

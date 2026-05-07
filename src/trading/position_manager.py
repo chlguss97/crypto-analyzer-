@@ -53,7 +53,14 @@ class Position:
         # 사용자 수동 SL/TP 수정 → self_heal/트레일이 안 덮음
         self.manual_sl_override = False
         self.manual_tp_override = False
-        # 시간 청산 제거 (2026-04-30) — SL/TP에 위임, 소액계좌 부분청산 불가 문제 해결
+
+        # AdaptiveParams 추적 필드
+        self.worst_price = entry_price    # SL 방향 최대 역행 (MAE)
+        self.first_profit_ts = 0.0        # 처음 수익 전환 시점
+        self.entry_atr = 0.0              # 진입 시점 ATR
+        self.entry_h1_trend = "unknown"   # 진입 시점 1h 추세
+        self.entry_h4_trend = "unknown"   # 진입 시점 4h 추세
+        self.params_snapshot = {}         # 진입 시 사용된 파라미터
 
         # OKX 알고 주문 ID 추적 (cancel/replace 용)
         # 러너 모드에서는 tp2/tp3 사용 안 함 — 호환용으로만 유지
@@ -552,6 +559,16 @@ class PositionManager:
 
     async def _process_position(self, symbol: str, pos: "Position", current_price: float):
         """단일 포지션 처리 — lock 안에서 호출됨"""
+        # AdaptiveParams 추적: worst_price(MAE) + first_profit
+        if pos.direction == "long":
+            pos.worst_price = min(pos.worst_price, current_price)
+            if pos.first_profit_ts == 0 and current_price > pos.entry_price:
+                pos.first_profit_ts = time.time()
+        else:
+            pos.worst_price = max(pos.worst_price, current_price)
+            if pos.first_profit_ts == 0 and current_price < pos.entry_price:
+                pos.first_profit_ts = time.time()
+
         # 0. Adverse Selection — 진입 후 90초 내 구조적 역행 감지
         as_cfg = self._as_cfg
         if as_cfg.get("enabled", False) and not pos.runner_mode:
@@ -1499,7 +1516,22 @@ class PositionManager:
                 await self.on_trade_closed(mode, pos.signals_snapshot, pnl_pct,
                                            fee_pct=0.0, direction=pos.direction,
                                            exit_reason=reason, pnl_usdt=pnl_usdt,
-                                           hold_min=hold_min)
+                                           hold_min=hold_min,
+                                           pos_data={
+                                               "best_price": pos.best_price,
+                                               "worst_price": pos.worst_price,
+                                               "first_profit_ts": pos.first_profit_ts,
+                                               "entry_price": pos.entry_price,
+                                               "entry_time": pos.entry_time,
+                                               "entry_atr": pos.entry_atr,
+                                               "entry_h1_trend": pos.entry_h1_trend,
+                                               "entry_h4_trend": pos.entry_h4_trend,
+                                               "tp1_price": pos.tp1_price,
+                                               "sl_price": pos.sl_price,
+                                               "leverage": pos.leverage,
+                                               "regime": pos.params_snapshot.get("regime", "unknown"),
+                                               "params_snapshot": pos.params_snapshot,
+                                           })
             except Exception as e:
                 logger.error(f"ML 콜백 에러: {e}")
 

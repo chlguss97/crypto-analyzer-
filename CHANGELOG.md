@@ -5,6 +5,35 @@
 
 ---
 
+## 2026-05-07
+
+### AdaptiveParams 수치 자동 보정 엔진
+
+SPEC §10 신설 + 구현. 거래 결과로부터 TP/SL/방향/사이즈 수치를 이동 통계로 자동 보정.
+
+**모듈 구조** (`src/strategy/adaptive_params.py`):
+- EntryQualityScorer: time_to_first_profit → 진입 품질 경고
+- DirectionScorer: (1h×4h×direction) EV → 사이즈 배수 or 차단
+- TPCalibrator: reach% → ATR 배수 보정 (레짐별)
+- SLCalibrator: winning MAE → SL 거리 보정
+- HoldOptimizer: 보유시간 vs 승률 → 트레일 강도
+- RegimeScorer: 레짐별 EV → 사이즈 배수
+- TimeOfDayTracker: 시간대별 EV
+
+**Phase**: 0~30건 수집만 → 30건+ Direction/EntryQuality → 100건+ TP/SL → 300건+ 전체
+
+**Position 추가 필드**: worst_price(MAE), first_profit_ts, entry_atr, entry_h1/h4_trend, params_snapshot
+
+**통합**: _on_trade_closed → adaptive.record_trade() + Redis persist
+
+### 상위 TF 추세 게이트 + Shadow/Paper 개선
+
+- 1h/4h EMA20 역행 차단 (역행 3건 전패 -$60 방지)
+- Shadow: ATR barrier + 전 시그널 추적 (entry_executed 필터 제거)
+- Paper: 리스크 게이트 제거 + 포지션 무제한 (벤치마크 순수화)
+
+---
+
 ## 2026-05-06
 
 ### 매매 복기 기반 3중 게이트 + TP1 ATR 전환
