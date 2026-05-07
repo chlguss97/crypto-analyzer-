@@ -5,7 +5,7 @@ for r in c.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall
     print(f"  {r[0]}")
 
 print("\n=== Counts ===")
-for t in ["candles", "trades", "signals", "daily_summary"]:
+for t in ["candles", "trades", "signals"]:
     try:
         n = c.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
         print(f"  {t}: {n}")

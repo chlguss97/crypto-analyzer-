@@ -292,18 +292,6 @@ async def get_candles(timeframe: str = "15m", limit: int = 200):
     return {"candles": candles, "count": len(candles), "timeframe": timeframe}
 
 
-@app.get("/api/daily-summary")
-async def get_daily_summary():
-    await _ensure_initialized()
-    """일일 성과 요약"""
-    cursor = await db._db.execute(
-        """SELECT * FROM daily_summary
-           ORDER BY date DESC LIMIT 30"""
-    )
-    rows = await cursor.fetchall()
-    return {"summaries": [dict(r) for r in rows]}
-
-
 @app.get("/api/paper/stats")
 async def get_paper_stats():
     await _ensure_initialized()
