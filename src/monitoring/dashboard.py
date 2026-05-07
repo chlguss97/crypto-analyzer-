@@ -337,16 +337,19 @@ async def get_paper_stats():
     )
     active = (await cursor3.fetchone())[0]
 
-    # Redis에서 실시간 페이퍼 계좌 상태
+    # PaperLab 상태 (구 paper:state → lab:stats)
     paper_state = {}
     paper_positions = []
     try:
-        ps = await redis.get_json("paper:state")
-        if ps:
-            paper_state = ps
-        pp = await redis.get_json("paper:positions")
-        if pp:
-            paper_positions = pp
+        lab = await redis.get_json("lab:stats")
+        if lab and isinstance(lab, dict):
+            best = lab.get("best", {})
+            paper_state = {
+                "balance": 0,
+                "total_trades": lab.get("total_trades", 0),
+                "win_rate": best.get("win_rate", 0) if best else 0,
+                "variants": lab.get("variants", []),
+            }
     except Exception:
         pass
 
