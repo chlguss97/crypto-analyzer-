@@ -437,30 +437,7 @@ class PaperTrader:
             self._add_shadow(signal_result, current_price)
             return None
 
-        # ── 리스크 게이트 ──
-        # 일일 손실 한도 (계좌 수준 %)
-        daily_pnl_pct = (self._daily_pnl_usdt / self.balance * 100) if self.balance > 0 else 0
-        if daily_pnl_pct <= -MAX_DAILY_LOSS_PCT:
-            logger.debug(f"[PAPER] 일일 손실 한도 도달: {daily_pnl_pct:.1f}%")
-            return None
-
-        # 쿨다운
-        if now < self._cooldown_until:
-            return None
-
-        # 최대 포지션
-        if len(self.positions) >= self.max_positions:
-            return None
-
-        # 같은 방향 연속 제한
-        if self._last_dir == direction and self._same_dir_count >= MAX_SAME_DIR:
-            return None
-
-        # 최소 진입 간격 (60초)
-        cooldown_cfg = self.config.get("cooldown", {})
-        min_interval = cooldown_cfg.get("min_interval_sec", 60)
-        if now - self._last_trade_time < min_interval:
-            return None
+        # ── paper는 벤치마크용 — 게이트 없음 (try_candidate_entry와 동일) ──
 
         # 같은 방향 포지션 중복 방지
         for pos in self.positions.values():

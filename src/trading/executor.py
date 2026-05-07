@@ -266,9 +266,9 @@ class OrderExecutor:
                 logger.error(f"post-only 주문 에러 ({attempt}): {e}")
                 await asyncio.sleep(0.5)
 
-        # post-only 전부 실패 → market 폴백 (기회 손실보다 taker 수수료가 나음)
-        logger.warning("post-only 3회 추격 실패 → market 폴백 (taker 0.05%)")
-        return await self._market_order(side, size, pos_side)
+        # post-only 전부 실패 → 진입 포기 (SPEC §6.1: 약한 시그널은 taker 불가)
+        logger.warning("post-only 3회 추격 실패 → 진입 포기 (maker 강제)")
+        return None
 
     async def _wait_for_fill_fast(self, order_id: str, timeout: int) -> dict | None:
         """체결 대기 (500ms 폴링 — post-only 용)"""
