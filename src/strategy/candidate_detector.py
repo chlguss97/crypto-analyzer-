@@ -511,21 +511,6 @@ class CandidateDetector:
         tr = pd.concat([h - l, (h - c.shift(1)).abs(), (l - c.shift(1)).abs()], axis=1).max(axis=1)
         return float(tr.rolling(period).mean().iloc[-1]) if len(tr) >= period else float(tr.mean())
 
-    def _ema(self, df, span) -> float:
-        if df is None or len(df) < 2:
-            return 0.0
-        return float(df["close"].astype(float).ewm(span=min(span, len(df)-1), adjust=False).mean().iloc[-1])
-
-    def _rsi(self, df, period=14) -> float:
-        if df is None or len(df) < period + 1:
-            return 50.0
-        delta = df["close"].astype(float).diff()
-        gain = delta.where(delta > 0, 0.0).ewm(alpha=1/period, adjust=False).mean()
-        loss = (-delta.where(delta < 0, 0.0)).ewm(alpha=1/period, adjust=False).mean()
-        rs = gain / loss.replace(0, 1e-10)
-        rsi = 100 - 100 / (1 + rs)
-        return float(rsi.iloc[-1])
-
     def _calc_adx(self, df, period=14) -> float:
         """ADX 계산 (추세 강도 0~100)"""
         if df is None or len(df) < period * 2:
@@ -552,26 +537,6 @@ class CandidateDetector:
         adx = dx.ewm(alpha=1/period, adjust=False).mean()
 
         return float(adx.iloc[-1]) if not pd.isna(adx.iloc[-1]) else 20.0
-
-    def _ema_trend(self, df) -> str:
-        """상위 TF 추세 판단 (호환용)"""
-        if df is None or len(df) < 10:
-            return "neutral"
-        c = df["close"].astype(float)
-        p = float(c.iloc[-1])
-        ema20 = float(c.ewm(span=max(1, min(20, len(c)-1)), adjust=False).mean().iloc[-1])
-        if len(df) >= 50:
-            ema50 = float(c.ewm(span=50, adjust=False).mean().iloc[-1])
-            if p > ema20 > ema50:
-                return "up"
-            elif p < ema20 < ema50:
-                return "down"
-        else:
-            if p > ema20 * 1.001:
-                return "up"
-            elif p < ema20 * 0.999:
-                return "down"
-        return "neutral"
 
     async def _get_micro_features(self) -> dict:
         """Redis에서 마이크로스트럭처 피처 읽기 (binance_stream이 2초마다 갱신)"""

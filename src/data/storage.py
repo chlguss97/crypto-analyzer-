@@ -44,8 +44,8 @@ CREATE TABLE IF NOT EXISTS trades (
     pnl_pct REAL,
     fee_total REAL,
     funding_cost REAL DEFAULT 0,
-    signals_snapshot TEXT,
-    notes TEXT
+    signals_snapshot TEXT
+    -- notes: 미사용 컬럼 제거 (2026-05-07)
 );
 
 -- oi_funding: 레거시 (Binance REST로 대체, Redis만 사용). 기존 DB 호환 유지.
@@ -85,6 +85,8 @@ CREATE TABLE IF NOT EXISTS signals (
 CREATE INDEX IF NOT EXISTS idx_signals_ts ON signals(ts);
 CREATE INDEX IF NOT EXISTS idx_signals_label ON signals(label);
 
+-- daily_summary: 미사용 (populate 코드 없음, 대시보드는 JSONL/trades에서 직접 계산)
+-- 기존 DB 호환 유지
 CREATE TABLE IF NOT EXISTS daily_summary (
     date TEXT PRIMARY KEY,
     total_trades INTEGER DEFAULT 0,
