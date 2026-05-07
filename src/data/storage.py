@@ -48,6 +48,7 @@ CREATE TABLE IF NOT EXISTS trades (
     notes TEXT
 );
 
+-- oi_funding: 레거시 (Binance REST로 대체, Redis만 사용). 기존 DB 호환 유지.
 CREATE TABLE IF NOT EXISTS oi_funding (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     symbol TEXT NOT NULL,
@@ -58,8 +59,6 @@ CREATE TABLE IF NOT EXISTS oi_funding (
     long_short_ratio_position REAL,
     UNIQUE(symbol, timestamp)
 );
-CREATE INDEX IF NOT EXISTS idx_oi_funding_lookup
-    ON oi_funding(symbol, timestamp DESC);
 
 CREATE TABLE IF NOT EXISTS signals (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

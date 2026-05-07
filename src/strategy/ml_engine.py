@@ -421,7 +421,3 @@ class MLDecisionEngine:
             self.model = None
             self.trained = False
             self.phase = "A"
-
-
-# ── 하위 호환: 기존 코드가 FlowML로 import하는 경우 ──
-FlowML = MLDecisionEngine

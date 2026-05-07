@@ -499,7 +499,7 @@ class CandidateDetector:
         return features
 
     # ════════════════════════════════════════
-    #  유틸리티 (기존 FlowEngine에서 보존)
+    #  유틸리티
     # ════════════════════════════════════════
 
     def _atr(self, df, period=14) -> float:
@@ -665,7 +665,3 @@ class CandidateDetector:
             logger.debug(f"flow data error: {e}")
 
         return flow
-
-
-# ── 하위 호환: 기존 코드가 FlowEngine으로 import하는 경우 ──
-FlowEngine = CandidateDetector

@@ -47,7 +47,7 @@ if [ -n "$HEARTBEAT" ] && [ "$HEARTBEAT" != "(nil)" ]; then
     fi
 fi
 
-# 4. 마지막 시그널 평가 시각 (FlowEngine 로그 패턴)
+# 4. 마지막 시그널 평가 시각 (CandidateDetector 로그 패턴)
 LAST_EVAL=$($DC logs --since 5m bot 2>&1 | grep -E "\[TRADE\] setup=|\[TRADE\] 게이트:" | tail -1 | grep -oE '[0-9]{2}:[0-9]{2}:[0-9]{2}' | head -1)
 [ -z "$LAST_EVAL" ] && LAST_EVAL="없음(5분내)"
 

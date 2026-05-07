@@ -78,7 +78,7 @@ $DC logs --since "${MINUTES}m" "$SERVICE" 2>&1 | \
     | tail -30 || echo "(없음)"
 echo
 
-# 5. 시그널 평가 + 거부 사유 통계 (FlowEngine 패턴)
+# 5. 시그널 평가 + 거부 사유 통계 (CandidateDetector 패턴)
 echo "── 📉 시그널 평가 통계 ──"
 $DC logs --since "${MINUTES}m" "$SERVICE" 2>&1 | \
     grep -E "\[TRADE\] setup=" | \

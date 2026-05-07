@@ -1,12 +1,23 @@
 # Commit Log
 
 > 자동 생성 — `scripts/update_commit_log.sh` (매 커밋 후 실행)
-> Updated: 2026-05-07 13:54:04    
-> Total commits: 310 (2026-04-03 → 2026-05-07)
+> Updated: 2026-05-07 16:19:22    
+> Total commits: 321 (2026-04-03 → 2026-05-07)
 
 Claude 가 질문/변경 작업 시 이 파일을 참고해서 과거 변경 이력 컨텍스트를 확보합니다. 수동 편집 금지 — 다음 커밋 시 덮어써집니다.
 
 ## 2026-05-07
+- `62142f2` docs: SPEC §2 데이터소스 현행화 + §3.6 1분 고속 감지 추가
+- `59a9aac` fix: fast_momentum shadow barrier에 quick hold_mode 매핑
+- `143d041` feat: 1분 고속 모멘텀 감지 추가 (5분 정규 평가와 병행)
+- `890aeb0` perf: 마이크로스트럭처 15개 지표 계산 비활성 (Phase B+까지)
+- `77e143f` feat: CVD/Whale을 Binance Futures WS로 이관 (OKX 대비 3~5배 거래량)
+- `66ad63d` feat: JSONL 로그 전면 정리 — 복기/분석 완전 지원
+- `e026602` fix: AUDIT 전수검사 CRITICAL 1 + HIGH 2 + MED 1 수정
+- `d916fd6` docs: AUDIT_PROMPT.md 복구 및 전면 갱신
+- `3f892e9` fix: dashboard.py paper:state → lab:stats 참조 수정
+- `dd9af8c` feat: 텔레그램 전면 개편 — 3경로 시스템 대응
+- `dbb1a2a` docs: MD 파일 정리 — 2개 삭제 + 3개 현행화 + CHANGELOG 50% 축소
 - `247ba23` docs: SPEC v2 전수검사 갱신 — 아키텍처/게이트/Phase/PaperLab 반영
 - `773cec0` feat: 확신도 기반 사이즈 + AdaptiveParams 실거래 연결
 - `953f0dd` feat: PaperTrader → PaperLab 전면 교체 (A/B 파라미터 테스터)

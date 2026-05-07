@@ -550,7 +550,7 @@ async def manual_update_tp(req: ManualTpRequest):
     return {"ok": True, "queued": True, "symbol": sym, "price": req.price}
 
 
-# ── FlowEngine / Setup Tracker 엔드포인트 ──
+# ── Setup Tracker / ML 엔드포인트 ──
 
 @app.get("/api/setup-tracker")
 async def get_setup_tracker():
@@ -565,7 +565,7 @@ async def get_setup_tracker():
 
 
 @app.get("/api/ml/flow-stats")
-async def get_flow_ml_stats():
+async def get_ml_stats():
     """MLDecisionEngine 모델 통계"""
     try:
         from src.strategy.ml_engine import MLDecisionEngine
