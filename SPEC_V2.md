@@ -318,6 +318,15 @@ Time: hold_mode별 max_hold_min (momentum/breakout 240분, cascade 120분)
   TP 먼저 → label = 1
   SL 먼저 → label = 0
   시간 초과 → PnL > 0이면 1, 아니면 0
+
+추적 중 연속값 동시 기록 (DB signals + JSONL):
+  reach_pct:     TP 방향 최대 도달률 (best_move / tp_dist × 100)
+  mae_pct:       SL 방향 최대 역행 (worst 가격 기반)
+  best_move_pct: TP 방향 최대 이동 %
+
+용도:
+  0~300건: label(0/1)은 ML 분류용, 연속값은 AdaptiveParams TP/SL 보정
+  300건+: ML 회귀 모델 전환 (reach_pct 예측 → TP 직접 제안)
 ```
 
 ### 5.4 Walk-Forward 재학습

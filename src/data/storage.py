@@ -78,6 +78,9 @@ CREATE TABLE IF NOT EXISTS signals (
     pnl_pct REAL DEFAULT 0,
     resolve_ts INTEGER DEFAULT 0,
     regime TEXT,
+    reach_pct REAL DEFAULT 0,
+    mae_pct REAL DEFAULT 0,
+    best_move_pct REAL DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_signals_ts ON signals(ts);
@@ -145,6 +148,12 @@ class Database:
         await self._db.execute("PRAGMA journal_mode=DELETE")  # 기본 journal 모드
         await self._db.execute("PRAGMA synchronous=FULL")     # 안전 우선
         await self._db.executescript(SCHEMA_SQL)
+        # 마이그레이션: 기존 signals 테이블에 연속값 컬럼 추가
+        for col in [("reach_pct", "REAL DEFAULT 0"), ("mae_pct", "REAL DEFAULT 0"), ("best_move_pct", "REAL DEFAULT 0")]:
+            try:
+                await self._db.execute(f"ALTER TABLE signals ADD COLUMN {col[0]} {col[1]}")
+            except Exception:
+                pass  # 이미 존재
         await self._db.commit()
         logger.info(f"SQLite 연결: {self.db_path} (journal=DELETE, sync=FULL, integrity OK)")
 
@@ -245,12 +254,16 @@ class Database:
         return cursor.lastrowid
 
     async def update_signal_label(self, signal_id: int, label: int,
-                                  barrier_hit: str, pnl_pct: float, resolve_ts: int):
-        """Triple Barrier 결과로 라벨 확정"""
+                                  barrier_hit: str, pnl_pct: float, resolve_ts: int,
+                                  reach_pct: float = 0, mae_pct: float = 0,
+                                  best_move_pct: float = 0):
+        """Triple Barrier 결과로 라벨 확정 + 연속값 기록"""
         await self._db.execute(
-            """UPDATE signals SET label=?, barrier_hit=?, pnl_pct=?, resolve_ts=?
+            """UPDATE signals SET label=?, barrier_hit=?, pnl_pct=?, resolve_ts=?,
+               reach_pct=?, mae_pct=?, best_move_pct=?
                WHERE id=?""",
-            (label, barrier_hit, pnl_pct, resolve_ts, signal_id),
+            (label, barrier_hit, pnl_pct, resolve_ts,
+             reach_pct, mae_pct, best_move_pct, signal_id),
         )
         await self._db.commit()
 

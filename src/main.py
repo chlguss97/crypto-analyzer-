@@ -706,13 +706,14 @@ class CryptoAnalyzer:
     # ── Shadow 추적 ──
 
     async def periodic_shadow_check(self):
-        """미진입 후보의 Triple Barrier 라벨링"""
+        """모든 시그널의 Triple Barrier 라벨링 + 연속값 추적"""
         from src.monitoring.trade_logger import _append_jsonl
+        # 시그널별 best/worst 가격 추적 (메모리)
+        shadow_tracking: dict[int, dict] = {}
+
         while self._running:
             try:
                 price_str = await self.redis.get("rt:price:BTC-USDT-SWAP")
-                if not price_str:
-                    price_str = None  # OKX WS가 유일한 가격 소스
                 if not price_str:
                     await asyncio.sleep(5)
                     continue
@@ -722,20 +723,35 @@ class CryptoAnalyzer:
                 now = _time.time()
 
                 for sig in pending:
+                    sig_id = sig["id"]
                     sig_ts = sig["ts"]
                     sig_price = sig["price"]
                     sig_dir = sig["direction"]
                     ctype = sig["candidate_type"]
 
-                    # hold_mode 에서 barrier 계산
+                    # best/worst 추적 초기화
+                    if sig_id not in shadow_tracking:
+                        shadow_tracking[sig_id] = {
+                            "best": sig_price, "worst": sig_price
+                        }
+                    track = shadow_tracking[sig_id]
+
+                    # best/worst 업데이트
+                    if sig_dir == "long":
+                        track["best"] = max(track["best"], price)
+                        track["worst"] = min(track["worst"], price)
+                    else:
+                        track["best"] = min(track["best"], price)
+                        track["worst"] = max(track["worst"], price)
+
+                    # barrier 계산
                     hm_cfg = self.config.get("hold_modes", {}).get(ctype, {})
                     sl_pct = hm_cfg.get("sl_margin_pct", 5.0)
-                    max_hold = hm_cfg.get("max_hold_min", 45) * 60  # 초
+                    max_hold = hm_cfg.get("max_hold_min", 45) * 60
 
-                    leverage = 15  # shadow는 고정 레버리지 가정
+                    leverage = 15
                     sl_dist = sig_price * (sl_pct / leverage / 100)
 
-                    # TP1: ATR 기반 (실거래와 동일)
                     try:
                         feat = json.loads(sig.get("features", "{}"))
                         atr_pct = feat.get("atr_pct", 0.3)
@@ -772,7 +788,6 @@ class CryptoAnalyzer:
                         pnl = -(sl_dist / sig_price * leverage * 100)
                     elif elapsed >= max_hold:
                         barrier = "time"
-                        # 시간 초과 시 현재 PnL로 라벨 결정 (수익이면 1, 손실이면 0)
                         if sig_dir == "long":
                             pnl = (price - sig_price) / sig_price * leverage * 100
                         else:
@@ -780,14 +795,43 @@ class CryptoAnalyzer:
                         label = 1 if pnl > 0 else 0
 
                     if label >= 0:
+                        # 연속값 계산
+                        if sig_dir == "long":
+                            best_move = (track["best"] - sig_price) / sig_price * 100
+                            mae = (sig_price - track["worst"]) / sig_price * 100
+                        else:
+                            best_move = (sig_price - track["best"]) / sig_price * 100
+                            mae = (track["worst"] - sig_price) / sig_price * 100
+                        reach = best_move / (tp_dist / sig_price * 100) * 100 if tp_dist > 0 else 0
+
                         await self.db.update_signal_label(
-                            sig["id"], label, barrier, round(pnl, 2), int(now)
+                            sig_id, label, barrier, round(pnl, 2), int(now),
+                            reach_pct=round(reach, 1),
+                            mae_pct=round(mae, 4),
+                            best_move_pct=round(best_move, 4),
                         )
                         self.ml_engine.record_decision_result(False, label)
-                        # JSONL 기록 (shadow 결과)
+
+                        # AdaptiveParams TP/SL 데이터
+                        await self.adaptive.record_trade({
+                            "direction": sig_dir,
+                            "pnl_pct": round(pnl, 2),
+                            "hold_min": round(elapsed / 60, 1),
+                            "exit_reason": f"shadow_{barrier}",
+                            "tp1_reach_pct": round(reach, 1),
+                            "mae_pct": round(mae, 4),
+                            "time_to_first_profit_sec": 0,
+                            "entry_atr": atr_pct,
+                            "entry_h1_trend": "unknown",
+                            "entry_h4_trend": "unknown",
+                            "regime": sig.get("regime", "unknown"),
+                            "entry_ts": sig_ts,
+                            "leverage": leverage,
+                        })
+
                         _append_jsonl({
                             "type": "shadow_result",
-                            "signal_id": sig["id"],
+                            "signal_id": sig_id,
                             "candidate_type": ctype,
                             "direction": sig_dir,
                             "label": label,
@@ -796,7 +840,19 @@ class CryptoAnalyzer:
                             "entry_price": round(sig_price, 1),
                             "exit_price": round(price, 1),
                             "elapsed_sec": round(elapsed, 0),
+                            "reach_pct": round(reach, 1),
+                            "mae_pct": round(mae, 4),
+                            "best_move_pct": round(best_move, 4),
                         })
+
+                        # 추적 정리
+                        shadow_tracking.pop(sig_id, None)
+
+                # 오래된 추적 정리 (resolve된 시그널)
+                active_ids = {s["id"] for s in pending}
+                for sid in list(shadow_tracking):
+                    if sid not in active_ids:
+                        shadow_tracking.pop(sid, None)
 
             except asyncio.CancelledError:
                 raise

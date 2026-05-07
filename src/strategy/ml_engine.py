@@ -179,6 +179,12 @@ class MLDecisionEngine:
             logger.info(f"[ML] 재학습 트리거: {self.total_labeled}건 (이전 {self.last_train_count})")
             self._train(labeled_signals)
 
+        # Phase B+ 전환: 300건 도달 → 회귀 모델 전환 준비 알림
+        if self.total_labeled >= 300 and self.phase == "B" and not getattr(self, '_regression_notified', False):
+            self._regression_notified = True
+            logger.info(f"[ML] 300건 도달 → 회귀 모델 전환 가능 (reach_pct/mae_pct 데이터 축적 완료)")
+            self._notify_phase_change("B", "B+", "300건 라벨 도달 — 회귀 모델 전환 준비 완료")
+
     def _train(self, labeled_signals: list[dict]):
         """GBM 학습 + Walk-Forward 검증"""
         from sklearn.ensemble import GradientBoostingClassifier
