@@ -273,27 +273,13 @@ class WebSocketStream:
         self._trade_count += 1
         flush = self._trade_count % 100 == 0 or size_usd >= WHALE_THRESHOLD_USD
 
-        if flush:
-            await self.redis.set("flow:combined:cvd_5m", str(round(self._cvd_5m, 4)), ttl=400)
-            await self.redis.set("flow:combined:cvd_15m", str(round(self._cvd_15m, 4)), ttl=1200)
-            await self.redis.set("flow:combined:cvd_1h", str(round(self._cvd_1h, 4)), ttl=4800)
+        # CVD/Whale → Binance Futures WS로 이관 (binance_stream.py)
+        # OKX trades는 마이크로스트럭처 + 속도 계산에만 사용
 
         # 마이크로 Redis (2초마다)
         if now_f - self._last_micro_flush >= 2:
             self._last_micro_flush = now_f
             await self._flush_microstructure(price)
-
-        # ── 고래 감지 ──
-        if size_usd >= WHALE_THRESHOLD_USD:
-            self._whales.append((now_f, side, round(size_usd), round(price, 1)))
-            while self._whales and self._whales[0][0] < now_f - WHALE_WINDOW_SEC:
-                self._whales.popleft()
-
-            buy_vol = sum(s for _, sd, s, _ in self._whales if sd == "buy")
-            sell_vol = sum(s for _, sd, s, _ in self._whales if sd == "sell")
-            total = buy_vol + sell_vol
-            whale_bias = (buy_vol - sell_vol) / total if total > 0 else 0
-            await self.redis.set("flow:combined:whale_bias", str(round(whale_bias, 3)), ttl=600)
 
         # ── 가격 변속도 ──
         if price > 0 and ts > 0:
@@ -338,8 +324,7 @@ class WebSocketStream:
         if now_sec - self._last_log >= 300:
             self._last_log = now_sec
             logger.info(
-                f"OKX CVD: 5m={self._cvd_5m:+.2f} 15m={self._cvd_15m:+.2f} "
-                f"1h={self._cvd_1h:+.2f} | whales={len(self._whales)} | trades={self._trade_count}"
+                f"OKX trades: {self._trade_count}건 (CVD/Whale은 Binance WS 담당)"
             )
 
     # ══════════════════════════════════════════
