@@ -88,3 +88,5 @@
 2026-05-08 08:51:08 [WARNING] src.trading.position_manager: 포지션 외부 종료 감지 (사이즈≈0) → 정리: BTC/USDT:USDT
 2026-05-08 08:51:11 [WARNING] src.trading.risk_manager: 손실 기록: -5.54% | 연패: 1
 2026-05-08 08:51:11 [ERROR] src.trading.position_manager: ML 콜백 에러: name 'MAX_DAILY_LOSS_PCT' is not defined
+2026-05-08 09:50:12 [WARNING] src.trading.executor: post-only 3회 추격 실패 → 진입 포기 (maker 강제)
+2026-05-08 09:50:55 [WARNING] src.trading.executor: post-only 3회 추격 실패 → 진입 포기 (maker 강제)
