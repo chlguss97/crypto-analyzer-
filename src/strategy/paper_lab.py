@@ -37,6 +37,8 @@ class LabPosition:
     sl_price: float
     tp1_price: float
     setup: str
+    regime: str = "unknown"
+    atr_pct: float = 0.3
     # 추적
     best_price: float = 0.0
     worst_price: float = 0.0
@@ -152,6 +154,8 @@ class PaperLab:
                 sl_price=sl,
                 tp1_price=tp1,
                 setup=ctype,
+                regime=regime,
+                atr_pct=atr_pct,
                 best_price=price,
                 worst_price=price,
                 remaining_size=size_btc,
@@ -282,10 +286,10 @@ class PaperLab:
                     "tp1_reach_pct": round(reach_pct, 1),
                     "mae_pct": round(mae_pct, 4),
                     "time_to_first_profit_sec": 0,
-                    "entry_atr": 0.3,
+                    "entry_atr": pos.atr_pct,
                     "entry_h1_trend": "unknown",
                     "entry_h4_trend": "unknown",
-                    "regime": "unknown",
+                    "regime": pos.regime,
                     "entry_ts": pos.entry_time,
                     "leverage": pos.leverage,
                 })
