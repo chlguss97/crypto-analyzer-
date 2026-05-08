@@ -88,6 +88,8 @@ class CryptoAnalyzer:
         self.ml_engine = MLDecisionEngine(config=self.config)
         from src.strategy.adaptive_params import AdaptiveParams
         self.adaptive = AdaptiveParams(config=self.config, redis=self.redis)
+        from src.strategy.sim_trader import SimTrader
+        self.sim_trader = SimTrader(config=self.config, adaptive=self.adaptive)
 
         # 매매 엔진
         self.leverage_calc = LeverageCalculator()
@@ -397,6 +399,31 @@ class CryptoAnalyzer:
                 "h4_trend": self._cached_h4_trend,
             })
             return
+
+        # SimTrader (실전 시뮬 — 항상 실행, autotrading 무관)
+        conviction_mult = self.CONVICTION_MULT.get(conviction, 0.15)
+        if self.sim_trader:
+            atr_pct = candidate.get("atr_pct", 0.3)
+            sim_price = candidate["price"]
+            sim_lev = self.config.get("risk", {}).get("leverage_range", [15, 20])[0]
+            sim_sl_dist = sim_price * (self.adaptive.get_sl_margin_pct() / sim_lev / 100)
+            sim_sl_dist = max(sim_sl_dist, sim_price * 0.005)
+            sim_tp_mult = self.adaptive.get_tp_mult(regime_now)
+            sim_tp_dist = sim_price * min(max(atr_pct * sim_tp_mult / 100, 0.0025), 0.008)
+            if sim_tp_dist < sim_sl_dist * 1.3:
+                sim_tp_dist = sim_sl_dist * 1.3
+            if direction == "long":
+                sim_sl = sim_price - sim_sl_dist
+                sim_tp1 = sim_price + sim_tp_dist
+            else:
+                sim_sl = sim_price + sim_sl_dist
+                sim_tp1 = sim_price - sim_tp_dist
+            sim_margin = 300 * self.config.get("risk", {}).get("margin_pct", 0.80) * conviction_mult
+            await self.sim_trader.try_entry(
+                candidate, conviction, conviction_mult,
+                sim_sl, sim_tp1, sim_lev, sim_margin,
+                regime_now, self._cached_h1_trend, self._cached_h4_trend,
+            )
 
         # 실거래
         if autotrading:
@@ -1021,6 +1048,8 @@ class CryptoAnalyzer:
                         await self.position_manager.check_positions(price)
                     if self.paper_lab and self.paper_lab.has_positions:
                         await self.paper_lab.check_positions(price)
+                    if self.sim_trader and self.sim_trader.position:
+                        await self.sim_trader.check_position(price)
 
                 # 킬스위치
                 bot_status = await self.redis.get("sys:bot_status")
