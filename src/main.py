@@ -233,6 +233,16 @@ class CryptoAnalyzer:
                             f"str={drift_flag['strength']:.1f} drift={drift_flag.get('drift_pct',0):.3f}%")
                 self._drift_logged = True
                 self._drift_dir = drift_flag["direction"]
+            # PaperLab에 drift 가상 진입 (비교 데이터: "drift 진입했으면 어땠을까")
+            if self.paper_lab:
+                drift_candidate = {
+                    "type": "drift", "direction": drift_flag["direction"],
+                    "strength": drift_flag["strength"],
+                    "price": float(df_5m["close"].iloc[-1]),
+                    "atr_pct": drift_flag.get("atr_pct", 0.3),
+                    "hold_mode": "momentum",
+                }
+                await self.paper_lab.on_candidate(drift_candidate, regime_now)
         else:
             if getattr(self, "_drift_logged", False):
                 logger.info("[DRIFT] 추세 플래그 OFF")

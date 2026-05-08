@@ -381,8 +381,12 @@ class CandidateDetector:
             return None
         price = float(df_5m["close"].iloc[-1])
         atr = self._atr(df_5m, 14)
+        atr_pct = atr / price * 100 if price > 0 else 0.3
         vol_20avg = float(df_5m["volume"].astype(float).tail(20).mean()) if len(df_5m) >= 20 else 1.0
-        return self._check_drift(df_5m, price, atr, vol_20avg)
+        result = self._check_drift(df_5m, price, atr, vol_20avg)
+        if result:
+            result["atr_pct"] = round(atr_pct, 4)
+        return result
 
     def _check_drift(self, df_5m, price, atr, vol_20avg) -> dict | None:
         """6캔들(30분) 누적 이동 감지. 진입 시그널 아닌 확신도 플래그로 사용."""
