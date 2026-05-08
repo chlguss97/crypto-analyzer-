@@ -100,3 +100,4 @@
 2026-05-08 19:15:14 [WARNING] src.trading.executor: post-only 3회 추격 실패 → 진입 포기 (maker 강제)
 2026-05-08 22:10:41 [WARNING] src.trading.position_manager: 포지션 외부 종료 감지 (사이즈≈0) → 정리: BTC/USDT:USDT
 2026-05-08 22:10:44 [WARNING] src.trading.risk_manager: 손실 기록: -8.94% | 연패: 1
+2026-05-08 22:45:04 [WARNING] src.trading.executor: post-only 3회 추격 실패 → 진입 포기 (maker 강제)
