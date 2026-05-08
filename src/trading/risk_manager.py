@@ -200,18 +200,6 @@ class RiskManager:
         await self.redis.set("risk:cooldown_until", str(self._state["cooldown_until"]))
         self._save_backup()
 
-        # 일일 손실 한도
-        if self._state["daily_pnl_pct"] <= -MAX_DAILY_LOSS_PCT:
-            logger.error(
-                f"[RISK] 일일 손실 한도 -{MAX_DAILY_LOSS_PCT}% 도달: {self._state['daily_pnl_pct']:.2f}% → 당일 매매 중단"
-            )
-
-        # 주간 손실 한도
-        if self._state["weekly_pnl_pct"] <= -MAX_WEEKLY_LOSS_PCT:
-            logger.error(
-                f"[RISK] 주간 손실 한도 -{MAX_WEEKLY_LOSS_PCT}% 도달: {self._state['weekly_pnl_pct']:.2f}% → 주간 매매 중단"
-            )
-
         # 최대 드로다운 체크
         peak = self._state["peak_balance"]
         current = self._state["current_balance"]

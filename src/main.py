@@ -823,8 +823,16 @@ class CryptoAnalyzer:
                         track["best"] = min(track["best"], price)
                         track["worst"] = max(track["worst"], price)
 
-                    # barrier 계산 (fast_momentum → quick 매핑)
-                    hold_key = "quick" if ctype == "fast_momentum" else ctype
+                    # barrier 계산 (candidate type → hold_mode 매핑)
+                    type_to_hold = {
+                        "fast_momentum": "quick",
+                        "momentum": "momentum",
+                        "breakout": "breakout",
+                        "cascade": "cascade",
+                        "drift": "momentum",
+                        "weak_momentum": "momentum",
+                    }
+                    hold_key = type_to_hold.get(ctype, "momentum")
                     hm_cfg = self.config.get("hold_modes", {}).get(hold_key, {})
                     sl_pct = hm_cfg.get("sl_margin_pct", 5.0)
                     max_hold = hm_cfg.get("max_hold_min", 240) * 60  # default 4시간
