@@ -246,6 +246,46 @@ signals (
 
 **확인**: `get_pending_shadows()`가 `WHERE label = -1` (entry_executed 조건 없음)
 
+### DB SELECT ↔ downstream 컬럼 매핑 ★데이터 흐름 추적
+
+**원칙: SQL SELECT의 컬럼이 downstream에서 실제로 사용되는지 1:1 대조.**
+이전 검사에서 `regime` 컬럼 누락으로 TPCalibrator 보정 불가 사고 발생 (2026-05-08).
+
+```
+get_pending_shadows() SELECT:
+  id        → update_signal_label(sig_id)
+  ts        → elapsed 계산
+  candidate_type → hold_mode 매핑 (shadow barrier)
+  direction → TP/SL 방향
+  price     → barrier 계산
+  features  → atr_pct 추출 (ATR TP1 계산)
+  regime    → AdaptiveParams bucket 분류 (trending/ranging/other)
+  
+  누락 시: regime 없으면 → bucket="other" → trending/ranging 보정 불가
+```
+
+```
+get_labeled_signals() SELECT:
+  *         → ml_engine._train()에서 features, label, entry_executed 사용
+  
+  확인: features JSON 키 ↔ ml_engine.CORE_FEATURES/EXTENDED_FEATURES 일치
+  확인: entry_executed → 가중치 2.0배 적용
+```
+
+```
+record_trade() 호출 경로별 데이터 완전성:
+  Shadow → {regime: DB에서, h1/h4: "unknown", reach_pct: 계산}
+  PaperLab → {regime: "unknown", h1/h4: "unknown", reach_pct: 계산}
+  실거래 → {regime: pos.params_snapshot, h1/h4: pos.entry_h1/h4, reach_pct: 계산}
+  
+  주의: "unknown"으로 들어가는 필드는 해당 모듈에서 보정 데이터로 못 씀
+```
+
+**검사 방법:**
+1. 모든 `db.execute(SELECT ...)` 쿼리의 컬럼 목록 추출
+2. 리턴된 dict/Row가 downstream에서 `.get("컬럼명")` 으로 접근하는 곳 전부 추적
+3. SELECT에 없는 컬럼을 `.get()`하면 → None → 기본값 → **잘못된 데이터 흐름**
+
 ### Position 추적 필드
 
 ```python
