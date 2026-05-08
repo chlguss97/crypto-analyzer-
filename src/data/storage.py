@@ -264,7 +264,7 @@ class Database:
     async def get_pending_shadows(self) -> list[dict]:
         """라벨 미확정 시그널 (진입 여부 무관, 모든 후보 shadow 추적)"""
         cursor = await self._db.execute(
-            """SELECT id, ts, candidate_type, direction, price, features
+            """SELECT id, ts, candidate_type, direction, price, features, regime
                FROM signals
                WHERE label = -1
                ORDER BY ts ASC"""
