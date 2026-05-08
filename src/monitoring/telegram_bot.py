@@ -93,6 +93,7 @@ class TelegramNotifier:
             "/adaptive": self._cmd_adaptive,
             "/lab": self._cmd_lab,
             "/shadow": self._cmd_shadow,
+            "/sim": self._cmd_sim,
             "/help": self._cmd_help,
         }
         handler = handlers.get(cmd)
@@ -235,6 +236,7 @@ class TelegramNotifier:
             log_dir = Path(__file__).parent.parent.parent / "data" / "logs"
 
             real_trades = []
+            sim_trades = []
             lab_trades = []
             for f in sorted(log_dir.glob("trades_*.jsonl"), reverse=True)[:2]:
                 for line in open(f, encoding="utf-8"):
@@ -244,6 +246,8 @@ class TelegramNotifier:
                             continue
                         if r["type"] == "exit":
                             real_trades.append(r)
+                        elif r["type"] == "sim_exit":
+                            sim_trades.append(r)
                         elif r["type"] == "lab_exit":
                             lab_trades.append(r)
                     except Exception:
@@ -260,6 +264,12 @@ class TelegramNotifier:
                 f"<b>Real:</b> {r_total}건 | {r_wins}W ({r_wr:.0f}%)\n"
                 f"PnL: ${r_pnl:+,.2f}\n"
             )
+
+            # Sim
+            if sim_trades:
+                s_wins = sum(1 for t in sim_trades if t.get("pnl_pct", 0) > 0)
+                s_pnl = sum(t.get("pnl_pct", 0) for t in sim_trades)
+                text += f"\n<b>Sim:</b> {len(sim_trades)}건 | {s_wins}W | PnL {s_pnl:+.1f}%\n"
 
             # Lab
             if lab_trades:
@@ -282,7 +292,7 @@ class TelegramNotifier:
                 for line in open(f, encoding="utf-8"):
                     try:
                         r = json.loads(line)
-                        if r["type"] == "exit":
+                        if r["type"] in ("exit", "sim_exit"):
                             exits.append(r)
                     except Exception:
                         continue
@@ -436,6 +446,47 @@ class TelegramNotifier:
         except Exception as e:
             await self._send(f"\u26a0\ufe0f Shadow 조회 실패: {e}")
 
+    async def _cmd_sim(self):
+        """SimTrader 실전 시뮬 현황"""
+        try:
+            log_dir = Path(__file__).parent.parent.parent / "data" / "logs"
+            sim_trades = []
+            for f in sorted(log_dir.glob("trades_*.jsonl"), reverse=True)[:2]:
+                for line in open(f, encoding="utf-8"):
+                    try:
+                        r = json.loads(line)
+                        if r["type"] == "sim_exit":
+                            sim_trades.append(r)
+                    except Exception:
+                        continue
+
+            if not sim_trades:
+                return await self._send("\U0001f3ae <b>SimTrader</b>\n\n거래 없음")
+
+            wins = sum(1 for t in sim_trades if t.get("pnl_pct", 0) > 0)
+            total = len(sim_trades)
+            total_pnl = sum(t.get("pnl_pct", 0) for t in sim_trades)
+            wr = wins / total * 100 if total > 0 else 0
+
+            text = (
+                f"\U0001f3ae <b>SimTrader (실전 시뮬)</b>\n\n"
+                f"Total: {total}건 | W:{wins} ({wr:.0f}%)\n"
+                f"PnL: {total_pnl:+.1f}%\n"
+            )
+
+            # 최근 3건
+            for t in sim_trades[-3:]:
+                ts = t.get("ts_iso", "")[:16]
+                d = t.get("direction", "?")[:1].upper()
+                pnl = t.get("pnl_pct", 0)
+                conv = t.get("conviction", "?")
+                icon = "\U0001f7e2" if pnl > 0 else "\U0001f534"
+                text += f"\n{icon} {ts} {d} {pnl:+.1f}% conv={conv}"
+
+            await self._send(text)
+        except Exception as e:
+            await self._send(f"\u26a0\ufe0f Sim 조회 실패: {e}")
+
     async def _cmd_help(self):
         await self._send(
             "<b>CryptoAnalyzer v2</b>\n\n"
@@ -450,6 +501,7 @@ class TelegramNotifier:
             "\U0001f4ca /adaptive \u2014 TP/SL Tuning\n"
             "\U0001f9ea /lab \u2014 A/B Variants\n"
             "\U0001f441 /shadow \u2014 Label Stats\n"
+            "\U0001f3ae /sim \u2014 SimTrader\n"
             "\U0001f6d1 /close \u2014 Close All\n"
             "\U0001f9f9 /clear \u2014 Clear Zombie\n"
         )

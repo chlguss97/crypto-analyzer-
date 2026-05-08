@@ -393,7 +393,8 @@ class CryptoAnalyzer:
 
         # SimTrader (실전 시뮬 — 항상 실행, autotrading 무관)
         conviction_mult = self.CONVICTION_MULT.get(conviction, 0.15)
-        if self.sim_trader:
+        has_real_position = bool(self.position_manager.positions)
+        if self.sim_trader and not has_real_position:
             atr_pct = candidate.get("atr_pct", 0.3)
             sim_price = candidate["price"]
             sim_lev = self.config.get("risk", {}).get("leverage_range", [15, 20])[0]
@@ -409,7 +410,8 @@ class CryptoAnalyzer:
             else:
                 sim_sl = sim_price + sim_sl_dist
                 sim_tp1 = sim_price - sim_tp_dist
-            sim_margin = 300 * self.config.get("risk", {}).get("margin_pct", 0.80) * conviction_mult
+            sim_balance = self.config.get("sim_trader", {}).get("balance", 300)
+            sim_margin = sim_balance * self.config.get("risk", {}).get("margin_pct", 0.80) * conviction_mult
             await self.sim_trader.try_entry(
                 candidate, conviction, conviction_mult,
                 sim_sl, sim_tp1, sim_lev, sim_margin,
@@ -1124,6 +1126,8 @@ class CryptoAnalyzer:
                         "lab_best": lab_stats.get("best", {}).get("name", "-") if lab_stats.get("best") else "-",
                         "adaptive_phase": adaptive_stats.get("phase", "collect"),
                         "adaptive_tp_mult": adaptive_stats.get("tp_mult", 1.5),
+                        "sim_total": self.sim_trader.get_stats()["total"] if self.sim_trader else 0,
+                        "sim_pnl": self.sim_trader.get_stats()["total_pnl"] if self.sim_trader else 0,
                     })
             except Exception as e:
                 logger.debug(f"스냅샷 에러: {e}")
