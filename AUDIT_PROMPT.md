@@ -1,8 +1,8 @@
 # BTC 자동매매 시스템 전수검사 프롬프트
 
-> CryptoAnalyzer v2 — 3경로 시스템 (Shadow + PaperLab + 실거래)
-> 실전매매 / PaperLab / Shadow / AdaptiveParams / ML 전체 정합성 검증
-> 마지막 갱신: 2026-05-07
+> CryptoAnalyzer v2 — 4경로 시스템 (Shadow + PaperLab + SimTrader + 실거래)
+> 4경로 / AdaptiveParams / ML / Drift플래그 / 확신도6점 전체 정합성 검증
+> 마지막 갱신: 2026-05-08
 
 ---
 
@@ -18,13 +18,13 @@
 
 ```
 src/
-  main.py                        — 오케스트레이터 (3경로 분기 + 확신도 점수)
+  main.py                        — 오케스트레이터 (4경로 분기 + 확신도 6점 + drift 플래그)
   strategy/
-    candidate_detector.py         — 3종 후보 감지 (Momentum/Breakout/Cascade)
+    candidate_detector.py         — 후보 감지 (fast_momentum/momentum/breakout/cascade + drift 플래그)
     ml_engine.py                  — ML Go/NoGo (Phase A/B/B+)
-    adaptive_params.py            — 수치 자동 보정 (7모듈: TP/SL/Direction/Hold/Regime/Time/EntryQuality)
-    paper_lab.py                  — PaperLab A/B 3-Variant 테스터
-    paper_trader.py               — [레거시] 미사용, import 없음
+    adaptive_params.py            — 수치 자동 보정 (7모듈, Phase TP_SL=10/DIRECTION=30/FULL=300)
+    paper_lab.py                  — PaperLab A/B 3-Variant + drift 비교
+    sim_trader.py                 — SimTrader 실전 시뮬 (확신도+게이트+h1/h4)
     setup_tracker.py              — 셋업 성과 추적
     signal_tracker.py             — 시그널 기여도 추적
   trading/
@@ -66,7 +66,8 @@ config/
 ```
 OKX WS → Redis → CandidateDetector → ML → {Shadow, PaperLab, 실거래}
   Shadow → DB signals (label + reach%/mae%) → ML 학습 + AdaptiveParams
-  PaperLab → AdaptiveParams (reach%/mae%)
+  PaperLab → AdaptiveParams (reach%/mae%) + drift 비교 데이터
+  SimTrader → AdaptiveParams (확신도별 성과, h1/h4 EV) ← autotrading 무관
   실거래 → AdaptiveParams (검증) + position_manager (worst_price, first_profit_ts)
   AdaptiveParams → Redis adaptive:state (persist) + 실거래 파라미터 override
 ```
@@ -79,7 +80,7 @@ SPEC_V2.md 섹션별 코드 대조:
 
 | SPEC 섹션 | 검증 대상 |
 |-----------|----------|
-| §1 아키텍처 | 3경로 분기, 다이어그램 vs 코드 흐름 |
+| §1 아키텍처 | 4경로 분기 (Shadow+PaperLab+SimTrader+실거래) |
 | §3 CandidateDetector | 3종 조건 (momentum/breakout/cascade), Phase A 완화값 |
 | §4 FeatureExtractor | 8→25 피처, signals 테이블 스키마 (reach_pct/mae_pct/best_move_pct) |
 | §5 ML | Phase A(<100) 무조건Go, Phase B(100+) go>0.55, Phase B+(300) 회귀 트리거 |
@@ -142,8 +143,12 @@ CandidateDetector.detect() → candidate dict
   
   → paper_lab.on_candidate(candidate, regime)      ← 게이트 전 (전부 진입)
   
-  → _calc_conviction(regime, direction, ctype, strength, candidate, df_1h, df_4h) → (score, detail)
-  → score == 0 → return (차단)
+  → drift 플래그 체크: check_drift_flag(df_5m) → _drift_dir 캐시
+  → drift 활성 시 PaperLab에 drift 가상 후보도 전달
+  
+  → _calc_conviction(6점: 1h+4h+regime+str+cvd+drift) → (score, detail)
+  → score == 0 → gate_block JSONL → return
+  → sim_trader.try_entry(같은 conviction/SL/TP) ← autotrading 무관
   → _execute(candidate, balance, regime, daily_pnl, conviction=score)
     → adaptive.get_tp_mult(regime) → ATR 배수
     → adaptive.get_sl_margin_pct() → SL 마진%
