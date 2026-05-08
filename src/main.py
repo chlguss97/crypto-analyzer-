@@ -224,6 +224,21 @@ class CryptoAnalyzer:
 
         regime_now = self._current_regime["regime"] if self._current_regime else "unknown"
 
+        # ── drift 플래그 체크 (진입 시그널 아닌 추세 확인) ──
+        drift_flag = self.detector.check_drift_flag(df_5m)
+        if drift_flag:
+            if not getattr(self, "_drift_logged", False) or \
+               getattr(self, "_drift_dir", "") != drift_flag["direction"]:
+                logger.info(f"[DRIFT] 추세 플래그 ON: {drift_flag['direction']} "
+                            f"str={drift_flag['strength']:.1f} drift={drift_flag.get('drift_pct',0):.3f}%")
+                self._drift_logged = True
+                self._drift_dir = drift_flag["direction"]
+        else:
+            if getattr(self, "_drift_logged", False):
+                logger.info("[DRIFT] 추세 플래그 OFF")
+            self._drift_logged = False
+            self._drift_dir = ""
+
         # ── 후보 감지 (1분 고속 → 5분 정규) ──
         # 1분: 강한 모멘텀 즉시 포착 (ATR_1m × 1.5, 엄격)
         candidate = self.detector.detect_fast(df_1m, df_5m)
@@ -495,6 +510,14 @@ class CryptoAnalyzer:
         else:
             details.append("cvd:X")
 
+        # +1: drift 추세 플래그 (같은 방향이면 보너스)
+        drift = getattr(self, "_drift_dir", "")
+        if drift and drift == direction:
+            score += 1
+            details.append("drift:O")
+        else:
+            details.append("drift:-")
+
         # 완전 역행 차단 (1h AND 4h 모두 반대)
         if h1 == ("DOWN" if direction == "long" else "UP") and \
            h4 == ("DOWN" if direction == "long" else "UP"):
@@ -505,7 +528,7 @@ class CryptoAnalyzer:
         return score, detail_str
 
     # 확신도 → 사이즈 배수 변환
-    CONVICTION_MULT = {0: 0.0, 1: 0.15, 2: 0.30, 3: 0.60, 4: 0.80, 5: 1.0}
+    CONVICTION_MULT = {0: 0.0, 1: 0.15, 2: 0.30, 3: 0.60, 4: 0.80, 5: 1.0, 6: 1.0}
 
     async def _execute(self, candidate: dict, balance: float,
                        regime: str, daily_pnl: float,

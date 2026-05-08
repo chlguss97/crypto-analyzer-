@@ -97,13 +97,7 @@ class CandidateDetector:
             )
             candidates.append(cas)
 
-        # 4종: Drift (점진적 추세 — 단일 캔들은 작지만 누적 이동 큼)
-        dft = self._check_drift(df_5m, price, atr, vol_20avg)
-        if dft:
-            dft["features_raw"] = await self._build_raw_features(
-                df_5m, df_15m, df_1h, df_4h, df_1d, price, atr, atr_pct, flow, vol_20avg, dft["direction"], df_1m=df_1m
-            )
-            candidates.append(dft)
+        # drift는 진입 시그널이 아닌 확신도 플래그로 사용 (main.py에서 관리)
 
         if not candidates:
             # 약한 후보 감지 (shadow 전용 — ML 데이터 가속)
@@ -377,13 +371,21 @@ class CandidateDetector:
         }
 
     # ════════════════════════════════════════
-    #  후보 D: Drift (점진적 추세)
+    #  Drift — 확신도 플래그 (진입 시그널 아님)
+    #  main.py에서 check_drift_flag() 호출 → 결과를 _calc_conviction에 반영
     # ════════════════════════════════════════
 
+    def check_drift_flag(self, df_5m) -> dict | None:
+        """외부 호출용: drift 플래그 체크. 결과 있으면 추세 활성."""
+        if df_5m is None or len(df_5m) < 30:
+            return None
+        price = float(df_5m["close"].iloc[-1])
+        atr = self._atr(df_5m, 14)
+        vol_20avg = float(df_5m["volume"].astype(float).tail(20).mean()) if len(df_5m) >= 20 else 1.0
+        return self._check_drift(df_5m, price, atr, vol_20avg)
+
     def _check_drift(self, df_5m, price, atr, vol_20avg) -> dict | None:
-        """6캔들(30분) 누적 이동 감지 — 캔들 하나는 작지만 방향 일관.
-        급변이 아닌 "천천히 꾸준히" 움직이는 추세를 잡음.
-        """
+        """6캔들(30분) 누적 이동 감지. 진입 시그널 아닌 확신도 플래그로 사용."""
         # 최소 8봉 필요 (6봉 lookback + 현재봉 + 여유)
         if df_5m is None or len(df_5m) < 8:
             return None
