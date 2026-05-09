@@ -119,3 +119,4 @@
 2026-05-09 21:05:11 [WARNING] src.trading.executor: post-only 3회 추격 실패 → 진입 포기 (maker 강제)
 2026-05-09 21:30:07 [WARNING] src.trading.executor: post-only 3회 추격 실패 → 진입 포기 (maker 강제)
 2026-05-09 23:15:12 [WARNING] src.trading.executor: post-only 3회 추격 실패 → 진입 포기 (maker 강제)
+2026-05-10 02:38:10 [WARNING] src.data.ws_stream: OKX WS public 수신 끊김: sent 1011 (internal error) keepalive ping timeout; no close frame received → 재연결
