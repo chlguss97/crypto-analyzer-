@@ -129,3 +129,5 @@
 2026-05-10 08:10:12 [WARNING] src.trading.executor: post-only 3회 추격 실패 → 진입 포기 (maker 강제)
 2026-05-10 08:30:10 [WARNING] src.trading.executor: post-only 3회 추격 실패 → 진입 포기 (maker 강제)
 2026-05-10 09:45:02 [WARNING] src.trading.position_manager: ⚠️  사이즈 0.0100 BTC < 0.02 BTC → TP1 에서 100% 청산 (러너 비활성)
+2026-05-11 00:40:51 [ERROR] src.trading.position_manager: 🛑 SL failsafe 발동: SHORT 가격 $81127 vs SL $81125 | 보유 895분 | runner=False | size=0.0100/0.0100 | algo_debug={'pending_count': 1, 'pending_ids': [{'clOrdId': 'tp117783739029338554', 'id': '3552458149493915648', 'triggerPx': '80134.8', 'sz': '1', 'state': 'live'}], 'pos_sl_algo_id': 'sl17783739027265967'}
+2026-05-11 00:40:53 [WARNING] src.trading.risk_manager: 손실 기록: -9.89% | 연패: 1
