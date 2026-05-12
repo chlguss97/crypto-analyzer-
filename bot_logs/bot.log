@@ -16,3 +16,5 @@
 2026-05-13 07:09:30 [WARNING] src.data.ws_stream: OKX WS business 수신 끊김: no close frame received or sent → 재연결
 2026-05-13 07:26:33 [WARNING] src.data.ws_stream: OKX WS public 수신 끊김: no close frame received or sent → 재연결
 2026-05-13 07:42:55 [WARNING] src.data.ws_stream: OKX WS public 수신 끊김: no close frame received or sent → 재연결
+2026-05-13 08:00:00 [WARNING] src.strategy.ml_engine: [ML] Phase 전환: B → B | 마일스톤: 200건 라벨 도달! (총 204건)
+2026-05-13 08:00:00 [WARNING] src.strategy.ml_engine: [ML] OOS 0.390 < 0.52 → 모델 미교체 (연속 1회)
