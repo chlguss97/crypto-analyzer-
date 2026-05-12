@@ -353,22 +353,12 @@ class WebSocketStream:
         tf_map = {"1m": "1m", "5m": "5m", "15m": "15m", "1H": "1h", "4H": "4h", "1D": "1d", "1W": "1w"}
         std_tf = tf_map.get(tf, tf.lower())
 
-        # DB 저장
-        if self.db:
-            should_save = is_closed
-            if not is_closed:
-                cache_key = f"_candle_last_save_{std_tf}"
-                last = getattr(self, cache_key, 0)
-                now = time.time()
-                if std_tf == "1m" or now - last >= 5:
-                    should_save = True
-                    setattr(self, cache_key, now)
-
-            if should_save:
-                try:
-                    await self.db.insert_candles(self._db_symbol, std_tf, [candle_dict])
-                except Exception as e:
-                    logger.debug(f"OKX candle DB 저장 실패 ({std_tf}): {e}")
+        # DB 저장 — 완성봉만 (미완성봉 저장 시 ATR 왜곡 위험)
+        if self.db and is_closed:
+            try:
+                await self.db.insert_candles(self._db_symbol, std_tf, [candle_dict])
+            except Exception as e:
+                logger.debug(f"OKX candle DB 저장 실패 ({std_tf}): {e}")
 
         # 캔들 확정 → 이벤트 발행 (eval 루프 트리거)
         if is_closed:

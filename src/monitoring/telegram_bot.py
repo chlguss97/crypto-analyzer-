@@ -221,10 +221,10 @@ class TelegramNotifier:
 
             # 속도
             if self.redis:
-                vel = await self.redis.get_json("rt:velocity:BTC-USDT-SWAP")
+                vel = await self.redis.hgetall("rt:velocity:BTC-USDT-SWAP")
                 if vel:
-                    text += f"\n60s Range: ${vel.get('range_60s', 0):.0f}"
-                    text += f"\n60s Move: ${vel.get('move_60s', 0):+.0f}"
+                    text += f"\n60s Range: ${float(vel.get('range_60s', 0)):.0f}"
+                    text += f"\n60s Move: ${float(vel.get('move_60s', 0)):+.0f}"
 
             await self._send(text)
         except Exception as e:
