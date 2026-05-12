@@ -27,3 +27,13 @@
 2026-05-13 08:15:01 [WARNING] src.strategy.ml_engine: [ML] OOS 0.390 < 0.52 → 모델 미교체 (연속 4회)
 2026-05-13 08:15:01 [ERROR] src.strategy.ml_engine: [ML] OOS 2연속 미달 → Phase A 복귀
 2026-05-13 08:15:01 [WARNING] src.strategy.ml_engine: [ML] Phase 전환: A → A | OOS 39.0% 2연속 미달 → 룰 기반 복귀
+2026-05-13 08:17:06 [WARNING] src.data.ws_stream: OKX WS business 수신 끊김: no close frame received or sent → 재연결
+2026-05-13 08:20:01 [WARNING] src.strategy.ml_engine: [ML] OOS 0.366 < 0.52 → 모델 미교체 (연속 5회)
+2026-05-13 08:20:01 [ERROR] src.strategy.ml_engine: [ML] OOS 2연속 미달 → Phase A 복귀
+2026-05-13 08:20:01 [WARNING] src.strategy.ml_engine: [ML] Phase 전환: A → A | OOS 36.6% 2연속 미달 → 룰 기반 복귀
+2026-05-13 08:25:01 [WARNING] src.strategy.ml_engine: [ML] OOS 0.419 < 0.52 → 모델 미교체 (연속 6회)
+2026-05-13 08:25:01 [ERROR] src.strategy.ml_engine: [ML] OOS 2연속 미달 → Phase A 복귀
+2026-05-13 08:25:01 [WARNING] src.strategy.ml_engine: [ML] Phase 전환: A → A | OOS 41.9% 2연속 미달 → 룰 기반 복귀
+2026-05-13 08:30:01 [WARNING] src.strategy.ml_engine: [ML] OOS 0.419 < 0.52 → 모델 미교체 (연속 7회)
+2026-05-13 08:30:01 [ERROR] src.strategy.ml_engine: [ML] OOS 2연속 미달 → Phase A 복귀
+2026-05-13 08:30:01 [WARNING] src.strategy.ml_engine: [ML] Phase 전환: A → A | OOS 41.9% 2연속 미달 → 룰 기반 복귀
