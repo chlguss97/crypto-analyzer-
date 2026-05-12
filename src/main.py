@@ -1093,11 +1093,11 @@ class CryptoAnalyzer:
     async def periodic_heartbeat(self):
         """헬스체크 (60초)"""
         while self._running:
-            await self.redis.set("sys:last_heartbeat", str(int(_time.time())))
+            await self.redis.set("sys:last_heartbeat", str(int(_time.time())), ttl=120)
             try:
                 bal = await asyncio.wait_for(self.executor.get_balance(), timeout=5.0)
                 if bal and bal > 0:
-                    await self.redis.set("sys:balance", f"{bal:.2f}")
+                    await self.redis.set("sys:balance", f"{bal:.2f}", ttl=300)
             except Exception:
                 pass
 

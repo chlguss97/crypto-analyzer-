@@ -226,7 +226,7 @@ class WebSocketStream:
             "low24h": ticker.get("low24h", "0"),
             "vol24h": ticker.get("volCcy24h", "0"),
             "timestamp": ticker.get("ts", "0"),
-        })
+        }, ttl=30)
 
     # ══════════════════════════════════════════
     #  Trades → CVD + 마이크로스트럭처
@@ -307,7 +307,7 @@ class WebSocketStream:
                     "range_10s": str(round((max(prices_10s) - min(prices_10s)) if len(prices_10s) >= 2 else 0, 1)),
                     "move_10s": str(round((price - prices_10s[0]) if prices_10s else 0, 1)),
                     "ts": str(ts),
-                })
+                }, ttl=30)
 
         # ── CVD 윈도우 리셋 ──
         if now_sec // 300 != self._cvd_reset_5m:

@@ -2,7 +2,7 @@
 
 > CryptoAnalyzer v2 — 4경로 시스템 (Shadow + PaperLab + SimTrader + 실거래)
 > 4경로 / AdaptiveParams / ML / Drift플래그 / 확신도6점 전체 정합성 검증
-> 마지막 갱신: 2026-05-08
+> 마지막 갱신: 2026-05-12
 
 ---
 
@@ -365,7 +365,58 @@ worst_price, first_profit_ts, entry_atr, entry_h1_trend, entry_h4_trend, params_
 
 ---
 
-## 9단계: 시간·경계·예외
+## 9단계: 데이터 흐름 End-to-End 검증 ★코드만 보면 못 찾는 버그
+
+**원칙: 코드 로직이 맞아도, 데이터가 잘못 들어오면 전부 무의미.**
+INSERT OR IGNORE로 미완성 캔들이 영구 저장되어 ATR=3.5 (정상 ~70) → 후보 감지 불가 사고 (2026-05-12).
+
+### 9-A. DB 쓰기 패턴 검증
+
+모든 `INSERT`, `UPDATE`, `REPLACE` 구문에 대해:
+
+1. **INSERT OR IGNORE 사용 금지 확인** — 동일 키로 갱신이 필요한 테이블에 사용하면 최초 값만 남음
+2. **UPSERT 패턴 확인** — `ON CONFLICT DO UPDATE`에서 갱신할 컬럼이 올바른지 (high=MAX, low=MIN, close/volume=최신)
+3. **타이밍 검증** — 데이터가 "미완성 → 완성" 순서로 들어올 때, 완성 데이터가 제대로 덮어쓰는지
+4. **TTL/만료** — Redis SET에 TTL이 필요한 키가 TTL 없이 영구 저장되는지
+
+### 9-B. 실제 데이터 샘플링 검증 (서버에서 실행)
+
+```python
+# 캔들 품질: 최근 20봉의 range가 정상 범위인지
+SELECT high-low as range, volume FROM candles 
+WHERE timeframe='5m' ORDER BY timestamp DESC LIMIT 20;
+# range < 5 (BTC 기준) 이면 이상 → 원인 추적
+
+# ATR 정상 범위: BTC 5분봉 ATR은 보통 30~150
+# ATR < 10 이면 데이터 오염 의심
+
+# signals 데이터 품질: reach_pct, mae_pct 이상값
+SELECT reach_pct, mae_pct FROM signals WHERE label >= 0;
+# |reach_pct| > 500 또는 mae_pct > 20 이면 이상
+```
+
+### 9-C. WS → DB 저장 경로 추적
+
+```
+WS 이벤트 수신 → 파싱 → DB/Redis 저장 → 읽기 → 계산
+```
+
+각 단계에서:
+1. **파싱**: 필드 누락/타입 불일치 없는지
+2. **저장**: INSERT/UPSERT 패턴이 데이터 특성에 맞는지
+3. **읽기**: SELECT가 올바른 컬럼을 가져오는지
+4. **계산**: 읽은 값으로 ATR/BB/EMA 등 계산 시 NaN/Inf/0 방어 있는지
+
+### 9-D. Redis 읽기-쓰기 일관성
+
+모든 Redis key에 대해:
+1. SET하는 곳의 **값 형식** (string/JSON/float) ↔ GET하는 곳의 **파싱 방식** 일치
+2. 키 이름 오타 (SET "flow:cvd_5m" vs GET "flow:combined:cvd_5m")
+3. TTL 설정: 실시간 데이터에 TTL 없으면 stale 값 영구 참조
+
+---
+
+## 10단계: 시간·경계·예외
 
 - 단위: 가격 USDT, 수량 BTC (OKX contracts 변환), 시간 epoch seconds/ms
 - 동시성: asyncio Lock (position_manager)
@@ -374,7 +425,7 @@ worst_price, first_profit_ts, entry_atr, entry_h1_trend, entry_h4_trend, params_
 
 ---
 
-## 10단계: 변수 스코프 + 런타임 패턴
+## 11단계: 변수 스코프 + 런타임 패턴
 
 - 모든 함수에서 변수 출처 확인 (파라미터/self/local/import → 아니면 NameError)
 - hot path에서 파일 I/O 금지 (load_config 캐싱)
@@ -382,7 +433,7 @@ worst_price, first_profit_ts, entry_atr, entry_h1_trend, entry_h4_trend, params_
 
 ---
 
-## 11단계: 운영 상태 확인 (수정 전 필수)
+## 12단계: 운영 상태 확인 (수정 전 필수)
 
 | 점검 항목 | 발견 시 |
 |-----------|---------|
@@ -392,7 +443,7 @@ worst_price, first_profit_ts, entry_atr, entry_h1_trend, entry_h4_trend, params_
 
 ---
 
-## 12단계: 자동 수정 정책
+## 13단계: 자동 수정 정책
 
 | 대상 | 정책 |
 |------|------|
@@ -414,7 +465,7 @@ worst_price, first_profit_ts, entry_atr, entry_h1_trend, entry_h4_trend, params_
 
 ---
 
-## 13단계: Git 커밋
+## 14단계: Git 커밋
 
 - .env, *.pkl, *.db 커밋 금지 (grep 스캔)
 - main 직접 커밋

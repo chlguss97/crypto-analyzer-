@@ -138,6 +138,7 @@ class PositionManager:
         self.trailing_cfg = self.config["trailing"]
         self.risk_cfg = self.config["risk"]
         self._as_cfg = self.config.get("adverse_selection", {})
+        self.symbol = self.config.get("exchange", {}).get("symbol", "BTC/USDT:USDT")
 
         self.positions: dict[str, Position] = {}  # symbol → Position
         self.on_trade_closed = None  # 콜백: async def(mode, signals, pnl_pct, fee_pct)
