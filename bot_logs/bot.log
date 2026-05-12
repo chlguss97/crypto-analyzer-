@@ -136,3 +136,22 @@
 2026-05-11 05:33:10 [WARNING] src.trading.risk_manager: 손실 기록: -9.11% | 연패: 2
 2026-05-11 07:34:24 [WARNING] src.data.ws_stream: OKX WS public 수신 끊김: sent 1011 (internal error) keepalive ping timeout; no close frame received → 재연결
 2026-05-11 08:35:13 [WARNING] src.trading.executor: post-only 3회 추격 실패 → 진입 포기 (maker 강제)
+2026-05-11 23:32:50 [WARNING] src.data.ws_stream: OKX WS public 수신 끊김: sent 1011 (internal error) keepalive ping timeout; no close frame received → 재연결
+2026-05-11 23:35:33 [WARNING] src.trading.position_manager: 포지션 외부 종료 감지 (사이즈≈0) → 정리: BTC/USDT:USDT
+2026-05-11 23:35:36 [WARNING] src.strategy.setup_tracker: [SetupTracker] 알 수 없는 셋업: fast_momentum
+2026-05-11 23:46:34 [ERROR] src.data.candle_collector: 캔들 조회 실패 [1m]: okx GET https://www.okx.com/api/v5/market/candles?instId=BTC-USDT-SWAP&bar=1m&limit=5
+2026-05-11 23:46:40 [WARNING] src.data.ws_stream: OKX WS public ping 실패 → 재연결
+2026-05-11 23:46:40 [WARNING] src.data.ws_stream: OKX WS business ping 실패 → 재연결
+2026-05-11 23:46:50 [WARNING] src.data.ws_stream: OKX WS 끊김: timed out during opening handshake → 5초 후 재연결 (시도 1)
+2026-05-11 23:46:57 [ERROR] src.data.candle_collector: 캔들 조회 실패 [5m]: okx GET https://www.okx.com/api/v5/market/candles?instId=BTC-USDT-SWAP&bar=5m&limit=5
+2026-05-11 23:47:05 [WARNING] src.data.ws_stream: OKX WS 끊김: timed out during opening handshake → 10초 후 재연결 (시도 2)
+2026-05-11 23:51:38 [ERROR] src.data.candle_collector: 캔들 조회 실패 [1m]: okx GET https://www.okx.com/api/v5/market/candles?instId=BTC-USDT-SWAP&bar=1m&limit=5
+2026-05-11 23:51:46 [WARNING] src.data.ws_stream: OKX WS public ping 실패 → 재연결
+2026-05-11 23:51:46 [WARNING] src.data.ws_stream: OKX WS business 수신 끊김: sent 1011 (internal error) keepalive ping timeout; no close frame received → 재연결
+2026-05-11 23:51:57 [WARNING] src.data.ws_stream: OKX WS 끊김: timed out during opening handshake → 5초 후 재연결 (시도 1)
+2026-05-11 23:52:01 [ERROR] src.data.candle_collector: 캔들 조회 실패 [5m]: okx GET https://www.okx.com/api/v5/market/candles?instId=BTC-USDT-SWAP&bar=5m&limit=5
+2026-05-11 23:52:12 [WARNING] src.data.ws_stream: OKX WS 끊김: timed out during opening handshake → 10초 후 재연결 (시도 2)
+2026-05-12 01:40:25 [WARNING] src.data.ws_stream: OKX WS business 수신 끊김: no close frame received or sent → 재연결
+2026-05-12 05:38:39 [WARNING] src.data.ws_stream: OKX WS business 수신 끊김: no close frame received or sent → 재연결
+2026-05-12 06:50:27 [WARNING] src.data.ws_stream: OKX WS business 수신 끊김: no close frame received or sent → 재연결
+2026-05-12 07:31:15 [WARNING] src.data.ws_stream: OKX WS public 수신 끊김: no close frame received or sent → 재연결
