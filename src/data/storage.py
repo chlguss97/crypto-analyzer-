@@ -146,9 +146,14 @@ class Database:
         if not candles:
             return
         await self._db.executemany(
-            """INSERT OR IGNORE INTO candles
+            """INSERT INTO candles
                (symbol, timeframe, timestamp, open, high, low, close, volume)
-               VALUES (:symbol, :timeframe, :timestamp, :open, :high, :low, :close, :volume)""",
+               VALUES (:symbol, :timeframe, :timestamp, :open, :high, :low, :close, :volume)
+               ON CONFLICT(symbol, timeframe, timestamp)
+               DO UPDATE SET high=MAX(candles.high, excluded.high),
+                            low=MIN(candles.low, excluded.low),
+                            close=excluded.close,
+                            volume=excluded.volume""",
             [{"symbol": symbol, "timeframe": timeframe, **c} for c in candles],
         )
         await self._db.commit()
