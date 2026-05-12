@@ -1,0 +1,157 @@
+2026-05-05 09:40:12 [WARNING] src.trading.executor: post-only 3회 추격 실패 → market 폴백 (taker 0.05%)
+2026-05-05 10:11:04 [WARNING] src.data.ws_stream: OKX WS business 수신 끊김: no close frame received or sent → 재연결
+2026-05-05 11:04:07 [WARNING] src.trading.position_manager: 포지션 외부 종료 감지 (사이즈≈0) → 정리: BTC/USDT:USDT
+2026-05-05 11:04:09 [WARNING] src.trading.risk_manager: 손실 기록: -8.32% | 연패: 1
+2026-05-05 11:04:09 [ERROR] src.trading.risk_manager: [RISK] 주간 손실 한도 -10.0% 도달: -11.30% → 주간 매매 중단
+2026-05-05 11:32:02 [WARNING] src.data.ws_stream: OKX WS business 수신 끊김: no close frame received or sent → 재연결
+2026-05-05 13:55:14 [WARNING] src.trading.executor: post-only 3회 추격 실패 → market 폴백 (taker 0.05%)
+2026-05-05 21:12:10 [WARNING] src.data.ws_stream: OKX WS public 수신 끊김: no close frame received or sent → 재연결
+2026-05-05 22:30:37 [ERROR] src.trading.position_manager: 🛑 SL failsafe 발동: LONG 가격 $81337 vs SL $81341 | 보유 515분 | runner=True | size=0.0250/0.0500 | algo_debug={'pending_count': 0, 'pending_ids': [], 'pos_sl_algo_id': 'rsl17779876697582149'}
+2026-05-05 22:30:38 [ERROR] src.trading.executor: 시장가 주문 실패 (1/3): okx {"code":"1","data":[{"clOrdId":"6b9ad766b55dBCDE49f2090e6421bc85","ordId":"","sCode":"51169","sMsg":"Order failed because you don't have any positions in this direction for this contract to reduce or close. ","subCode":"","tag":"6b9ad766b55dBCDE","ts":"1777987838106"}],"inTime":"1777987838106677","msg":"All operations failed","outTime":"1777987838107129"}
+2026-05-06 00:00:20 [WARNING] src.data.ws_stream: OKX WS business 수신 끊김: no close frame received or sent → 재연결
+2026-05-06 01:28:20 [WARNING] src.data.ws_stream: OKX WS public 수신 끊김: no close frame received or sent → 재연결
+2026-05-06 04:12:16 [WARNING] src.data.ws_stream: OKX WS public 수신 끊김: no close frame received or sent → 재연결
+2026-05-06 05:03:39 [WARNING] src.trading.position_manager: 포지션 외부 종료 감지 (사이즈≈0) → 정리: BTC/USDT:USDT
+2026-05-06 05:03:41 [WARNING] src.trading.risk_manager: 손실 기록: -7.24% | 연패: 1
+2026-05-06 05:07:01 [WARNING] src.trading.position_manager: ⚡ Adverse Selection 발동: LONG 마진 -2.5% (한도 -2.5%) | 60초 경과
+2026-05-06 05:07:10 [WARNING] src.trading.executor: post-only 청산 실패 → 다음 사이클 재시도 (adverse_selection)
+2026-05-06 05:07:10 [ERROR] src.trading.position_manager: 🚨 청산 실패 (adverse_selection) 1/10 → SL 긴급 재등록 + 2초 후 재시도
+2026-05-06 07:32:01 [ERROR] src.trading.position_manager: 🛑 SL failsafe 발동: LONG 가격 $81256 vs SL $81261 | 보유 146분 | runner=False | size=0.0500/0.0500 | algo_debug={'pending_count': 1, 'pending_ids': [{'clOrdId': 'tp117780116334496733', 'id': '3540302408431607808', 'triggerPx': '82179.9', 'sz': '2', 'state': 'live'}], 'pos_sl_algo_id': 'sl17780116321515112'}
+2026-05-06 07:32:02 [ERROR] src.trading.executor: 시장가 주문 실패 (1/3): okx {"code":"1","data":[{"clOrdId":"6b9ad766b55dBCDE2d32d2e0efc40ecc","ordId":"","sCode":"51169","sMsg":"Order failed because you don't have any positions in this direction for this contract to reduce or close. ","subCode":"","tag":"6b9ad766b55dBCDE","ts":"1778020322166"}],"inTime":"1778020322165724","msg":"All operations failed","outTime":"1778020322166592"}
+2026-05-06 07:32:03 [WARNING] src.trading.risk_manager: 손실 기록: -8.88% | 연패: 2
+2026-05-06 07:32:03 [ERROR] src.trading.risk_manager: [RISK] 일일 손실 한도 -10.0% 도달: -15.64% → 당일 매매 중단
+2026-05-06 07:32:03 [ERROR] src.trading.risk_manager: [RISK] 주간 손실 한도 -10.0% 도달: -18.62% → 주간 매매 중단
+2026-05-06 08:21:57 [WARNING] src.data.ws_stream: OKX WS public 수신 끊김: no close frame received or sent → 재연결
+2026-05-06 14:10:13 [WARNING] src.trading.executor: post-only 3회 추격 실패 → market 폴백 (taker 0.05%)
+2026-05-06 17:33:30 [WARNING] src.trading.position_manager: 포지션 외부 종료 감지 (사이즈≈0) → 정리: BTC/USDT:USDT
+2026-05-06 17:33:33 [WARNING] src.trading.risk_manager: 손실 기록: -8.12% | 연패: 1
+2026-05-06 17:33:33 [ERROR] src.trading.risk_manager: [RISK] 주간 손실 한도 -10.0% 도달: -26.74% → 주간 매매 중단
+2026-05-06 17:40:14 [WARNING] src.trading.executor: post-only 3회 추격 실패 → market 폴백 (taker 0.05%)
+2026-05-06 20:43:46 [WARNING] src.trading.position_manager: 포지션 외부 종료 감지 (사이즈≈0) → 정리: BTC/USDT:USDT
+2026-05-06 20:43:48 [ERROR] src.trading.risk_manager: [RISK] 주간 손실 한도 -10.0% 도달: -15.94% → 주간 매매 중단
+2026-05-07 00:00:07 [WARNING] src.trading.executor: post-only 3회 추격 실패 → market 폴백 (taker 0.05%)
+2026-05-07 02:35:02 [WARNING] src.data.ws_stream: OKX WS business 수신 끊김: no close frame received or sent → 재연결
+2026-05-07 04:20:49 [WARNING] src.data.ws_stream: OKX WS public 수신 끊김: no close frame received or sent → 재연결
+2026-05-07 05:03:30 [WARNING] src.data.ws_stream: OKX WS public 수신 끊김: no close frame received or sent → 재연결
+2026-05-07 08:03:22 [WARNING] src.trading.position_manager: 포지션 외부 종료 감지 (사이즈≈0) → 정리: BTC/USDT:USDT
+2026-05-07 08:03:24 [WARNING] src.trading.risk_manager: 손실 기록: -9.09% | 연패: 1
+2026-05-07 08:03:24 [ERROR] src.trading.risk_manager: [RISK] 주간 손실 한도 -10.0% 도달: -25.02% → 주간 매매 중단
+2026-05-07 08:30:52 [WARNING] src.data.ws_stream: OKX WS public 수신 끊김: no close frame received or sent → 재연결
+2026-05-07 08:35:03 [WARNING] src.data.ws_stream: OKX WS public 수신 끊김: sent 1011 (internal error) keepalive ping timeout; no close frame received → 재연결
+2026-05-07 08:35:03 [WARNING] src.data.ws_stream: OKX WS business 수신 끊김: sent 1011 (internal error) keepalive ping timeout; no close frame received → 재연결
+2026-05-07 08:40:01 [WARNING] src.data.ws_stream: OKX WS business 수신 끊김: sent 1011 (internal error) keepalive ping timeout; no close frame received → 재연결
+2026-05-07 08:40:28 [WARNING] src.trading.executor: post-only 3회 추격 실패 → market 폴백 (taker 0.05%)
+2026-05-07 08:40:44 [WARNING] CryptoAnalyzer: 미청산: BTC/USDT:USDT SHORT @ $81270.1
+2026-05-07 08:42:10 [WARNING] src.trading.position_manager: 거래소 포지션 발견 (봇 미추적): BTC/USDT:USDT short 4.000000 @ $81270.1
+2026-05-07 08:55:48 [WARNING] CryptoAnalyzer: 미청산: BTC/USDT:USDT SHORT @ $81270.1
+2026-05-07 08:55:58 [WARNING] src.trading.position_manager: 거래소 포지션 발견 (봇 미추적): BTC/USDT:USDT short 4.000000 @ $81270.1
+2026-05-07 09:03:00 [WARNING] CryptoAnalyzer: 미청산: BTC/USDT:USDT SHORT @ $81270.1
+2026-05-07 09:03:10 [WARNING] src.trading.position_manager: 거래소 포지션 발견 (봇 미추적): BTC/USDT:USDT short 4.000000 @ $81270.1
+2026-05-07 09:08:32 [WARNING] CryptoAnalyzer: 미청산: BTC/USDT:USDT SHORT @ $81270.1
+2026-05-07 09:08:41 [WARNING] src.trading.position_manager: 거래소 포지션 발견 (봇 미추적): BTC/USDT:USDT short 4.000000 @ $81270.1
+2026-05-07 09:18:18 [WARNING] CryptoAnalyzer: 미청산: BTC/USDT:USDT SHORT @ $81270.1
+2026-05-07 09:18:28 [WARNING] src.trading.position_manager: 거래소 포지션 발견 (봇 미추적): BTC/USDT:USDT short 4.000000 @ $81270.1
+2026-05-07 10:03:26 [WARNING] CryptoAnalyzer: 미청산: BTC/USDT:USDT SHORT @ $81270.1
+2026-05-07 10:03:35 [WARNING] src.trading.position_manager: 거래소 포지션 발견 (봇 미추적): BTC/USDT:USDT short 4.000000 @ $81270.1
+2026-05-07 10:09:11 [WARNING] CryptoAnalyzer: 미청산: BTC/USDT:USDT SHORT @ $81270.1
+2026-05-07 10:09:22 [WARNING] src.trading.position_manager: 거래소 포지션 발견 (봇 미추적): BTC/USDT:USDT short 4.000000 @ $81270.1
+2026-05-07 10:13:35 [WARNING] CryptoAnalyzer: 미청산: BTC/USDT:USDT SHORT @ $81270.1
+2026-05-07 10:13:45 [WARNING] src.trading.position_manager: 거래소 포지션 발견 (봇 미추적): BTC/USDT:USDT short 4.000000 @ $81270.1
+2026-05-07 10:38:26 [WARNING] CryptoAnalyzer: 미청산: BTC/USDT:USDT SHORT @ $81270.1
+2026-05-07 10:38:37 [WARNING] src.trading.position_manager: 거래소 포지션 발견 (봇 미추적): BTC/USDT:USDT short 4.000000 @ $81270.1
+2026-05-07 10:58:43 [WARNING] CryptoAnalyzer: 미청산: BTC/USDT:USDT SHORT @ $81270.1
+2026-05-07 10:58:54 [WARNING] src.trading.position_manager: 거래소 포지션 발견 (봇 미추적): BTC/USDT:USDT short 4.000000 @ $81270.1
+2026-05-07 11:29:23 [WARNING] CryptoAnalyzer: 미청산: BTC/USDT:USDT SHORT @ $81270.1
+2026-05-07 11:29:34 [WARNING] src.trading.position_manager: 거래소 포지션 발견 (봇 미추적): BTC/USDT:USDT short 4.000000 @ $81270.1
+2026-05-07 13:05:38 [WARNING] CryptoAnalyzer: 미청산: BTC/USDT:USDT SHORT @ $81270.1
+2026-05-07 13:05:49 [WARNING] src.trading.position_manager: 거래소 포지션 발견 (봇 미추적): BTC/USDT:USDT short 4.000000 @ $81270.1
+2026-05-07 13:21:42 [WARNING] CryptoAnalyzer: 미청산: BTC/USDT:USDT SHORT @ $81270.1
+2026-05-07 13:22:05 [WARNING] src.trading.position_manager: 거래소 포지션 발견 (봇 미추적): BTC/USDT:USDT short 2.000000 @ $81270.1
+2026-05-07 13:25:51 [WARNING] src.trading.position_manager: 포지션 외부 종료 감지 (사이즈≈0) → 정리: BTC/USDT:USDT
+2026-05-07 13:25:53 [ERROR] src.trading.risk_manager: [RISK] 주간 손실 한도 -10.0% 도달: -24.97% → 주간 매매 중단
+2026-05-08 01:05:09 [WARNING] src.trading.executor: post-only 3회 추격 실패 → 진입 포기 (maker 강제)
+2026-05-08 01:10:15 [WARNING] src.trading.executor: post-only 3회 추격 실패 → 진입 포기 (maker 강제)
+2026-05-08 01:34:37 [ERROR] src.trading.executor: 포지션 사이즈 조회 실패: okx GET https://www.okx.com/api/v5/account/positions?instId=BTC-USDT-SWAP
+2026-05-08 02:30:18 [WARNING] src.data.ws_stream: OKX WS public 수신 끊김: no close frame received or sent → 재연결
+2026-05-08 02:50:38 [WARNING] src.data.ws_stream: OKX WS public 수신 끊김: no close frame received or sent → 재연결
+2026-05-08 03:00:55 [WARNING] src.trading.position_manager: 포지션 외부 종료 감지 (사이즈≈0) → 정리: BTC/USDT:USDT
+2026-05-08 03:00:58 [WARNING] src.trading.risk_manager: 손실 기록: -11.07% | 연패: 1
+2026-05-08 03:00:58 [ERROR] src.trading.position_manager: ML 콜백 에러: name 'MAX_DAILY_LOSS_PCT' is not defined
+2026-05-08 03:56:52 [WARNING] src.trading.position_manager: ⚡ Adverse Selection 발동: SHORT 마진 -2.6% (한도 -2.5%) | 60초 경과
+2026-05-08 03:57:01 [WARNING] src.trading.executor: post-only 청산 실패 → 다음 사이클 재시도 (adverse_selection)
+2026-05-08 03:57:01 [ERROR] src.trading.position_manager: 🚨 청산 실패 (adverse_selection) 1/10 → SL 긴급 재등록 + 2초 후 재시도
+2026-05-08 04:29:47 [WARNING] src.data.ws_stream: OKX WS public 수신 끊김: no close frame received or sent → 재연결
+2026-05-08 05:02:23 [WARNING] src.data.ws_stream: OKX WS business 수신 끊김: no close frame received or sent → 재연결
+2026-05-08 05:21:55 [WARNING] src.data.ws_stream: OKX WS public 수신 끊김: no close frame received or sent → 재연결
+2026-05-08 07:12:46 [WARNING] src.trading.position_manager: 포지션 외부 종료 감지 (사이즈≈0) → 정리: BTC/USDT:USDT
+2026-05-08 07:12:49 [ERROR] src.trading.position_manager: ML 콜백 에러: name 'MAX_DAILY_LOSS_PCT' is not defined
+2026-05-08 08:51:08 [WARNING] src.trading.position_manager: 포지션 외부 종료 감지 (사이즈≈0) → 정리: BTC/USDT:USDT
+2026-05-08 08:51:11 [WARNING] src.trading.risk_manager: 손실 기록: -5.54% | 연패: 1
+2026-05-08 08:51:11 [ERROR] src.trading.position_manager: ML 콜백 에러: name 'MAX_DAILY_LOSS_PCT' is not defined
+2026-05-08 09:50:12 [WARNING] src.trading.executor: post-only 3회 추격 실패 → 진입 포기 (maker 강제)
+2026-05-08 09:50:55 [WARNING] src.trading.executor: post-only 3회 추격 실패 → 진입 포기 (maker 강제)
+2026-05-08 10:05:13 [WARNING] src.trading.executor: post-only 3회 추격 실패 → 진입 포기 (maker 강제)
+2026-05-08 14:45:25 [ERROR] src.trading.position_manager: 🛑 SL failsafe 발동: SHORT 가격 $79736 vs SL $79735 | 보유 155분 | runner=False | size=0.0600/0.0600 | algo_debug={'pending_count': 1, 'pending_ids': [{'clOrdId': 'tp117782098048927566', 'id': '3546951935049748480', 'triggerPx': '78822.8', 'sz': '3', 'state': 'live'}], 'pos_sl_algo_id': 'sl17782098045730095'}
+2026-05-08 14:45:26 [ERROR] src.trading.executor: 시장가 주문 실패 (1/3): okx {"code":"1","data":[{"clOrdId":"6b9ad766b55dBCDE9d8b68ff5c526072","ordId":"","sCode":"51169","sMsg":"Order failed because you don't have any positions in this direction for this contract to reduce or close. ","subCode":"","tag":"6b9ad766b55dBCDE","ts":"1778219126451"}],"inTime":"1778219126451261","msg":"All operations failed","outTime":"1778219126451650"}
+2026-05-08 14:45:28 [WARNING] src.trading.risk_manager: 손실 기록: -11.02% | 연패: 1
+2026-05-08 14:45:28 [WARNING] src.strategy.setup_tracker: [SetupTracker] 알 수 없는 셋업: drift
+2026-05-08 15:05:09 [WARNING] src.trading.executor: post-only 3회 추격 실패 → 진입 포기 (maker 강제)
+2026-05-08 16:05:12 [WARNING] src.trading.executor: post-only 3회 추격 실패 → 진입 포기 (maker 강제)
+2026-05-08 19:15:14 [WARNING] src.trading.executor: post-only 3회 추격 실패 → 진입 포기 (maker 강제)
+2026-05-08 22:10:41 [WARNING] src.trading.position_manager: 포지션 외부 종료 감지 (사이즈≈0) → 정리: BTC/USDT:USDT
+2026-05-08 22:10:44 [WARNING] src.trading.risk_manager: 손실 기록: -8.94% | 연패: 1
+2026-05-08 22:45:04 [WARNING] src.trading.executor: post-only 3회 추격 실패 → 진입 포기 (maker 강제)
+2026-05-09 04:55:13 [WARNING] src.trading.executor: post-only 3회 추격 실패 → 진입 포기 (maker 강제)
+2026-05-09 05:25:10 [WARNING] src.trading.executor: post-only 3회 추격 실패 → 진입 포기 (maker 강제)
+2026-05-09 05:35:09 [WARNING] src.trading.executor: post-only 3회 추격 실패 → 진입 포기 (maker 강제)
+2026-05-09 06:05:14 [WARNING] src.trading.executor: post-only 3회 추격 실패 → 진입 포기 (maker 강제)
+2026-05-09 06:50:45 [WARNING] src.data.ws_stream: OKX WS public 수신 끊김: no close frame received or sent → 재연결
+2026-05-09 07:05:14 [WARNING] src.trading.executor: post-only 3회 추격 실패 → 진입 포기 (maker 강제)
+2026-05-09 07:45:09 [WARNING] src.trading.executor: post-only 3회 추격 실패 → 진입 포기 (maker 강제)
+2026-05-09 10:05:07 [WARNING] src.trading.position_manager: ⚠️  사이즈 0.0100 BTC < 0.02 BTC → TP1 에서 100% 청산 (러너 비활성)
+2026-05-09 13:06:11 [WARNING] src.trading.position_manager: 포지션 외부 종료 감지 (사이즈≈0) → 정리: BTC/USDT:USDT
+2026-05-09 13:06:13 [WARNING] src.trading.risk_manager: 손실 기록: -8.42% | 연패: 1
+2026-05-09 15:25:12 [WARNING] src.trading.executor: post-only 3회 추격 실패 → 진입 포기 (maker 강제)
+2026-05-09 18:20:13 [WARNING] src.trading.executor: post-only 3회 추격 실패 → 진입 포기 (maker 강제)
+2026-05-09 19:10:11 [WARNING] src.trading.executor: post-only 3회 추격 실패 → 진입 포기 (maker 강제)
+2026-05-09 20:05:13 [WARNING] src.trading.executor: post-only 3회 추격 실패 → 진입 포기 (maker 강제)
+2026-05-09 20:50:13 [WARNING] src.trading.executor: post-only 3회 추격 실패 → 진입 포기 (maker 강제)
+2026-05-09 21:05:11 [WARNING] src.trading.executor: post-only 3회 추격 실패 → 진입 포기 (maker 강제)
+2026-05-09 21:30:07 [WARNING] src.trading.executor: post-only 3회 추격 실패 → 진입 포기 (maker 강제)
+2026-05-09 23:15:12 [WARNING] src.trading.executor: post-only 3회 추격 실패 → 진입 포기 (maker 강제)
+2026-05-10 02:38:10 [WARNING] src.data.ws_stream: OKX WS public 수신 끊김: sent 1011 (internal error) keepalive ping timeout; no close frame received → 재연결
+2026-05-10 04:17:54 [ERROR] src.trading.position_manager: 🛑 SL failsafe 발동: LONG 가격 $80800 vs SL $80803 | 보유 196분 | runner=True | size=0.0100/0.0200 | algo_debug={'pending_count': 0, 'pending_ids': [], 'pos_sl_algo_id': 'rsl17783542369479101'}
+2026-05-10 04:17:55 [ERROR] src.trading.executor: 시장가 주문 실패 (1/3): okx {"code":"1","data":[{"clOrdId":"6b9ad766b55dBCDEe372efc83c9e4eeb","ordId":"","sCode":"51169","sMsg":"Order failed because you don't have any positions in this direction for this contract to reduce or close. ","subCode":"","tag":"6b9ad766b55dBCDE","ts":"1778354275175"}],"inTime":"1778354275175132","msg":"All operations failed","outTime":"1778354275176201"}
+2026-05-10 04:17:56 [WARNING] src.strategy.setup_tracker: [SetupTracker] 알 수 없는 셋업: fast_momentum
+2026-05-10 05:35:12 [WARNING] src.trading.executor: post-only 3회 추격 실패 → 진입 포기 (maker 강제)
+2026-05-10 06:05:13 [WARNING] src.trading.executor: post-only 3회 추격 실패 → 진입 포기 (maker 강제)
+2026-05-10 07:35:11 [WARNING] src.trading.executor: post-only 3회 추격 실패 → 진입 포기 (maker 강제)
+2026-05-10 08:10:12 [WARNING] src.trading.executor: post-only 3회 추격 실패 → 진입 포기 (maker 강제)
+2026-05-10 08:30:10 [WARNING] src.trading.executor: post-only 3회 추격 실패 → 진입 포기 (maker 강제)
+2026-05-10 09:45:02 [WARNING] src.trading.position_manager: ⚠️  사이즈 0.0100 BTC < 0.02 BTC → TP1 에서 100% 청산 (러너 비활성)
+2026-05-11 00:40:51 [ERROR] src.trading.position_manager: 🛑 SL failsafe 발동: SHORT 가격 $81127 vs SL $81125 | 보유 895분 | runner=False | size=0.0100/0.0100 | algo_debug={'pending_count': 1, 'pending_ids': [{'clOrdId': 'tp117783739029338554', 'id': '3552458149493915648', 'triggerPx': '80134.8', 'sz': '1', 'state': 'live'}], 'pos_sl_algo_id': 'sl17783739027265967'}
+2026-05-11 00:40:53 [WARNING] src.trading.risk_manager: 손실 기록: -9.89% | 연패: 1
+2026-05-11 05:33:07 [ERROR] src.trading.position_manager: 🛑 SL failsafe 발동: LONG 가격 $80930 vs SL $80936 | 보유 267분 | runner=False | size=0.0300/0.0300 | algo_debug={'pending_count': 1, 'pending_ids': [{'clOrdId': 'tp117784291117642532', 'id': '3554310652304969728', 'triggerPx': '81933.9', 'sz': '1.5', 'state': 'live'}], 'pos_sl_algo_id': 'sl17784291116200742'}
+2026-05-11 05:33:08 [ERROR] src.trading.executor: 시장가 주문 실패 (1/3): okx {"code":"1","data":[{"clOrdId":"6b9ad766b55dBCDEe62d2c8572fb58cb","ordId":"","sCode":"51169","sMsg":"Order failed because you don't have any positions in this direction for this contract to reduce or close. ","subCode":"","tag":"6b9ad766b55dBCDE","ts":"1778445188634"}],"inTime":"1778445188633784","msg":"All operations failed","outTime":"1778445188634883"}
+2026-05-11 05:33:10 [WARNING] src.trading.risk_manager: 손실 기록: -9.11% | 연패: 2
+2026-05-11 07:34:24 [WARNING] src.data.ws_stream: OKX WS public 수신 끊김: sent 1011 (internal error) keepalive ping timeout; no close frame received → 재연결
+2026-05-11 08:35:13 [WARNING] src.trading.executor: post-only 3회 추격 실패 → 진입 포기 (maker 강제)
+2026-05-11 23:32:50 [WARNING] src.data.ws_stream: OKX WS public 수신 끊김: sent 1011 (internal error) keepalive ping timeout; no close frame received → 재연결
+2026-05-11 23:35:33 [WARNING] src.trading.position_manager: 포지션 외부 종료 감지 (사이즈≈0) → 정리: BTC/USDT:USDT
+2026-05-11 23:35:36 [WARNING] src.strategy.setup_tracker: [SetupTracker] 알 수 없는 셋업: fast_momentum
+2026-05-11 23:46:34 [ERROR] src.data.candle_collector: 캔들 조회 실패 [1m]: okx GET https://www.okx.com/api/v5/market/candles?instId=BTC-USDT-SWAP&bar=1m&limit=5
+2026-05-11 23:46:40 [WARNING] src.data.ws_stream: OKX WS public ping 실패 → 재연결
+2026-05-11 23:46:40 [WARNING] src.data.ws_stream: OKX WS business ping 실패 → 재연결
+2026-05-11 23:46:50 [WARNING] src.data.ws_stream: OKX WS 끊김: timed out during opening handshake → 5초 후 재연결 (시도 1)
+2026-05-11 23:46:57 [ERROR] src.data.candle_collector: 캔들 조회 실패 [5m]: okx GET https://www.okx.com/api/v5/market/candles?instId=BTC-USDT-SWAP&bar=5m&limit=5
+2026-05-11 23:47:05 [WARNING] src.data.ws_stream: OKX WS 끊김: timed out during opening handshake → 10초 후 재연결 (시도 2)
+2026-05-11 23:51:38 [ERROR] src.data.candle_collector: 캔들 조회 실패 [1m]: okx GET https://www.okx.com/api/v5/market/candles?instId=BTC-USDT-SWAP&bar=1m&limit=5
+2026-05-11 23:51:46 [WARNING] src.data.ws_stream: OKX WS public ping 실패 → 재연결
+2026-05-11 23:51:46 [WARNING] src.data.ws_stream: OKX WS business 수신 끊김: sent 1011 (internal error) keepalive ping timeout; no close frame received → 재연결
+2026-05-11 23:51:57 [WARNING] src.data.ws_stream: OKX WS 끊김: timed out during opening handshake → 5초 후 재연결 (시도 1)
+2026-05-11 23:52:01 [ERROR] src.data.candle_collector: 캔들 조회 실패 [5m]: okx GET https://www.okx.com/api/v5/market/candles?instId=BTC-USDT-SWAP&bar=5m&limit=5
+2026-05-11 23:52:12 [WARNING] src.data.ws_stream: OKX WS 끊김: timed out during opening handshake → 10초 후 재연결 (시도 2)
+2026-05-12 01:40:25 [WARNING] src.data.ws_stream: OKX WS business 수신 끊김: no close frame received or sent → 재연결
+2026-05-12 05:38:39 [WARNING] src.data.ws_stream: OKX WS business 수신 끊김: no close frame received or sent → 재연결
+2026-05-12 06:50:27 [WARNING] src.data.ws_stream: OKX WS business 수신 끊김: no close frame received or sent → 재연결
+2026-05-12 07:31:15 [WARNING] src.data.ws_stream: OKX WS public 수신 끊김: no close frame received or sent → 재연결
