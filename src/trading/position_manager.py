@@ -128,7 +128,7 @@ class Position:
 
 
 class PositionManager:
-    """포지션 관리: 트레일링, 시간청산, TP, 청산 우선순위"""
+    """포지션 관리: 트레일링, TP, 청산 우선순위"""
 
     def __init__(self, executor: OrderExecutor, db: Database, redis: RedisClient):
         self.executor = executor
@@ -778,8 +778,11 @@ class PositionManager:
         sl_id = pos.algo_ids.get("sl")
         need_sl_reregister = not sl_id  # ID 없으면 당연히 재등록
 
-        if sl_id and pos.hold_minutes % 2 == 0:
-            # 2분마다 OKX에 SL이 실제 존재하는지 확인
+        # 1분마다 OKX에 SL이 실제 존재하는지 확인
+        now = time.time()
+        last_check = getattr(pos, "_last_sl_verify", 0)
+        if sl_id and (now - last_check) >= 60:
+            pos._last_sl_verify = now
             try:
                 inst_id = self.executor.exchange.market(symbol)["id"]
                 resp = await self.executor.exchange.private_get_trade_orders_algo_pending(
