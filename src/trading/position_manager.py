@@ -663,6 +663,17 @@ class PositionManager:
             await self._full_close(pos, "sl_failsafe")
             return
 
+        # 1.5. 시간 청산 — max_hold_min 초과 시 강제 청산
+        hold_mode = pos.signals_snapshot.get("setup", "momentum") if isinstance(pos.signals_snapshot, dict) else "momentum"
+        type_to_hold = {"fast_momentum": "quick", "drift": "momentum", "weak_momentum": "momentum"}
+        hold_key = type_to_hold.get(hold_mode, hold_mode)
+        max_hold = self.config.get("hold_modes", {}).get(hold_key, {}).get("max_hold_min", 240)
+        if pos.hold_minutes > max_hold and not pos.runner_mode:
+            logger.warning(f"⏰ 시간 청산: {pos.direction.upper()} {pos.hold_minutes:.0f}분 > {max_hold}분")
+            await self._cancel_all_algos(pos)
+            await self._full_close(pos, "time_exit")
+            return
+
         # 2. 거래소 사이즈 동기화 — 서버사이드 TP/SL 체결 감지
         try:
             ex_size = await self.executor.get_position_size(symbol)

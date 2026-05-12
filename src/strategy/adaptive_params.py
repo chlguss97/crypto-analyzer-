@@ -144,6 +144,9 @@ class TPCalibrator:
 
     def update(self, result: dict):
         reach = result.get("tp1_reach_pct", 0)
+        # 비정상값 필터 (0 나누기 등으로 발생하는 ±수천% 방지)
+        if abs(reach) > 500:
+            return
         regime = result.get("regime", "other")
         bucket = "trending" if "trending" in regime else ("ranging" if regime == "ranging" else "other")
         pnl = result.get("pnl_pct", 0)
@@ -196,6 +199,9 @@ class SLCalibrator:
         mae_pct = result.get("mae_pct", 0)
         atr = result.get("entry_atr", 0.3)
         mae_atr = mae_pct / atr if atr > 0 else 0
+        # 비정상값 필터 (MAE가 ATR의 20배 이상 = 비정상)
+        if mae_atr > 20:
+            return
         pnl = result.get("pnl_pct", 0)
 
         if pnl > 0:
@@ -217,7 +223,7 @@ class SLCalibrator:
         # 예: mae_95=3.0 → SL margin 3.6% → 가격거리 = 3.6/15/100 = 0.24%
         optimal_pct = mae_95 * 1.2
 
-        new_pct = max(3.0, min(8.0, optimal_pct))
+        new_pct = max(3.0, min(6.0, optimal_pct))  # cap 8→6 (8%는 과도한 손실)
 
         if abs(new_pct - self.current_pct) > 0.1:
             logger.info(f"[ADAPTIVE] SL margin: {self.current_pct:.1f}% -> {new_pct:.1f}% "
