@@ -8,3 +8,6 @@
 2026-05-12 22:34:20 [WARNING] src.data.ws_stream: OKX WS public 수신 끊김: sent 1011 (internal error) keepalive ping timeout; no close frame received → 재연결
 2026-05-12 23:07:38 [WARNING] src.data.ws_stream: OKX WS business 수신 끊김: no close frame received or sent → 재연결
 2026-05-12 23:39:45 [WARNING] src.data.ws_stream: OKX WS business 수신 끊김: no close frame received or sent → 재연결
+2026-05-13 00:24:58 [WARNING] src.strategy.ml_engine: [ML] Phase 전환: A → A | 마일스톤: 100건 라벨 도달! (총 103건)
+2026-05-13 00:25:00 [WARNING] src.strategy.ml_engine: [ML] Phase 전환: A → B | OOS 81.0% | 8피처 | Top: trend_strength
+2026-05-13 00:29:27 [WARNING] src.data.ws_stream: OKX WS public 수신 끊김: no close frame received or sent → 재연결
