@@ -663,17 +663,6 @@ class PositionManager:
             await self._full_close(pos, "sl_failsafe")
             return
 
-        # 1.5. 시간 청산 — max_hold_min 초과 시 강제 청산
-        hold_mode = pos.signals_snapshot.get("setup", "momentum") if isinstance(pos.signals_snapshot, dict) else "momentum"
-        type_to_hold = {"fast_momentum": "quick", "drift": "momentum", "weak_momentum": "momentum"}
-        hold_key = type_to_hold.get(hold_mode, hold_mode)
-        max_hold = self.config.get("hold_modes", {}).get(hold_key, {}).get("max_hold_min", 240)
-        if pos.hold_minutes > max_hold and not pos.runner_mode:
-            logger.warning(f"⏰ 시간 청산: {pos.direction.upper()} {pos.hold_minutes:.0f}분 > {max_hold}분")
-            await self._cancel_all_algos(pos)
-            await self._full_close(pos, "time_exit")
-            return
-
         # 2. 거래소 사이즈 동기화 — 서버사이드 TP/SL 체결 감지
         try:
             ex_size = await self.executor.get_position_size(symbol)
@@ -779,19 +768,46 @@ class PositionManager:
             logger.debug(f"Redis 포지션 갱신 실패: {e}")
 
     async def _self_heal_algos(self, pos: "Position"):
-        """SL/TP 알고가 등록 실패해서 None 이면 재등록 시도 (수동 override 도 존중)"""
+        """SL/TP 알고 검증 + 복구: ID 있어도 OKX에서 취소됐으면 재등록"""
         if pos.remaining_size <= 0:
             return
 
-        # SL 자동 복구 — 사용자 수동 수정한 경우에도 None 이면 그 가격으로 재등록
-        if not pos.algo_ids.get("sl"):
+        symbol = pos.symbol or self.symbol
+
+        # SL 검증: ID가 있어도 OKX pending에 없으면 재등록
+        sl_id = pos.algo_ids.get("sl")
+        need_sl_reregister = not sl_id  # ID 없으면 당연히 재등록
+
+        if sl_id and pos.hold_minutes % 2 == 0:
+            # 2분마다 OKX에 SL이 실제 존재하는지 확인
+            try:
+                inst_id = self.executor.exchange.market(symbol)["id"]
+                resp = await self.executor.exchange.private_get_trade_orders_algo_pending(
+                    {"instType": "SWAP", "instId": inst_id, "ordType": "trigger"}
+                )
+                pending = resp.get("data", []) if isinstance(resp, dict) else []
+                sl_found = any(
+                    (p.get("algoClOrdId") == sl_id or p.get("algoId") == sl_id)
+                    for p in pending
+                )
+                if not sl_found:
+                    logger.warning(
+                        f"⚠️  SL 알고 OKX에서 소실 감지: id={sl_id} "
+                        f"(pending={len(pending)}건) → 재등록"
+                    )
+                    pos.algo_ids["sl"] = None
+                    need_sl_reregister = True
+            except Exception as e:
+                logger.debug(f"SL 존재 확인 예외: {e}")
+
+        if need_sl_reregister:
             try:
                 new_id = await self.executor.set_stop_loss(
                     pos.direction, pos.remaining_size, pos.current_sl
                 )
                 if new_id:
                     pos.algo_ids["sl"] = new_id
-                    logger.info(f"🔧 SL 알고 자동 복구: ${pos.current_sl:.0f} id={new_id}")
+                    logger.info(f"🔧 SL 알고 복구: ${pos.current_sl:.0f} id={new_id}")
             except Exception as e:
                 logger.debug(f"SL 자동 복구 실패: {e}")
 
