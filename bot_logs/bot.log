@@ -70,3 +70,4 @@
 2026-05-13 21:43:58 [WARNING] src.strategy.ml_engine: [ML] OOS 0.483 < 0.52 → 모델 미교체 (연속 5회)
 2026-05-13 21:43:58 [ERROR] src.strategy.ml_engine: [ML] OOS 2연속 미달 → Phase A 복귀
 2026-05-13 21:43:58 [WARNING] src.strategy.ml_engine: [ML] Phase 전환: A → A | OOS 48.3% 2연속 미달 → 룰 기반 복귀
+2026-05-13 21:48:58 [WARNING] src.strategy.ml_engine: [ML] Phase 전환: A → B | OOS 67.8% | 8피처 | Top: adx
