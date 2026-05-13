@@ -53,3 +53,4 @@
 2026-05-13 14:12:29 [ERROR] src.trading.executor: 포지션 사이즈 조회 실패: okx GET https://www.okx.com/api/v5/account/positions?instId=BTC-USDT-SWAP
 2026-05-13 14:23:37 [WARNING] src.data.ws_stream: OKX WS public 수신 끊김: sent 1011 (internal error) keepalive ping timeout; no close frame received → 재연결
 2026-05-13 14:23:37 [WARNING] src.data.ws_stream: OKX WS business 수신 끊김: sent 1011 (internal error) keepalive ping timeout; no close frame received → 재연결
+2026-05-13 17:41:12 [WARNING] src.data.ws_stream: OKX WS business 수신 끊김: no close frame received or sent → 재연결
