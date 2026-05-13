@@ -44,3 +44,4 @@
 2026-05-13 09:53:55 [WARNING] src.strategy.ml_engine: [ML] Phase 전환: A → A | 마일스톤: 100건 라벨 도달! (총 253건)
 2026-05-13 09:53:55 [WARNING] src.strategy.ml_engine: [ML] Phase 전환: A → A | 마일스톤: 200건 라벨 도달! (총 253건)
 2026-05-13 10:13:56 [WARNING] src.strategy.ml_engine: [ML] Phase 전환: A → B | OOS 89.2% | 8피처 | Top: adx
+2026-05-13 10:18:56 [WARNING] src.strategy.ml_engine: [ML] Phase 전환: B → B+ | 300건 라벨 도달 — 회귀 모델 전환 준비 완료
