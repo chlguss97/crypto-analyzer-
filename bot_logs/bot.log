@@ -71,3 +71,4 @@
 2026-05-13 21:43:58 [ERROR] src.strategy.ml_engine: [ML] OOS 2연속 미달 → Phase A 복귀
 2026-05-13 21:43:58 [WARNING] src.strategy.ml_engine: [ML] Phase 전환: A → A | OOS 48.3% 2연속 미달 → 룰 기반 복귀
 2026-05-13 21:48:58 [WARNING] src.strategy.ml_engine: [ML] Phase 전환: A → B | OOS 67.8% | 8피처 | Top: adx
+2026-05-14 00:13:58 [WARNING] src.strategy.ml_engine: [ML] Phase 전환: B → B | 마일스톤: 500건 라벨 도달! (총 500건)
