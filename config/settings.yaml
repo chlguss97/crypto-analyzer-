@@ -116,7 +116,7 @@ candidate:
     min_price_change_pct: 0.2
 
 ml:
-  phase_a_min_samples: 100
+  phase_a_min_samples: 300
   retrain_interval: 100
   window_size: 500
   min_oos_accuracy: 0.52

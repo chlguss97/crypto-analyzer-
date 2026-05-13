@@ -255,7 +255,6 @@ class CryptoAnalyzer:
                 candidate["price"], atr_5m, candidate["atr_pct"],
                 flow, vol_20avg, candidate["direction"], df_1m=df_1m
             )
-            logger.info(f"[FAST] 1분 모멘텀 감지: {candidate['direction']} str={candidate['strength']:.1f} ATR_1m={candidate['atr_pct']:.3f}%")
 
         # 5분: 정규 평가 (1분에서 못 잡으면)
         if not candidate:
@@ -269,10 +268,14 @@ class CryptoAnalyzer:
                 logger.info(f"[EVAL] 후보 없음 (5m={len(candles_5m)}건, regime={regime_now})")
             return
 
-        # 동일 캔들 중복 시그널 방지
+        # 동일 캔들 중복 시그널 방지 (로그 스팸 방지를 위해 dedup 먼저)
         dedup_key = (candidate["type"], candidate["direction"], int(candidate["price"] * 10))
         if dedup_key == getattr(self, "_last_dedup_key", None):
             return
+
+        # dedup 통과 후 로그
+        if candidate["type"] == "fast_momentum":
+            logger.info(f"[FAST] 1분 모멘텀 감지: {candidate['direction']} str={candidate['strength']:.1f} ATR_1m={candidate['atr_pct']:.3f}%")
 
         # 약한 후보는 shadow 전용 (진입 안 함, ML 데이터만 수집)
         is_weak = candidate.get("weak", False)
