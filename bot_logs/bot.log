@@ -73,3 +73,4 @@
 2026-05-13 21:48:58 [WARNING] src.strategy.ml_engine: [ML] Phase 전환: A → B | OOS 67.8% | 8피처 | Top: adx
 2026-05-14 00:13:58 [WARNING] src.strategy.ml_engine: [ML] Phase 전환: B → B | 마일스톤: 500건 라벨 도달! (총 500건)
 2026-05-14 01:15:14 [WARNING] src.data.ws_stream: OKX WS business 수신 끊김: no close frame received or sent → 재연결
+2026-05-14 02:01:59 [WARNING] src.data.ws_stream: OKX WS public 수신 끊김: no close frame received or sent → 재연결
