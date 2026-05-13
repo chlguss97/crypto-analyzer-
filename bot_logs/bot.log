@@ -61,3 +61,12 @@
 2026-05-13 21:28:58 [WARNING] src.strategy.ml_engine: [ML] OOS 0.424 < 0.52 → 모델 미교체 (연속 2회)
 2026-05-13 21:28:58 [ERROR] src.strategy.ml_engine: [ML] OOS 2연속 미달 → Phase A 복귀
 2026-05-13 21:28:58 [WARNING] src.strategy.ml_engine: [ML] Phase 전환: B → A | OOS 42.4% 2연속 미달 → 룰 기반 복귀
+2026-05-13 21:33:58 [WARNING] src.strategy.ml_engine: [ML] OOS 0.500 < 0.52 → 모델 미교체 (연속 3회)
+2026-05-13 21:33:58 [ERROR] src.strategy.ml_engine: [ML] OOS 2연속 미달 → Phase A 복귀
+2026-05-13 21:33:58 [WARNING] src.strategy.ml_engine: [ML] Phase 전환: A → A | OOS 50.0% 2연속 미달 → 룰 기반 복귀
+2026-05-13 21:38:58 [WARNING] src.strategy.ml_engine: [ML] OOS 0.483 < 0.52 → 모델 미교체 (연속 4회)
+2026-05-13 21:38:58 [ERROR] src.strategy.ml_engine: [ML] OOS 2연속 미달 → Phase A 복귀
+2026-05-13 21:38:58 [WARNING] src.strategy.ml_engine: [ML] Phase 전환: A → A | OOS 48.3% 2연속 미달 → 룰 기반 복귀
+2026-05-13 21:43:58 [WARNING] src.strategy.ml_engine: [ML] OOS 0.483 < 0.52 → 모델 미교체 (연속 5회)
+2026-05-13 21:43:58 [ERROR] src.strategy.ml_engine: [ML] OOS 2연속 미달 → Phase A 복귀
+2026-05-13 21:43:58 [WARNING] src.strategy.ml_engine: [ML] Phase 전환: A → A | OOS 48.3% 2연속 미달 → 룰 기반 복귀
