@@ -45,3 +45,8 @@
 2026-05-13 09:53:55 [WARNING] src.strategy.ml_engine: [ML] Phase 전환: A → A | 마일스톤: 200건 라벨 도달! (총 253건)
 2026-05-13 10:13:56 [WARNING] src.strategy.ml_engine: [ML] Phase 전환: A → B | OOS 89.2% | 8피처 | Top: adx
 2026-05-13 10:18:56 [WARNING] src.strategy.ml_engine: [ML] Phase 전환: B → B+ | 300건 라벨 도달 — 회귀 모델 전환 준비 완료
+2026-05-13 13:39:16 [ERROR] src.trading.executor: 포지션 사이즈 조회 실패: okx GET https://www.okx.com/api/v5/account/positions?instId=BTC-USDT-SWAP
+2026-05-13 13:39:47 [WARNING] src.data.ws_stream: OKX WS public 수신 끊김: sent 1011 (internal error) keepalive ping timeout; no close frame received → 재연결
+2026-05-13 13:40:02 [WARNING] src.data.ws_stream: OKX WS 끊김: timed out during opening handshake → 5초 후 재연결 (시도 1)
+2026-05-13 13:40:17 [WARNING] src.data.ws_stream: OKX WS 끊김: timed out during opening handshake → 10초 후 재연결 (시도 2)
+2026-05-13 13:40:17 [ERROR] src.data.candle_collector: 캔들 조회 실패 [1m]: okx GET https://www.okx.com/api/v5/market/candles?instId=BTC-USDT-SWAP&bar=1m&limit=5
