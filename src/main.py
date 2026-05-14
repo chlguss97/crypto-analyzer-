@@ -366,12 +366,6 @@ class CryptoAnalyzer:
         if not go:
             return
 
-        # ── 수익 보호 ──
-        profit_protect = self.config.get("risk", {}).get("profit_protect_pct", 0.03) * 100
-        profit_stop = self.config.get("risk", {}).get("profit_stop_pct", 0.05) * 100
-        if daily_pnl >= profit_stop:
-            return
-
         # ── 자동매매 확인 ──
         autotrading = (await self.redis.get("sys:autotrading") or "off") == "on"
 
@@ -647,13 +641,6 @@ class CryptoAnalyzer:
             if self.risk_manager.get_streak() >= int(threshold):
                 size_mult = mult
                 break
-
-        # 수익 보호 축소
-        profit_protect = risk_cfg.get("profit_protect_pct", 0.03) * 100
-        daily_pnl_now = self.risk_manager.get_daily_pnl()
-        if daily_pnl_now >= profit_protect:
-            size_mult *= 0.5
-            logger.info(f"[EXEC] 수익 보호 발동 (+{daily_pnl_now:.1f}%) → 마진 50%")
 
         # 확신도 사이즈 배수
         conviction_mult = self.CONVICTION_MULT.get(conviction, 0.15)

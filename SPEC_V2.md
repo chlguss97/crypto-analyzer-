@@ -838,8 +838,6 @@ risk:
   max_daily_loss: 0.05
   max_drawdown: 0.12
   bot_kill_drawdown: 0.15
-  profit_protect_pct: 0.03
-  profit_stop_pct: 0.05
   max_margin_loss_pct: 5.0
   tp1_margin_gain_pct: 10.0
   min_entry_interval_sec: 30

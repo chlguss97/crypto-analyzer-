@@ -1,12 +1,45 @@
 # Commit Log
 
 > 자동 생성 — `scripts/update_commit_log.sh` (매 커밋 후 실행)
-> Updated: 2026-05-07 16:19:22    
-> Total commits: 321 (2026-04-03 → 2026-05-07)
+> Updated: 2026-05-13 09:45:53    
+> Total commits: 348 (2026-04-03 → 2026-05-13)
 
 Claude 가 질문/변경 작업 시 이 파일을 참고해서 과거 변경 이력 컨텍스트를 확보합니다. 수동 편집 금지 — 다음 커밋 시 덮어써집니다.
 
+## 2026-05-13
+- `9848373` fix: ML Phase B 조기전환 방지 (min_samples 100→300) + FAST 로그 dedup
+
+## 2026-05-12
+- `647d935` fix: 전수검사 — 미완성봉 DB저장 제거 + velocity 타입불일치 + docstring
+- `8b9f53b` fix: 전수검사 — AUDIT 9단계 추가 + TTL 누락 + self.symbol 미정의
+- `7061eb1` fix: CRITICAL 캔들 INSERT OR IGNORE → UPSERT (미완성봉 덮어쓰기)
+- `3a5a481` fix: SL algo 검증 주기 1분 + 시간 기반 throttle
+- `1eb0e87` fix: 시간청산 제거 + SL algo OKX 소실 감지/재등록
+- `6cb5c68` fix: CRITICAL 3건 — SL과대 + 비정상값 + 시간청산 누락
+
+## 2026-05-08
+- `cb66fc4` docs: AUDIT 4경로+SimTrader+drift플래그 반영
+- `f898388` fix: SimTrader 전수검사 7건 수정
+- `9e30930` fix: PaperLab에서 drift 진입 제거 — SimTrader가 담당
+- `6767ee0` feat: SimTrader — 실거래 동일 로직 가상매매
+- `79224e5` fix: PaperLab에 drift 가상 진입 데이터 수집 추가
+- `c6b015c` refactor: drift를 진입 시그널 → 확신도 플래그로 전환
+- `f326cb7` docs: SPEC §3.7 Drift + §3.8 Weak Momentum + §3.9 빈도표 추가
+- `9c045e3` fix: PaperLab regime+atr_pct 저장 → AdaptiveParams 정확한 bucket 분류
+- `804afc4` fix: AUDIT CRITICAL+MEDIUM — NameError 방지 + shadow hold_mode 매핑
+- `7018989` docs: AUDIT에 DB SELECT↔downstream 컬럼 매핑 검사 추가
+- `99e0891` fix: get_pending_shadows에 regime 컬럼 추가
+- `060c26e` feat: Drift Detector 추가 — 점진적 추세 감지 (4번째 후보)
+
 ## 2026-05-07
+- `e3a3770` refactor: 리스크 게이트 5개 → 3개 (확신도 사이즈에 위임)
+- `6d7514f` fix: 주간 손실 한도 게이트 제거
+- `1e22af3` debug: 리스크 게이트 차단 로그 추가 (eval loop 디버깅)
+- `7db88c9` fix: CRITICAL eval loop pubsub 블로킹 → 단순 1초 폴링으로 교체
+- `8f8815b` fix: 전수검사 HIGH 1 + MED 2 + LOW 2 수정
+- `ccbd8b4` cleanup: oi_funding + daily_summary 테이블 완전 제거
+- `cf09e6a` cleanup: dead code 삭제 + DB 스키마 정리
+- `287eb0f` cleanup: 레거시 전면 정리 — paper_trader 삭제 + FlowEngine/FlowML 별칭 제거
 - `62142f2` docs: SPEC §2 데이터소스 현행화 + §3.6 1분 고속 감지 추가
 - `59a9aac` fix: fast_momentum shadow barrier에 quick hold_mode 매핑
 - `143d041` feat: 1분 고속 모멘텀 감지 추가 (5분 정규 평가와 병행)
