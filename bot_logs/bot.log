@@ -118,3 +118,7 @@
 2026-05-14 19:46:07 [WARNING] src.trading.executor: post-only 3회 추격 실패 → 진입 포기 (maker 강제)
 2026-05-14 20:35:22 [WARNING] src.data.ws_stream: OKX WS business 수신 끊김: no close frame received or sent → 재연결
 2026-05-14 20:36:49 [WARNING] src.data.ws_stream: OKX WS business 수신 끊김: no close frame received or sent → 재연결
+2026-05-14 22:05:34 [ERROR] src.trading.position_manager: 🛑 SL failsafe 발동: SHORT 가격 $79843 vs SL $79842 | 보유 137분 | runner=False | size=0.0200/0.0200 | algo_debug={'pending_count': 1, 'pending_ids': [{'clOrdId': 'tp117787556552657951', 'id': '3565267633735901184', 'triggerPx': '78928.1', 'sz': '1', 'state': 'live'}], 'pos_sl_algo_id': 'sl17787556551288066'}
+2026-05-14 22:05:35 [ERROR] src.trading.executor: 시장가 주문 실패 (1/3): okx {"code":"1","data":[{"clOrdId":"6b9ad766b55dBCDE46ad08a62b7f41c8","ordId":"","sCode":"51169","sMsg":"Order failed because you don't have any positions in this direction for this contract to reduce or close. ","subCode":"","tag":"6b9ad766b55dBCDE","ts":"1778763935727"}],"inTime":"1778763935727184","msg":"All operations failed","outTime":"1778763935728037"}
+2026-05-14 22:05:37 [WARNING] src.trading.risk_manager: 손실 기록: -8.68% | 연패: 3
+2026-05-14 22:05:37 [WARNING] src.trading.risk_manager: 3연패 → 10분 쿨다운
