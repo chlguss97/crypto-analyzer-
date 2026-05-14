@@ -80,3 +80,10 @@
 2026-05-14 08:57:30 [WARNING] src.data.ws_stream: OKX WS public 수신 끊김: no close frame received or sent → 재연결
 2026-05-14 09:19:00 [WARNING] src.data.ws_stream: OKX WS public 수신 끊김: no close frame received or sent → 재연결
 2026-05-14 09:50:01 [WARNING] src.data.ws_stream: OKX WS public 수신 끊김: no close frame received or sent → 재연결
+2026-05-14 10:32:20 [WARNING] CryptoAnalyzer: 미청산: BTC/USDT:USDT SHORT @ $79366.5
+2026-05-14 10:32:36 [WARNING] src.trading.position_manager: 거래소 포지션 발견 (봇 미추적): BTC/USDT:USDT short 4.000000 @ $79366.5
+2026-05-14 10:32:39 [WARNING] src.strategy.ml_engine: [ML] Phase 전환: B → B+ | 300건 라벨 도달 — 회귀 모델 전환 준비 완료
+2026-05-14 10:33:41 [WARNING] src.trading.position_manager: ⚡ Adverse Selection 발동: SHORT 마진 -2.6% (한도 -2.5%) | 60초 경과
+2026-05-14 10:33:46 [WARNING] src.trading.risk_manager: 손실 기록: -0.03% | 연패: 1
+2026-05-14 10:33:54 [WARNING] src.trading.executor: post-only 3회 추격 실패 → 진입 포기 (maker 강제)
+2026-05-14 10:34:20 [WARNING] src.trading.position_manager: ⚠️  사이즈 0.0100 BTC < 0.02 BTC → TP1 에서 100% 청산 (러너 비활성)
