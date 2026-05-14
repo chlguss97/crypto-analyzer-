@@ -129,3 +129,6 @@
 2026-05-15 01:37:28 [WARNING] src.strategy.setup_tracker: [SetupTracker] 알 수 없는 셋업: fast_momentum
 2026-05-15 02:36:23 [WARNING] src.trading.position_manager: ⚠️  사이즈 0.0100 BTC < 0.02 BTC → TP1 에서 100% 청산 (러너 비활성)
 2026-05-15 04:38:44 [WARNING] src.data.ws_stream: OKX WS public 수신 끊김: no close frame received or sent → 재연결
+2026-05-15 05:20:45 [WARNING] src.trading.position_manager: 포지션 외부 종료 감지 (사이즈≈0) → 정리: BTC/USDT:USDT
+2026-05-15 05:20:48 [WARNING] src.trading.risk_manager: 손실 기록: -11.07% | 연패: 1
+2026-05-15 05:20:48 [WARNING] src.strategy.setup_tracker: [SetupTracker] 알 수 없는 셋업: fast_momentum
