@@ -116,3 +116,5 @@
 2026-05-14 19:41:23 [WARNING] src.trading.position_manager: 포지션 외부 종료 감지 (사이즈≈0) → 정리: BTC/USDT:USDT
 2026-05-14 19:41:25 [WARNING] src.trading.risk_manager: 손실 기록: -8.11% | 연패: 2
 2026-05-14 19:46:07 [WARNING] src.trading.executor: post-only 3회 추격 실패 → 진입 포기 (maker 강제)
+2026-05-14 20:35:22 [WARNING] src.data.ws_stream: OKX WS business 수신 끊김: no close frame received or sent → 재연결
+2026-05-14 20:36:49 [WARNING] src.data.ws_stream: OKX WS business 수신 끊김: no close frame received or sent → 재연결
