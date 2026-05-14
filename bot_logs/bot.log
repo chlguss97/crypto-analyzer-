@@ -123,3 +123,4 @@
 2026-05-14 22:05:37 [WARNING] src.trading.risk_manager: 손실 기록: -8.68% | 연패: 3
 2026-05-14 22:05:37 [WARNING] src.trading.risk_manager: 3연패 → 10분 쿨다운
 2026-05-14 23:07:51 [WARNING] src.trading.position_manager: ⚠️  사이즈 0.0100 BTC < 0.02 BTC → TP1 에서 100% 청산 (러너 비활성)
+2026-05-14 23:18:24 [WARNING] src.trading.position_manager: 포지션 외부 종료 감지 (사이즈≈0) → 정리: BTC/USDT:USDT
