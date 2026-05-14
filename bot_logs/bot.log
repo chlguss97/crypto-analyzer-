@@ -87,3 +87,4 @@
 2026-05-14 10:33:46 [WARNING] src.trading.risk_manager: 손실 기록: -0.03% | 연패: 1
 2026-05-14 10:33:54 [WARNING] src.trading.executor: post-only 3회 추격 실패 → 진입 포기 (maker 강제)
 2026-05-14 10:34:20 [WARNING] src.trading.position_manager: ⚠️  사이즈 0.0100 BTC < 0.02 BTC → TP1 에서 100% 청산 (러너 비활성)
+2026-05-14 10:52:06 [WARNING] src.data.ws_stream: OKX WS public 수신 끊김: no close frame received or sent → 재연결
