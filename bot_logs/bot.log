@@ -127,3 +127,4 @@
 2026-05-15 01:00:34 [WARNING] src.data.ws_stream: OKX WS public 수신 끊김: sent 1011 (internal error) keepalive ping timeout; no close frame received → 재연결
 2026-05-15 01:37:26 [WARNING] src.trading.position_manager: 포지션 외부 종료 감지 (사이즈≈0) → 정리: BTC/USDT:USDT
 2026-05-15 01:37:28 [WARNING] src.strategy.setup_tracker: [SetupTracker] 알 수 없는 셋업: fast_momentum
+2026-05-15 02:36:23 [WARNING] src.trading.position_manager: ⚠️  사이즈 0.0100 BTC < 0.02 BTC → TP1 에서 100% 청산 (러너 비활성)
