@@ -361,6 +361,8 @@ class CryptoAnalyzer:
 
         # PaperLab (A/B 테스트: ML/게이트 무관하게 모든 후보 진입)
         if self.paper_lab:
+            candidate["h1_trend"] = h1_trend
+            candidate["h4_trend"] = h4_trend
             await self.paper_lab.on_candidate(candidate, regime_now)
 
         if not go:
@@ -695,8 +697,8 @@ class CryptoAnalyzer:
             pos.entry_h1_trend = getattr(self, "_cached_h1_trend", "unknown")
             pos.entry_h4_trend = getattr(self, "_cached_h4_trend", "unknown")
             pos.params_snapshot = {
-                "regime": regime, "atr_mult": atr_pct * 1.5,
-                "sl_margin_pct": sl_margin_pct, "tp1_dist": round(tp1_dist, 1),
+                "regime": regime, "atr_mult": round(adaptive_tp_mult, 4),
+                "sl_margin_pct": round(sl_margin_used, 4), "tp1_dist": round(tp1_dist, 1),
             }
             self._last_trade_time = _time.time()
 
@@ -776,10 +778,10 @@ class CryptoAnalyzer:
             tp1_dist = abs(tp1 - ep) if tp1 > 0 else 1
             if direction == "long":
                 reach = (best - ep) / tp1_dist * 100 if tp1_dist > 0 else 0
-                mae_pct = (ep - worst) / ep * 100
+                mae_pct = (ep - worst) / ep * 100 if ep > 0 else 0
             else:
                 reach = (ep - best) / tp1_dist * 100 if tp1_dist > 0 else 0
-                mae_pct = (worst - ep) / ep * 100
+                mae_pct = (worst - ep) / ep * 100 if ep > 0 else 0
 
             ttp = pos_data.get("first_profit_ts", 0)
             ttp_sec = ttp - pos_data.get("entry_time", 0) if ttp > 0 else 0
@@ -1084,6 +1086,7 @@ class CryptoAnalyzer:
         """헬스체크 (60초)"""
         while self._running:
             await self.redis.set("sys:last_heartbeat", str(int(_time.time())), ttl=120)
+            bal = 0
             try:
                 bal = await asyncio.wait_for(self.executor.get_balance(), timeout=5.0)
                 if bal and bal > 0:

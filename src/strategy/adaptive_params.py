@@ -88,6 +88,11 @@ class DirectionScorer:
         # Level 1: direction만
         self.results[("*", "*", d)].append(pnl)
 
+        # 메모리 제한: 각 버킷 최대 200건
+        for key in [(h1, h4, d), ("*", "*", d, h1), ("*", "*", d)]:
+            if len(self.results[key]) > 200:
+                self.results[key] = self.results[key][-200:]
+
     def get_size_mult(self, direction: str, h1_trend: str, h4_trend: str) -> float:
         """EV 기반 사이즈 배수. 0=차단, 0.5=축소, 1.0=정상, 1.2=확대"""
         # Level 3 시도
@@ -215,7 +220,7 @@ class SLCalibrator:
 
         # 승리 MAE의 95번째 백분위 (근사)
         sorted_mae = sorted(self.winning_mae_atr.values[-20:])
-        idx = int(len(sorted_mae) * 0.95)
+        idx = int((len(sorted_mae) - 1) * 0.95)
         mae_95 = sorted_mae[min(idx, len(sorted_mae) - 1)]
 
         # mae_95 = ATR 배수 (예: 1.5 = ATR의 1.5배 역행)
@@ -277,6 +282,8 @@ class RegimeScorer:
         regime = result.get("regime", "unknown")
         pnl = result.get("pnl_pct", 0)
         self.results[regime].append(pnl)
+        if len(self.results[regime]) > 200:
+            self.results[regime] = self.results[regime][-200:]
 
     def get_size_mult(self, regime: str) -> float:
         pnls = self.results.get(regime, [])
@@ -415,7 +422,10 @@ class AdaptiveParams:
                 "sl_pct": self.sl_cal.current_pct,
                 "tp_reach_trending": self.tp_cal.reach_pcts["trending"].values[-50:],
                 "tp_reach_ranging": self.tp_cal.reach_pcts["ranging"].values[-50:],
+                "tp_reach_other": self.tp_cal.reach_pcts["other"].values[-50:],
+                "tp_overshoot": self.tp_cal.overshoot.values[-50:],
                 "winning_mae": self.sl_cal.winning_mae_atr.values[-50:],
+                "losing_mae": self.sl_cal.losing_mae_atr.values[-50:],
                 "direction_results": {str(k): v[-50:] for k, v in self.direction.results.items()},
                 "regime_results": {k: v[-50:] for k, v in self.regime.results.items()},
             }
@@ -440,8 +450,14 @@ class AdaptiveParams:
                 self.tp_cal.reach_pcts["trending"].add(v)
             for v in state.get("tp_reach_ranging", []):
                 self.tp_cal.reach_pcts["ranging"].add(v)
+            for v in state.get("tp_reach_other", []):
+                self.tp_cal.reach_pcts["other"].add(v)
+            for v in state.get("tp_overshoot", []):
+                self.tp_cal.overshoot.add(v)
             for v in state.get("winning_mae", []):
                 self.sl_cal.winning_mae_atr.add(v)
+            for v in state.get("losing_mae", []):
+                self.sl_cal.losing_mae_atr.add(v)
 
             for k, vals in state.get("direction_results", {}).items():
                 import ast as _ast
