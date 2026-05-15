@@ -662,9 +662,11 @@ class CryptoAnalyzer:
             return False
 
         # SL이 ATR 바닥으로 넓어진 경우 사이즈 축소 (절대 손실액 유지)
+        # 단, 보정 전 사이즈가 0.02 BTC 미만이면 스킵 (최소 단위에서 추가 축소 무의미)
+        raw_size_pre = margin * leverage / price
         actual_margin_loss_pct = sl_dist / price * leverage * 100
         target_loss_pct = sl_margin_used
-        if actual_margin_loss_pct > target_loss_pct and target_loss_pct > 0:
+        if actual_margin_loss_pct > target_loss_pct and target_loss_pct > 0 and raw_size_pre >= 0.02:
             size_adj = target_loss_pct / actual_margin_loss_pct
             margin *= size_adj
             logger.info(f"[SIZE] SL 보정 축소: margin_loss {actual_margin_loss_pct:.1f}% > "
