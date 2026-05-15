@@ -152,3 +152,6 @@
 2026-05-15 13:59:04 [WARNING] CryptoAnalyzer: 미청산: BTC/USDT:USDT SHORT @ $80984.6
 2026-05-15 13:59:19 [WARNING] src.trading.position_manager: 거래소 포지션 발견 (봇 미추적): BTC/USDT:USDT short 1.000000 @ $80984.6
 2026-05-15 13:59:22 [WARNING] src.strategy.ml_engine: [ML] Phase 전환: B → B+ | 300건 라벨 도달 — 회귀 모델 전환 준비 완료
+2026-05-15 14:26:50 [WARNING] CryptoAnalyzer: 미청산: BTC/USDT:USDT SHORT @ $80984.6
+2026-05-15 14:27:05 [WARNING] src.trading.position_manager: 거래소 포지션 발견 (봇 미추적): BTC/USDT:USDT short 1.000000 @ $80984.6
+2026-05-15 14:27:08 [WARNING] src.strategy.ml_engine: [ML] Phase 전환: B → B+ | 300건 라벨 도달 — 회귀 모델 전환 준비 완료
