@@ -376,11 +376,12 @@ class CryptoAnalyzer:
             regime_now, direction, ctype, strength, candidate, df_1h, df_4h
         )
 
-        if conviction <= 0:
-            logger.info(f"[GATE] 확신도 0점 차단: {direction} {ctype} | {conv_detail}")
+        if conviction <= 1:
+            reason = "conviction_0" if conviction <= 0 else "conviction_low"
+            logger.info(f"[GATE] 확신도 {conviction}점 차단 (최소 2점 필요): {direction} {ctype} | {conv_detail}")
             _append_jsonl({
                 "type": "gate_block",
-                "reason": "conviction_0",
+                "reason": reason,
                 "direction": direction,
                 "candidate_type": ctype,
                 "detail": conv_detail,
@@ -506,13 +507,14 @@ class CryptoAnalyzer:
         else:
             details.append("1h:-")
 
-        # +1: 4h 추세 일치
+        # +1: 4h 추세 일치 / -1: 4h 역행 패널티
         h4 = self._cached_h4_trend
         if h4 == expected:
             score += 1
             details.append("4h:O")
         elif h4 != "FLAT" and h4 != "unknown" and h4 != expected:
-            details.append("4h:X")
+            score -= 1  # h4 역행 감점 (기존: 감점 없음)
+            details.append("4h:X(-1)")
         else:
             details.append("4h:-")
 
@@ -589,10 +591,12 @@ class CryptoAnalyzer:
         lev_result = self.leverage_calc.calculate(grade, atr_pct, self.risk_manager.get_streak())
         leverage = lev_result["leverage"]
 
-        # SL/TP 거리 (AdaptiveParams 보정 적용)
+        # SL/TP 거리 (AdaptiveParams 보정 + ATR 바닥)
         adaptive_sl = self.adaptive.get_sl_margin_pct()
         sl_margin_used = adaptive_sl if adaptive_sl != 5.0 else sl_margin_pct
-        sl_dist = price * (sl_margin_used / leverage / 100)
+        margin_sl_dist = price * (sl_margin_used / leverage / 100)
+        atr_sl_dist = price * atr_pct * 1.5 / 100  # 최소 1.5 ATR 보장
+        sl_dist = max(margin_sl_dist, atr_sl_dist)
         min_sl = price * 0.005
         sl_dist = max(sl_dist, min_sl)
 
@@ -657,10 +661,19 @@ class CryptoAnalyzer:
         if margin <= 0:
             return False
 
-        # OKX 사이즈 (최소 0.01 BTC 보장)
+        # SL이 ATR 바닥으로 넓어진 경우 사이즈 축소 (절대 손실액 유지)
+        actual_margin_loss_pct = sl_dist / price * leverage * 100
+        target_loss_pct = sl_margin_used
+        if actual_margin_loss_pct > target_loss_pct and target_loss_pct > 0:
+            size_adj = target_loss_pct / actual_margin_loss_pct
+            margin *= size_adj
+            logger.info(f"[SIZE] SL 보정 축소: margin_loss {actual_margin_loss_pct:.1f}% > "
+                        f"target {target_loss_pct:.1f}% → size ×{size_adj:.2f}")
+
+        # OKX 사이즈 (최소 0.01 BTC)
         raw_size = margin * leverage / price
         size_btc = math.floor(raw_size / 0.01) * 0.01
-        size_btc = max(round(size_btc, 4), 0.01)  # 확신 낮아도 최소 진입
+        size_btc = max(round(size_btc, 4), 0.01)
 
         logger.info(f"[SIZE] conviction={conviction}({conviction_mult:.0%}) "
                     f"adaptive={adaptive_mult:.2f} → {size_btc} BTC (${margin:.0f})")

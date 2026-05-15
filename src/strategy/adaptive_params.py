@@ -225,10 +225,20 @@ class SLCalibrator:
 
         # mae_95 = ATR 배수 (예: 1.5 = ATR의 1.5배 역행)
         # SL margin% = mae_95 × 1.2 (여유 20%)
-        # 예: mae_95=3.0 → SL margin 3.6% → 가격거리 = 3.6/15/100 = 0.24%
         optimal_pct = mae_95 * 1.2
 
-        new_pct = max(3.0, min(6.0, optimal_pct))  # cap 8→6 (8%는 과도한 손실)
+        # 패자 편향 보정: 손실 중 SL 근처(80% 이내)에서 발생한 비율 체크
+        # 30% 이상이면 SL이 너무 좁다는 신호 → 넓힘
+        if self.losing_mae_atr.count >= 5:
+            losing_vals = self.losing_mae_atr.values[-20:]
+            current_sl_atr = self.current_pct  # ATR 배수 기준
+            tight_losses = sum(1 for m in losing_vals if m < current_sl_atr * 0.8)
+            tight_ratio = tight_losses / max(len(losing_vals), 1)
+            if tight_ratio > 0.3:
+                optimal_pct *= 1.1  # SL 10% 확대 (기존 5% → 더 적극적)
+                logger.info(f"[ADAPTIVE] SL 패자보정: tight_ratio={tight_ratio:.0%} > 30% → ×1.1")
+
+        new_pct = max(3.0, min(6.0, optimal_pct))
 
         if abs(new_pct - self.current_pct) > 0.1:
             logger.info(f"[ADAPTIVE] SL margin: {self.current_pct:.1f}% -> {new_pct:.1f}% "
