@@ -1713,6 +1713,8 @@ class PositionManager:
                             import math
                             tp1_size = pos.remaining_size * 0.5
                             tp1_size = math.floor(tp1_size / 0.01) * 0.01
+                            if tp1_size < 0.01:
+                                tp1_size = pos.remaining_size  # 최소 단위면 100% TP1
                             if tp1_size >= 0.01:
                                 new_tp_id = await self.executor.set_take_profit(
                                     pos.direction, tp1_size, pos.tp1_price, level=1
