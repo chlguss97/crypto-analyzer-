@@ -35,6 +35,7 @@ class CandidateDetector:
         self.mom_body_ratio = mom.get("min_body_ratio", 0.6)
         # Breakout 설정
         brk = cfg.get("breakout", {})
+        self.brk_enabled = brk.get("enabled", True)
         self.brk_squeeze_pctl = brk.get("bb_squeeze_pctl", 25)
         self.brk_vol_ratio = brk.get("min_vol_ratio", 1.2)
         # Cascade 설정
@@ -83,12 +84,13 @@ class CandidateDetector:
             )
             candidates.append(mom)
 
-        brk = self._check_volatility_breakout(df_5m, price, atr, vol_20avg)
-        if brk:
-            brk["features_raw"] = await self._build_raw_features(
-                df_5m, df_15m, df_1h, df_4h, df_1d, price, atr, atr_pct, flow, vol_20avg, brk["direction"], df_1m=df_1m
-            )
-            candidates.append(brk)
+        if self.brk_enabled:
+            brk = self._check_volatility_breakout(df_5m, price, atr, vol_20avg)
+            if brk:
+                brk["features_raw"] = await self._build_raw_features(
+                    df_5m, df_15m, df_1h, df_4h, df_1d, price, atr, atr_pct, flow, vol_20avg, brk["direction"], df_1m=df_1m
+                )
+                candidates.append(brk)
 
         cas = await self._check_liquidation_cascade(df_5m, price, atr, flow)
         if cas:
