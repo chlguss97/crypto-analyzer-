@@ -148,3 +148,4 @@
 2026-05-15 11:51:29 [WARNING] src.trading.position_manager: 포지션 외부 종료 감지 (사이즈≈0) → 정리: BTC/USDT:USDT
 2026-05-15 11:51:32 [WARNING] src.trading.risk_manager: 손실 기록: -8.60% | 연패: 1
 2026-05-15 12:32:37 [WARNING] src.trading.position_manager: ⚠️  사이즈 0.0100 BTC < 0.02 BTC → TP1 에서 100% 청산 (러너 비활성)
+2026-05-15 12:55:50 [WARNING] src.data.ws_stream: OKX WS business 수신 끊김: no close frame received or sent → 재연결
