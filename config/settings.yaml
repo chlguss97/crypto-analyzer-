@@ -22,9 +22,6 @@ risk:
   margin_pct: 0.80
   leverage_range: [15, 20]
   max_positions: 1
-  max_daily_loss: 0.10
-  max_weekly_loss: 0.10
-  max_drawdown: 0.12
   bot_kill_drawdown: 0.15
   min_entry_interval_sec: 30
   max_margin_loss_pct: 5.0

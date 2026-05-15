@@ -200,14 +200,6 @@ class RiskManager:
         await self.redis.set("risk:cooldown_until", str(self._state["cooldown_until"]))
         self._save_backup()
 
-        # 최대 드로다운 체크
-        peak = self._state["peak_balance"]
-        current = self._state["current_balance"]
-        drawdown = (peak - current) / peak if peak > 0 else 0
-        if drawdown >= self.risk_cfg["max_drawdown"]:
-            logger.error(
-                f"최대 드로다운 도달: {drawdown*100:.1f}% → 전체 매매 중단"
-            )
 
     async def reset_daily(self):
         """일일 카운터 리셋 (매일 00:00 UTC)"""
