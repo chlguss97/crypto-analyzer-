@@ -140,3 +140,6 @@
 2026-05-15 09:33:12 [WARNING] src.trading.position_manager: 포지션 외부 종료 감지 (사이즈≈0) → 정리: BTC/USDT:USDT
 2026-05-15 09:33:14 [WARNING] src.trading.risk_manager: 손실 기록: -8.35% | 연패: 1
 2026-05-15 09:46:20 [WARNING] src.trading.position_manager: ⚠️  사이즈 0.0100 BTC < 0.02 BTC → TP1 에서 100% 청산 (러너 비활성)
+2026-05-15 10:43:58 [WARNING] CryptoAnalyzer: 미청산: BTC/USDT:USDT SHORT @ $81410.7
+2026-05-15 10:44:14 [WARNING] src.trading.position_manager: 거래소 포지션 발견 (봇 미추적): BTC/USDT:USDT short 1.000000 @ $81410.7
+2026-05-15 10:44:17 [WARNING] src.strategy.ml_engine: [ML] Phase 전환: B → B+ | 300건 라벨 도달 — 회귀 모델 전환 준비 완료
