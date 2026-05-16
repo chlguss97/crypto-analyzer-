@@ -174,3 +174,4 @@
 2026-05-16 04:08:35 [WARNING] src.data.ws_stream: OKX WS business 수신 끊김: no close frame received or sent → 재연결
 2026-05-16 05:45:04 [WARNING] src.data.ws_stream: OKX WS business 수신 끊김: no close frame received or sent → 재연결
 2026-05-16 06:07:59 [WARNING] src.data.ws_stream: OKX WS business 수신 끊김: no close frame received or sent → 재연결
+2026-05-16 11:12:29 [WARNING] src.data.ws_stream: OKX WS public 수신 끊김: no close frame received or sent → 재연결
