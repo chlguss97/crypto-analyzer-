@@ -1,0 +1,39 @@
+═══════════════════════════════════════════════════
+📊 로그 디지스트 — 최근 20분 (2026-05-18 09:00:01 KST)
+═══════════════════════════════════════════════════
+
+═══ 봇 헬스체크 (09:00:05) ═══
+상태       : ✅ OK
+컨테이너   : running
+마지막 로그: 2026-05-18 09:00:01
+Heartbeat  : 22초 전
+시그널 평가: 없음(5분내)
+활성 포지션: 0개
+자동매매   : on
+잔고       : $259.40
+학습 상태  : idle
+
+── 🎯 트레이딩 이벤트 ──
+(없음)
+
+── 🔧 알고 주문 (SL/TP) ──
+(없음)
+
+── ❌ ERROR / 🚨 ──
+(없음)
+
+── ⚠️ WARNING ──
+bot-1  | 2026-05-18 08:40:56 [WARNING] src.data.ws_stream: OKX WS public 수신 끊김: sent 1011 (internal error) keepalive ping timeout; no close frame received → 재연결
+bot-1  | 2026-05-18 08:42:30 [WARNING] src.data.ws_stream: OKX WS public 수신 끊김: sent 1011 (internal error) keepalive ping timeout; no close frame received → 재연결
+
+── 📉 시그널 평가 통계 ──
+(없음)
+
+── 🚧 게이트 차단 통계 ──
+(없음)
+
+── 💰 마지막 잔고/포지션 ──
+(없음)
+
+═══════════════════════════════════════════════════
+끝 — line count: 192
