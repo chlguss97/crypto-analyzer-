@@ -5,3 +5,8 @@
 2026-05-19 10:01:52 [WARNING] src.trading.position_manager: ⚠️  사이즈 0.0100 BTC < 0.02 BTC → TP1 에서 100% 청산 (러너 비활성)
 2026-05-19 11:04:02 [WARNING] src.trading.position_manager: 포지션 외부 종료 감지 (사이즈≈0) → 정리: BTC/USDT:USDT
 2026-05-19 11:04:05 [WARNING] src.strategy.setup_tracker: [SetupTracker] 알 수 없는 셋업: fast_momentum
+2026-05-19 11:24:45 [ERROR] src.trading.position_manager: 🛑 SL failsafe 발동: SHORT 가격 $76908 vs SL $76903 | 보유 20분 | runner=False | size=0.0300/0.0300 | algo_debug={'pending_count': 1, 'pending_ids': [{'clOrdId': 'tp117791562675284467', 'id': '3578709951377731584', 'triggerPx': '76022.7', 'sz': '1.5', 'state': 'live'}], 'pos_sl_algo_id': 'sl17791562671996680'}
+2026-05-19 11:24:46 [ERROR] src.trading.executor: 시장가 주문 실패 (1/3): okx {"code":"1","data":[{"clOrdId":"6b9ad766b55dBCDEb72b2b938eceb5f0","ordId":"","sCode":"51169","sMsg":"Order failed because you don't have any positions in this direction for this contract to reduce or close. ","subCode":"","tag":"6b9ad766b55dBCDE","ts":"1779157486467"}],"inTime":"1779157486466501","msg":"All operations failed","outTime":"1779157486467628"}
+2026-05-19 11:24:47 [WARNING] src.trading.risk_manager: 손실 기록: -11.25% | 연패: 1
+2026-05-19 11:24:47 [WARNING] src.strategy.setup_tracker: [SetupTracker] 알 수 없는 셋업: fast_momentum
+2026-05-19 11:26:00 [WARNING] src.trading.position_manager: ⚠️  사이즈 0.0100 BTC < 0.02 BTC → TP1 에서 100% 청산 (러너 비활성)
