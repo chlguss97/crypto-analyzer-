@@ -420,14 +420,42 @@ class CryptoAnalyzer:
 
         # 실거래
         if autotrading:
-            balance = await self.executor.get_balance()
-            if balance > 0:
-                executed = await self._execute(
-                    candidate, balance, regime_now, daily_pnl,
-                    conviction=conviction
+            # Shadow WR 게이트 (5분마다 갱신, WR<20% 시 매매 정지)
+            if now - getattr(self, "_last_shadow_wr_check", 0) >= 300:
+                self._last_shadow_wr_check = now
+                try:
+                    wr, cnt = await self.db.get_recent_shadow_wr(hours=4)
+                    self._cached_shadow_wr = wr
+                    self._cached_shadow_cnt = cnt
+                except Exception:
+                    pass
+
+            shadow_wr = getattr(self, "_cached_shadow_wr", 50.0)
+            shadow_cnt = getattr(self, "_cached_shadow_cnt", 0)
+            if shadow_cnt >= 30 and shadow_wr < 20:
+                logger.info(
+                    f"[GATE] Shadow WR {shadow_wr:.1f}% ({shadow_cnt}건/4h) < 20% "
+                    f"→ 매매 일시 정지: {direction} {ctype}"
                 )
-                if executed and sig_id:
-                    await self.db.update_signal_entry(sig_id)
+                _append_jsonl({
+                    "type": "gate_block",
+                    "reason": "shadow_wr_low",
+                    "detail": f"WR={shadow_wr:.1f}% cnt={shadow_cnt} (4h)",
+                    "direction": direction,
+                    "candidate_type": ctype,
+                    "regime": regime_now,
+                    "h1_trend": self._cached_h1_trend,
+                    "h4_trend": self._cached_h4_trend,
+                })
+            else:
+                balance = await self.executor.get_balance()
+                if balance > 0:
+                    executed = await self._execute(
+                        candidate, balance, regime_now, daily_pnl,
+                        conviction=conviction
+                    )
+                    if executed and sig_id:
+                        await self.db.update_signal_entry(sig_id)
 
         # 주기적 상태 로깅
         if now - getattr(self, "_last_eval_log", 0) >= 30:

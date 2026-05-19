@@ -277,6 +277,27 @@ class Database:
         rows = await cursor.fetchall()
         return [dict(r) for r in rows]
 
+    async def get_recent_shadow_wr(self, hours: int = 4) -> tuple[float, int]:
+        """최근 N시간 shadow WR 반환 → (wr_pct, total_count)"""
+        import time as _t
+        cutoff = int(_t.time()) - hours * 3600
+        cursor = await self._db.execute(
+            """SELECT label, COUNT(*) as cnt FROM signals
+               WHERE label IN (0, 1) AND resolve_ts > ?
+               GROUP BY label""",
+            (cutoff,),
+        )
+        rows = await cursor.fetchall()
+        wins = 0
+        total = 0
+        for r in rows:
+            total += r["cnt"]
+            if r["label"] == 1:
+                wins = r["cnt"]
+        if total == 0:
+            return 50.0, 0
+        return round(wins / total * 100, 1), total
+
     async def get_signal_count(self, labeled_only: bool = True) -> int:
         """라벨 확정된 시그널 수"""
         if labeled_only:

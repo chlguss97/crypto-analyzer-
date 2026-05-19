@@ -779,10 +779,13 @@ class PositionManager:
         sl_id = pos.algo_ids.get("sl")
         need_sl_reregister = not sl_id  # ID 없으면 당연히 재등록
 
-        # 10초마다 OKX에 SL이 실제 존재하는지 확인 (60→10초: SL 소실 시 failsafe 전 복구)
+        # 검증 주기: 진입 후 2분 이내 5초, 이후 10초
         now = time.time()
+        pos_age = now - (pos.entry_time if pos.entry_time > 0 else now)
+        check_interval = 5 if pos_age < 120 else 10
+
         last_check = getattr(pos, "_last_sl_verify", 0)
-        if sl_id and (now - last_check) >= 10:
+        if sl_id and (now - last_check) >= check_interval:
             pos._last_sl_verify = now
             try:
                 inst_id = self.executor.exchange.market(symbol)["id"]
@@ -795,12 +798,42 @@ class PositionManager:
                     for p in pending
                 )
                 if not sl_found:
+                    sl_lost_count = getattr(pos, "_sl_lost_count", 0) + 1
+                    pos._sl_lost_count = sl_lost_count
                     logger.warning(
-                        f"⚠️  SL 알고 OKX에서 소실 감지: id={sl_id} "
+                        f"⚠️  SL 알고 OKX에서 소실 감지 ({sl_lost_count}회): id={sl_id} "
                         f"(pending={len(pending)}건) → 재등록"
                     )
                     pos.algo_ids["sl"] = None
                     need_sl_reregister = True
+
+                    # 텔레그램 알림 (첫 소실 + 3회째)
+                    if self.telegram and sl_lost_count in (1, 3):
+                        try:
+                            await self.telegram.notify_warning(
+                                f"SL 알고 소실 ({sl_lost_count}회)\n"
+                                f"{pos.direction.upper()} ${pos.entry_price:.0f}\n"
+                                f"SL ${pos.current_sl:.0f} | 재등록 시도 중"
+                            )
+                        except Exception:
+                            pass
+
+                    # 3회 이상 반복 소실 → 포지션 강제 청산 (불안정)
+                    if sl_lost_count >= 3:
+                        logger.error(
+                            f"🚨 SL 알고 {sl_lost_count}회 반복 소실 → 포지션 강제 청산"
+                        )
+                        if self.telegram:
+                            try:
+                                await self.telegram.notify_emergency(
+                                    f"SL {sl_lost_count}회 반복 소실 → 강제 청산\n"
+                                    f"{pos.direction.upper()} ${pos.entry_price:.0f}"
+                                )
+                            except Exception:
+                                pass
+                        await self._cancel_all_algos(pos)
+                        await self._full_close(pos, "sl_repeated_loss")
+                        return
             except Exception as e:
                 logger.debug(f"SL 존재 확인 예외: {e}")
 
