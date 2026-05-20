@@ -381,10 +381,11 @@ class ScalpManager:
         exit_price = 0.0
         try:
             order = await self.executor.close_position(pos.direction, pos.size, reason)
-            if order:
+            if order and isinstance(order, dict):
                 exit_price = float(order.get("price", 0) or 0)
-                fee = float(order.get("fee", {}).get("cost", 0) or 0)
-                pos.total_fee += abs(fee)
+                fee_info = order.get("fee") or {}
+                if isinstance(fee_info, dict):
+                    pos.total_fee += abs(float(fee_info.get("cost", 0) or 0))
         except Exception as e:
             logger.error(f"청산 실패: {e}")
 
