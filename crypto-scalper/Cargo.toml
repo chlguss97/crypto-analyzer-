@@ -23,8 +23,8 @@ serde_yaml = "0.9"
 # Redis
 redis = { version = "0.27", features = ["tokio-comp", "aio"] }
 
-# SQLite
-rusqlite = { version = "0.32", features = ["bundled"] }
+# SQLite (burn-dataset 0.20과 동일 rusqlite 버전)
+rusqlite = { version = "0.37", features = ["bundled"] }
 
 # ML / Deep Learning
 burn = { version = "0.20", features = ["train", "ndarray"] }
