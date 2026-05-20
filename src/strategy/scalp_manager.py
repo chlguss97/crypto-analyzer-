@@ -121,32 +121,28 @@ class ScalpManager:
 
         # 레버리지 설정
         try:
-            await self.executor.set_leverage(self.leverage)
+            await self.executor.set_leverage(self.leverage, direction)
         except Exception as e:
             logger.warning(f"레버리지 설정 실패: {e}")
 
-        # 진입 주문 (post-only maker, 실패 시 포기)
+        # 진입 주문 — 시장가 (taker 0.05%, 즉시 체결)
         logger.info(
             f"[SCALP] {direction.upper()} 진입 시도 @ ${price:.0f} | "
             f"TP ${tp_price:.0f} SL ${sl_price:.0f} | "
             f"size={size} BTC, margin=${margin:.1f}"
         )
 
-        order = await self.executor.open_position(
-            direction=direction,
-            size=size,
-            grade="SCALP",
-            entry_price=price,
-            sl_price=sl_price,
-            leverage=self.leverage,
-        )
+        side = "buy" if direction == "long" else "sell"
+        pos_side = "long" if direction == "long" else "short"
+        order = await self.executor._market_order(side, size, pos_side)
         if not order:
-            logger.info("[SCALP] 진입 실패 (post-only 미체결) → 포기")
+            logger.info("[SCALP] 진입 실패 (시장가 미체결) → 포기")
             return None
 
-        fill_price = float(order.get("price", price))
-        filled_size = float(order.get("filled", size))
-        fee = float(order.get("fee", {}).get("cost", 0) or 0)
+        fill_price = float(order.get("average", order.get("price", price)) or price)
+        filled_size = size  # 시장가는 전량 체결
+        fee_info = order.get("fee") or {}
+        fee = abs(float(fee_info.get("cost", 0) or 0)) if isinstance(fee_info, dict) else 0
 
         if filled_size < MIN_ORDER_SIZE_BTC:
             logger.warning(f"[SCALP] 체결 사이즈 부족: {filled_size}")
