@@ -45,6 +45,9 @@ hmac = "0.12"
 sha2 = "0.10"
 base64 = "0.22"
 
+# Error handling
+anyhow = "1"
+
 # Environment
 dotenvy = "0.15"
 

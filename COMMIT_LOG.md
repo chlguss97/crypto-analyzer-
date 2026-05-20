@@ -1,12 +1,13 @@
 # Commit Log
 
 > 자동 생성 — `scripts/update_commit_log.sh` (매 커밋 후 실행)
-> Updated: 2026-05-20 17:22:47    
-> Total commits: 388 (2026-04-03 → 2026-05-20)
+> Updated: 2026-05-20 17:24:03    
+> Total commits: 389 (2026-04-03 → 2026-05-20)
 
 Claude 가 질문/변경 작업 시 이 파일을 참고해서 과거 변경 이력 컨텍스트를 확보합니다. 수동 편집 금지 — 다음 커밋 시 덮어써집니다.
 
 ## 2026-05-20
+- `ffc71005` fix: rusqlite 0.32→0.37 (burn-dataset sqlite3 충돌 해결)
 - `c8640b12` fix: burn 0.15→0.20 (bincode 호환)
 - `5370fcf1` fix: Rust nightly (burn 의존성 1.88+ 요구)
 - `c49ee34f` fix: Rust 1.80→1.85 (burn edition2024 요구)

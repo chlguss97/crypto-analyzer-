@@ -82,8 +82,8 @@ impl Database {
 
     // ── Candles ──
 
-    pub fn insert_candles(&self, symbol: &str, tf: &str, candles: &[crate::models::candle::Candle]) -> anyhow::Result<()> {
-        let tx = self.conn.unchecked_transaction()?;
+    pub fn insert_candles(&mut self, symbol: &str, tf: &str, candles: &[crate::models::candle::Candle]) -> anyhow::Result<()> {
+        let tx = self.conn.transaction()?;
         for c in candles {
             tx.execute(
                 "INSERT INTO candles (symbol, timeframe, timestamp, open, high, low, close, volume)
