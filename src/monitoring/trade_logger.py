@@ -1,3 +1,19 @@
+"""
+TradeLogger v3 — 스캘핑 JSONL 로거
+
+주간 JSONL 파일 + 텍스트 로그 파일.
+모든 이벤트는 _append_jsonl()로 기록.
+
+이벤트 타입:
+  - scalp_entry: 스캘핑 진입
+  - scalp_exit: 스캘핑 청산
+  - candidate: 시그널 감지 (Shadow 포함)
+  - shadow_result: Shadow 라벨 확정
+  - gate_block: 게이트 차단
+  - hourly_snapshot: 시간별 스냅샷
+  - adaptive_update: AdaptiveParams 갱신
+"""
+
 import json
 import logging
 import time
@@ -9,18 +25,16 @@ LOG_DIR = Path(__file__).parent.parent.parent / "data" / "logs"
 
 
 def _week_tag() -> str:
-    """현재 주 태그: '2026-W17' (strftime %W 기준 — .log 로테이션과 통일)"""
     now = datetime.now(timezone.utc)
     return now.strftime("%Y-W%W")
 
 
 def _jsonl_path() -> Path:
-    """주간 JSONL 파일: trades_2026-W18.jsonl"""
     return LOG_DIR / f"trades_{_week_tag()}.jsonl"
 
 
 def _append_jsonl(record: dict):
-    """단일 JSON line 을 주간 파일에 append — fsync 로 즉시 디스크 반영"""
+    """단일 JSON line을 주간 파일에 append"""
     try:
         LOG_DIR.mkdir(parents=True, exist_ok=True)
         record["ts"] = int(time.time())
@@ -34,122 +48,50 @@ def _append_jsonl(record: dict):
             except Exception:
                 pass
     except Exception:
-        pass  # 로그 실패가 매매를 막지 않게
+        pass
 
 
 class TradeLogger:
-    """매매 전용 로거 (주간 파일 영구 보존)"""
+    """매매 전용 텍스트 로거 (주간 파일 영구 보존)"""
 
     def __init__(self):
         LOG_DIR.mkdir(parents=True, exist_ok=True)
         self.logger = logging.getLogger("TradeLog")
-        self.logger.setLevel(logging.DEBUG)
+        self.logger.setLevel(logging.INFO)
 
         if not self.logger.handlers:
-            # 매매 로그 (INFO) — 매주 월요일 로테이션, 영구 보존
-            trade_handler = TimedRotatingFileHandler(
+            handler = TimedRotatingFileHandler(
                 LOG_DIR / "trades.log",
-                when="W0",          # 월요일 기준
-                backupCount=520,    # 10년치 보존
-                encoding="utf-8",
-                utc=True,
-            )
-            trade_handler.setLevel(logging.INFO)
-            trade_handler.setFormatter(
-                logging.Formatter("%(asctime)s | %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
-            )
-            trade_handler.suffix = "%Y-W%W"  # trades.log.2026-W18
-            self.logger.addHandler(trade_handler)
-
-            # 시그널 상세 로그 (DEBUG) — 매주 월요일 로테이션
-            signal_handler = TimedRotatingFileHandler(
-                LOG_DIR / "signals.log",
                 when="W0",
                 backupCount=520,
                 encoding="utf-8",
                 utc=True,
             )
-            signal_handler.setLevel(logging.DEBUG)
-            signal_handler.setFormatter(
+            handler.setLevel(logging.INFO)
+            handler.setFormatter(
                 logging.Formatter("%(asctime)s | %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
             )
-            signal_handler.suffix = "%Y-W%W"
-            self.logger.addHandler(signal_handler)
+            handler.suffix = "%Y-W%W"
+            self.logger.addHandler(handler)
 
-    def log_entry(self, direction: str, grade: str, score: float,
-                  entry_price: float, sl_price: float, leverage: int,
-                  margin: float, tp1_price: float = 0,
-                  conviction: int = 0, conviction_mult: float = 1.0,
-                  h1_trend: str = "?", h4_trend: str = "?",
-                  regime: str = "?"):
+    def log_scalp_entry(self, direction: str, entry_price: float,
+                        sl_price: float, tp_price: float,
+                        size: float, leverage: int, regime: str = "?"):
         self.logger.info(
-            f"ENTRY | {grade} {direction.upper()} | "
-            f"${entry_price:,.1f} | SL ${sl_price:,.1f} | TP1 ${tp1_price:,.1f} | "
-            f"{leverage}x | ${margin:,.0f} | conv={conviction}({conviction_mult:.0%})"
+            f"SCALP ENTRY | {direction.upper()} | "
+            f"${entry_price:,.1f} | SL ${sl_price:,.1f} TP ${tp_price:,.1f} | "
+            f"{size} BTC {leverage}x | regime={regime}"
         )
-        _append_jsonl({
-            "type": "entry",
-            "direction": direction,
-            "grade": grade,
-            "score": round(float(score), 2),
-            "entry_price": round(float(entry_price), 1),
-            "sl_price": round(float(sl_price), 1),
-            "tp1_price": round(float(tp1_price), 1),
-            "leverage": int(leverage),
-            "margin": round(float(margin), 2),
-            "conviction": conviction,
-            "conviction_mult": round(conviction_mult, 2),
-            "h1_trend": h1_trend,
-            "h4_trend": h4_trend,
-            "regime": regime,
-        })
 
-    def log_exit(self, direction: str, exit_reason: str,
-                 entry_price: float, exit_price: float,
-                 pnl_pct: float, pnl_usdt: float,
-                 hold_min: int, fee: float, **extra):
+    def log_scalp_exit(self, direction: str, exit_reason: str,
+                       entry_price: float, exit_price: float,
+                       pnl_pct: float, pnl_usdt: float,
+                       hold_sec: int, fee: float):
         self.logger.info(
-            f"EXIT  | {direction.upper()} {exit_reason} | "
-            f"${entry_price:,.1f} -> ${exit_price:,.1f} | "
+            f"SCALP EXIT  | {direction.upper()} {exit_reason} | "
+            f"${entry_price:,.1f} → ${exit_price:,.1f} | "
             f"{pnl_pct:+.2f}% (${pnl_usdt:+.2f}) | "
-            f"{hold_min}min | fee ${fee:.2f}"
-        )
-        # JSONL 영구 기록 (DB 손상 무관)
-        record = {
-            "type": "exit",
-            "direction": direction,
-            "exit_reason": exit_reason,
-            "entry_price": round(float(entry_price), 1),
-            "exit_price": round(float(exit_price), 1),
-            "pnl_pct": round(float(pnl_pct), 2),
-            "pnl_usdt": round(float(pnl_usdt), 2),
-            "hold_min": int(hold_min),
-            "fee": round(float(fee), 2),
-        }
-        # 추가 필드 (grade, score, leverage, setup, regime 등)
-        for k, v in extra.items():
-            if v is not None:
-                record[k] = v
-        _append_jsonl(record)
-
-    def log_partial_close(self, direction: str, reason: str,
-                          close_pct: float, price: float):
-        self.logger.info(
-            f"PARTIAL | {direction.upper()} {reason} | "
-            f"{close_pct*100:.0f}% @ ${price:,.1f}"
-        )
-
-    def log_trailing_update(self, direction: str, tier: int, new_sl: float):
-        self.logger.info(
-            f"TRAIL | {direction.upper()} Tier {tier} | SL -> ${new_sl:,.1f}"
-        )
-
-    def log_signal_summary(self, score: float, grade: str, direction: str,
-                           long_score: float, short_score: float, bonus: float):
-        self.logger.debug(
-            f"GRADE | {grade} {direction.upper()} | "
-            f"score {score:.1f} | L:{long_score:.1f} S:{short_score:.1f} | "
-            f"bonus {bonus:.1f}"
+            f"{hold_sec}s | fee ${fee:.2f}"
         )
 
     def log_risk_event(self, event: str, detail: str = ""):

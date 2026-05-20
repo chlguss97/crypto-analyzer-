@@ -57,7 +57,7 @@ async def verify_auth(
 
 
 app = FastAPI(
-    title="CryptoAnalyzer v2",
+    title="ScalpEngine v3",
     version="2.0.0",
     dependencies=[Depends(verify_auth)],
 )
@@ -231,40 +231,25 @@ async def get_signals():
 
 
 @app.get("/api/trades")
-async def get_trades(days: int = 7, mode: str = "all"):
+async def get_trades(days: int = 7):
     await _ensure_initialized()
-    """최근 매매 내역 (mode: all, paper, real)"""
+    """스캘핑 매매 내역"""
     import time
     since = int((time.time() - days * 86400) * 1000)
 
-    if mode == "paper":
-        cursor = await db._db.execute(
-            """SELECT * FROM trades
-               WHERE entry_time >= ? AND grade LIKE 'PAPER_%'
-               ORDER BY entry_time DESC""",
-            (since,),
-        )
-    elif mode == "real":
-        cursor = await db._db.execute(
-            """SELECT * FROM trades
-               WHERE entry_time >= ? AND grade NOT LIKE 'PAPER_%'
-               ORDER BY entry_time DESC""",
-            (since,),
-        )
-    else:
-        cursor = await db._db.execute(
-            """SELECT * FROM trades
-               WHERE entry_time >= ?
-               ORDER BY entry_time DESC""",
-            (since,),
-        )
+    cursor = await db._db.execute(
+        """SELECT * FROM scalp_trades
+           WHERE entry_time >= ?
+           ORDER BY entry_time DESC""",
+        (since,),
+    )
     rows = await cursor.fetchall()
 
     trades = []
     for row in rows:
         trade = dict(row)
-        if trade.get("signals_snapshot"):
-            trade["signals_snapshot"] = "(생략)"
+        if trade.get("features_snapshot"):
+            trade["features_snapshot"] = "(생략)"
         trades.append(trade)
 
     return {"trades": trades, "count": len(trades)}
@@ -292,81 +277,52 @@ async def get_candles(timeframe: str = "15m", limit: int = 200):
     return {"candles": candles, "count": len(candles), "timeframe": timeframe}
 
 
-@app.get("/api/paper/stats")
-async def get_paper_stats():
+@app.get("/api/shadow/stats")
+async def get_shadow_stats():
     await _ensure_initialized()
-    """가상매매 통계"""
+    """Shadow 시그널 통계"""
     cursor = await db._db.execute(
         """SELECT
             COUNT(*) as total,
-            SUM(CASE WHEN pnl_pct > 0 THEN 1 ELSE 0 END) as wins,
-            SUM(CASE WHEN pnl_pct <= 0 THEN 1 ELSE 0 END) as losses,
-            COALESCE(SUM(pnl_usdt), 0) as total_pnl,
+            SUM(CASE WHEN label = 1 THEN 1 ELSE 0 END) as wins,
+            SUM(CASE WHEN label = 0 THEN 1 ELSE 0 END) as losses,
             COALESCE(AVG(pnl_pct), 0) as avg_pnl_pct
-        FROM trades
-        WHERE grade LIKE 'PAPER_%' AND exit_time IS NOT NULL"""
+        FROM scalp_signals
+        WHERE label != -1"""
     )
     row = dict(await cursor.fetchone())
 
-    # 최근 20건
     cursor2 = await db._db.execute(
-        """SELECT id, direction, grade, score, entry_price, exit_price,
-                  entry_time, exit_time, exit_reason, pnl_pct, pnl_usdt, leverage
-           FROM trades
-           WHERE grade LIKE 'PAPER_%' AND exit_time IS NOT NULL
-           ORDER BY exit_time DESC LIMIT 20"""
+        """SELECT id, signal_type, direction, price, regime, hurst, label,
+                  barrier_hit, pnl_pct, reach_pct, mae_pct, ts
+           FROM scalp_signals
+           WHERE label != -1
+           ORDER BY ts DESC LIMIT 20"""
     )
     recent = [dict(r) for r in await cursor2.fetchall()]
 
-    # 진행 중 가상 포지션 수
     cursor3 = await db._db.execute(
-        """SELECT COUNT(*) FROM trades
-           WHERE grade LIKE 'PAPER_%' AND exit_time IS NULL"""
+        "SELECT COUNT(*) FROM scalp_signals WHERE label = -1"
     )
-    active = (await cursor3.fetchone())[0]
-
-    # PaperLab 상태 (구 paper:state → lab:stats)
-    paper_state = {}
-    paper_positions = []
-    try:
-        lab = await redis.get_json("lab:stats")
-        if lab and isinstance(lab, dict):
-            best = lab.get("best", {})
-            paper_state = {
-                "balance": 0,
-                "total_trades": lab.get("total_trades", 0),
-                "win_rate": best.get("win_rate", 0) if best else 0,
-                "variants": lab.get("variants", []),
-            }
-    except Exception:
-        pass
+    pending = (await cursor3.fetchone())[0]
 
     return {
         "total": row["total"],
         "wins": row["wins"] or 0,
         "losses": row["losses"] or 0,
         "win_rate": (row["wins"] or 0) / max(row["total"], 1) * 100,
-        "total_pnl": round(row["total_pnl"], 2),
-        "avg_pnl_pct": round(row["avg_pnl_pct"], 4),
-        "active_positions": active,
-        "recent_trades": recent,
-        "account": paper_state,
-        "live_positions": paper_positions,
+        "avg_pnl_pct": round(row["avg_pnl_pct"] or 0, 4),
+        "pending": pending,
+        "recent_signals": recent,
     }
 
 
 @app.get("/api/equity-curve")
-async def get_equity_curve(mode: str = "paper"):
+async def get_equity_curve():
     await _ensure_initialized()
-    """자산 곡선 (mode: paper, real, all)"""
-    if mode == "paper":
-        where = "WHERE exit_time IS NOT NULL AND grade LIKE 'PAPER_%'"
-    elif mode == "real":
-        where = "WHERE exit_time IS NOT NULL AND grade NOT LIKE 'PAPER_%'"
-    else:
-        where = "WHERE exit_time IS NOT NULL"
+    """자산 곡선"""
     cursor = await db._db.execute(
-        f"SELECT entry_time, pnl_usdt, pnl_pct FROM trades {where} ORDER BY exit_time ASC"
+        "SELECT entry_time, pnl_usdt, pnl_pct FROM scalp_trades WHERE exit_time IS NOT NULL ORDER BY exit_time ASC"
     )
     rows = await cursor.fetchall()
 
@@ -629,44 +585,24 @@ async def get_engine_overview():
     # 3) SetupTracker 요약
     setup_summary = {}
 
-    # 4) Real vs Paper 비교 (동일 grade family 필터)
-    real_stats = {"total": 0, "wins": 0, "wr": 0.0, "total_pnl": 0.0, "avg_pnl": 0.0}
-    paper_stats = {"total": 0, "wins": 0, "wr": 0.0, "total_pnl": 0.0, "avg_pnl": 0.0}
+    # 4) 스캘핑 트레이드 통계
+    trade_stats = {"total": 0, "wins": 0, "wr": 0.0, "total_pnl": 0.0, "avg_pnl": 0.0}
     try:
-        # Real (PAPER_ 접두어 없는 모든 거래)
         cur = await db._db.execute(
             """SELECT COUNT(*) as total,
                       SUM(CASE WHEN pnl_pct > 0 THEN 1 ELSE 0 END) as wins,
                       COALESCE(SUM(pnl_usdt), 0) as total_pnl,
                       COALESCE(AVG(pnl_pct), 0) as avg_pnl
-               FROM trades
-               WHERE exit_time IS NOT NULL
-                 AND grade NOT LIKE 'PAPER_%'"""
+               FROM scalp_trades WHERE exit_time IS NOT NULL"""
         )
         row = dict(await cur.fetchone())
-        real_stats["total"] = row["total"] or 0
-        real_stats["wins"] = row["wins"] or 0
-        real_stats["wr"] = (real_stats["wins"] / max(real_stats["total"], 1)) * 100
-        real_stats["total_pnl"] = round(row["total_pnl"] or 0, 2)
-        real_stats["avg_pnl"] = round(row["avg_pnl"] or 0, 4)
-
-        # Paper (PAPER_SETUP_A/B/C)
-        cur2 = await db._db.execute(
-            """SELECT COUNT(*) as total,
-                      SUM(CASE WHEN pnl_pct > 0 THEN 1 ELSE 0 END) as wins,
-                      COALESCE(SUM(pnl_usdt), 0) as total_pnl,
-                      COALESCE(AVG(pnl_pct), 0) as avg_pnl
-               FROM trades
-               WHERE exit_time IS NOT NULL AND grade LIKE 'PAPER_%'"""
-        )
-        row2 = dict(await cur2.fetchone())
-        paper_stats["total"] = row2["total"] or 0
-        paper_stats["wins"] = row2["wins"] or 0
-        paper_stats["wr"] = (paper_stats["wins"] / max(paper_stats["total"], 1)) * 100
-        paper_stats["total_pnl"] = round(row2["total_pnl"] or 0, 2)
-        paper_stats["avg_pnl"] = round(row2["avg_pnl"] or 0, 4)
+        trade_stats["total"] = row["total"] or 0
+        trade_stats["wins"] = row["wins"] or 0
+        trade_stats["wr"] = (trade_stats["wins"] / max(trade_stats["total"], 1)) * 100
+        trade_stats["total_pnl"] = round(row["total_pnl"] or 0, 2)
+        trade_stats["avg_pnl"] = round(row["avg_pnl"] or 0, 4)
     except Exception as e:
-        logger.debug(f"real/paper 집계 실패: {e}")
+        logger.debug(f"trade stats 집계 실패: {e}")
 
     # 5) Flow × Regime 히트맵
     heatmap = {}
@@ -697,7 +633,7 @@ async def get_engine_overview():
         "engine": engine_state,
         "setups": setup_summary,
         "heatmap": heatmap,
-        "comparison": {"real": real_stats, "paper": paper_stats},
+        "comparison": {"scalp_trades": trade_stats},
         "ml": ml_stats,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
@@ -705,11 +641,11 @@ async def get_engine_overview():
 
 @app.get("/api/signals-db")
 async def get_signals_db():
-    """signals 테이블 최근 50건 조회"""
+    """scalp_signals 최근 50건 조회"""
     await _ensure_initialized()
     try:
         cursor = await db._db.execute(
-            "SELECT * FROM signals ORDER BY ts DESC LIMIT 50"
+            "SELECT * FROM scalp_signals ORDER BY ts DESC LIMIT 50"
         )
         rows = await cursor.fetchall()
         return {"signals": [dict(r) for r in rows], "count": len(rows)}

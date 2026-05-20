@@ -655,6 +655,8 @@ class ScalpEngine:
 
         self.telegram.redis = self.redis
         self.telegram.executor = self.executor
+        self.telegram.scalp_manager = self.scalp_manager
+        self.telegram.risk_manager = self.risk_manager
 
         await self.telegram.notify_bot_status("running")
         try:

@@ -1,10 +1,14 @@
 # Commit Log
 
 > 자동 생성 — `scripts/update_commit_log.sh` (매 커밋 후 실행)
-> Updated: 2026-05-18 16:03:07    
-> Total commits: 356 (2026-04-03 → 2026-05-18)
+> Updated: 2026-05-20 09:39:46    
+> Total commits: 358 (2026-04-03 → 2026-05-20)
 
 Claude 가 질문/변경 작업 시 이 파일을 참고해서 과거 변경 이력 컨텍스트를 확보합니다. 수동 편집 금지 — 다음 커밋 시 덮어써집니다.
+
+## 2026-05-20
+- `50af961d` feat: ScalpEngine v3 — 마이크로스트럭처 스캘핑 엔진 전면 재설계
+- `9d763c66` fix: SL 소실 근본 대응 + Shadow WR 매매 자동정지
 
 ## 2026-05-18
 - `155be494` fix: self-heal SL 검증 주기 60초→10초 — OKX SL 소실 시 failsafe 전 복구
