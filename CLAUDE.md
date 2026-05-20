@@ -8,14 +8,17 @@
 - 사람용 변경 큐레이션: `CHANGELOG.md`
 - 운영 매뉴얼: `MANUAL.md`
 
-## 핵심 설계 결정 (v3, 2026-05-20)
+## 핵심 설계 결정 (v3, 2026-05-20 — 프로 레퍼런스 12/12 EXACT)
 - **4계층**: Raw Data → Feature Engine → Regime Gate → ML Scorer → Execute
-- **Regime Gate**: Hurst(추세/횡보/랜덤) + VPIN(독성) → 자동 거래허용 판단
-- **시그널 2종**: Micro-Momentum Burst (추세장) / VWAP Snap (횡보장)
-- **TP/SL**: TP +0.20% (maker) / SL -0.15% (market) / 시간정지 3~5분
-- **ML**: 20종 마이크로스트럭처 피처 → XGBoost (Phase A 규칙 → B ML)
-- **주문**: post-only maker 강제, 실패→포기 (market 전환 없음)
+- **Regime Gate**: Hurst(동적 n/8~n 스케일) + VPIN(4단계) + Book Shock
+- **시그널 2종**: Micro-Momentum Burst + OU Z-Score Reversion (0.93 감쇠)
+- **앙상블**: Burst + OU 방향 합의, CVD divergence >0.3 오버라이드
+- **TP/SL**: 동적 k(2.0) × Parkinson/Realized Vol 블렌딩 (고정% 없음)
+- **청산**: 시그널 반전 즉시 청산 + 시간정지 3~5분
+- **사이징**: VPIN배수 × Hurst배수 × micro_conf 캐스케이드
+- **주문**: post-only maker 강제, 실패→포기
 - **보호**: SL market-on-trigger + 5초 self-heal + 3회 소실 강제청산
+- **제거**: 쿨다운/연패축소/시간당제한/진입간격/Shadow WR 게이트 (프로 미사용)
 
 ## 기술스택
 - Python 3.11 / ccxt / scikit-learn / FastAPI

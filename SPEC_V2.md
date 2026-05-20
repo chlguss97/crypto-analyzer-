@@ -80,10 +80,12 @@
 | 피처 | Redis 키 | 계산 | 참조 |
 |------|----------|------|------|
 | OFI 멀티레벨 | `rt:micro:ofi` | books5 ΔBid - ΔAsk (5레벨) | Cont et al. (2014) |
-| Hurst Exponent | `rt:regime:hurst` | R/S 분석, 5분봉 20~50개 | Hurst (1951) |
-| Parkinson Vol | `rt:micro:parkinson_vol` | √[Σ(ln H/L)² / 4n·ln2] | Parkinson (1980) |
-| Welford Z-Score | ScalpDetector 내부 | 100개 윈도우 온라인 정규화 | Welford (1962) |
-| VPIN | `rt:micro:vpin` (미구현) | 볼륨 버킷 |V_buy-V_sell|/V | Easley et al. (2012) |
+| Hurst Exponent | `rt:regime:hurst` | R/S 동적 n/8,n/4,n/2,n 스케일 | Hurst (1951) |
+| Parkinson/Realized Vol | `rt:micro:parkinson_vol` | Parkinson 50% + Realized 50% 블렌딩 | Parkinson (1980) |
+| Welford Z-Score | ScalpDetector 내부 | 100개 윈도우 + 워밍업 100샘플 | Welford (1962) |
+| VPIN | `rt:micro:vpin` | 볼륨 버킷 (1/N)Σ|V_buy-V_sell|/V, 4단계 사이징 | Easley et al. (2012) |
+| OU Z-Score | `rt:micro:ou_zscore` | OLS 추정 + 0.93 감쇠 + z<-2/z>+2 진입 | Uhlenbeck & Ornstein (1930) |
+| Book Resilience | `rt:micro:book_resilience` | EWMA α=0.15 + 30% shock 감지 | Kyle (1985) |
 
 ---
 
@@ -106,15 +108,29 @@ Redis에서만 읽음. DB/캔들 접근 없음. 500ms 폴링.
 | 유동성 | spread | ≤ $2.0 |
 | 소진 필터 | move_60s | < price × 0.15% |
 
-### 3.2 Signal B: VWAP Snap (Hurst < 0.4)
+### 3.2 Signal B: OU Z-Score Reversion (Hurst < 0.4)
 
 | 조건 | 피처 | 임계값 |
 |------|------|--------|
-| VWAP 이탈 | vwap_deviation | ≥ 0.12% |
-| 다이버전스 | delta_div | 1 (long) / -1 (short) |
-| 흡수 | absorption_score | ≥ 1.0 |
-| 호가 지지 | book_imbalance | ≥ ±0.15 |
+| OU Z-Score | ou_zscore | abs ≥ 2.0σ (z<-2 long, z>+2 short) |
+| 호가 지지 | book_imbalance | ≥ +0.10 (long) / ≤ -0.10 (short) |
 | 유동성 | spread | ≤ $1.5 |
+| 보너스 | delta_div | 방향 일치 시 +0.3 |
+| 보너스 | absorption | ≥ 1.0 + 방향 일치 시 +0.3 |
+
+OU 감쇠: 0.93 per update (비활성 시 시그널 약화)
+
+### 3.3 CVD Divergence Override
+
+CVD z-score > 0.3 시 모멘텀 시그널 방향을 반전 (Bouchaud et al. 2004)
+- 가격↑ + CVD↓ = 매수 소진 → short으로 오버라이드
+- 가격↓ + CVD↑ = 매도 소진 → long으로 오버라이드
+
+### 3.4 앙상블 합의
+
+Burst + OU 2시그널 동시 발생 시:
+- 방향 일치 → strength +0.5 (강화)
+- 방향 불일치 → 차단 (conf < 0.6 동등)
 
 ---
 
@@ -151,31 +167,37 @@ cvd_5m_raw, funding_rate
 
 ## 5. 청산 로직
 
-| 유형 | 가격 | 넷 마진 (20x) | 방식 |
-|------|------|--------------|------|
-| TP | +0.20% | **+3.2%** | 서버 limit-on-trigger (maker) |
-| SL | -0.15% | **-4.4%** | 서버 market-on-trigger (taker) |
+| 유형 | 계산 | 방식 |
+|------|------|------|
+| **TP** | k(2.0) × Parkinson/Realized Vol (동적) | 서버 limit-on-trigger (maker) |
+| **SL** | k(2.0) × Parkinson/Realized Vol (동적) | 서버 market-on-trigger (taker) |
+| **시그널 반전** | 반대 방향 시그널 발생 시 | 즉시 market 청산 |
+| **시간 정지** | 180초(수익시) / 300초(최대) | market 청산 |
 
-**시간 정지**: 180초(수익/본전→즉시), 300초(무조건)
-
-**러너 없음, 부분청산 없음.** 100% TP or 100% SL or Time.
-
-**손익분기 승률: 57.9%**
+- TP/SL 범위: 0.1%~0.5% (변동성 적응)
+- RR 최소 1.0 보장 (TP ≥ SL)
+- **러너 없음, 부분청산 없음, 고정 % 없음**
+- 프로 레퍼런스: SL은 k×vol, TP도 k×vol 또는 시그널 반전
 
 ---
 
 ## 6. 리스크 컨트롤
 
-| 항목 | 값 |
-|------|-----|
+프로 레퍼런스 동일 — 인위적 제한 없이 시장 상태 기반 필터만 사용.
+
+| 항목 | 방식 |
+|------|------|
 | 레버리지 | 20x 고정 |
-| 마진 | balance × 80% |
-| 연패 축소 | 2:80%, 3:60%, 5:40%, 7:25% |
-| 쿨다운 | 승 30초, 패 90초, 3연패 10분, 5연패 60분 |
-| 시간당 최대 | 8건 |
-| 진입 간격 | 60초 |
-| BOT_KILL | -20% DD |
-| Shadow WR | 4시간 < 20% → 매매 정지 |
+| 마진 | balance × 80% × VPIN배수 × Hurst배수 × micro_conf |
+| **VPIN 4단계** | Low 1.0x / Med 0.5x / High 0.25x / Extreme 0x (킬스위치) |
+| **Hurst Regime** | momentum 1.0x / neutral 0.5x / dead_zone 0.25x |
+| **Micro Regime** | spread × depth × activity (floor 0.2) |
+| **Book Shock** | 깊이 30% 급감 → 진입 차단 |
+| **앙상블 불일치** | Burst + OU 방향 불일치 → 차단 |
+| **BOT_KILL** | -20% DD |
+| **시그널 반전** | 반대 시그널 → 즉시 청산 |
+
+~~쿨다운, 연패 축소, 시간당 제한, Shadow WR 게이트~~ → 제거 (VPIN/Hurst가 선행 필터)
 
 ---
 
