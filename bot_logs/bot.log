@@ -23,3 +23,4 @@
 2026-05-20 08:42:43 [WARNING] CryptoAnalyzer: 미청산: BTC/USDT:USDT LONG @ $76754.3
 2026-05-20 08:42:58 [WARNING] src.trading.position_manager: 거래소 포지션 발견 (봇 미추적): BTC/USDT:USDT long 1.000000 @ $76754.3
 2026-05-20 08:43:01 [WARNING] src.strategy.ml_engine: [ML] Phase 전환: B → B+ | 300건 라벨 도달 — 회귀 모델 전환 준비 완료
+2026-05-20 09:40:53 [WARNING] CryptoAnalyzer: 미청산: BTC/USDT:USDT LONG @ $76754.3
