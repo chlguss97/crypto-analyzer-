@@ -75,6 +75,13 @@ class ScalpDetector:
 
         # State
         self._last_signal_ts = 0
+        self._last_debug_ts = 0
+        self._gate_stats = {"total": 0, "warmup": 0, "spread": 0, "book_shock": 0,
+                           "vpin": 0, "regime": 0, "micro_conf": 0,
+                           "burst_dir": 0, "burst_vel": 0, "burst_fresh": 0,
+                           "burst_ofi": 0, "burst_burst": 0, "burst_bs": 0,
+                           "ou_z": 0, "ou_imbal": 0, "ou_spread": 0,
+                           "ensemble": 0, "passed": 0}
 
     async def evaluate(self) -> dict | None:
         """
@@ -82,6 +89,9 @@ class ScalpDetector:
         반환: {type, direction, strength, price, features} or None
         """
         # ── 1. 피처 수집 (Redis reads) ──
+        self._gate_stats["total"] += 1
+        self._log_gate_debug()
+
         features = await self._read_features()
         if features is None:
             return None
@@ -99,12 +109,14 @@ class ScalpDetector:
         # ── 3. Welford 워밍업 (100샘플 미달 시 시그널 억제) ──
         self._warmup_count += 1
         if self._warmup_count < self._warmup_threshold:
+            self._gate_stats["warmup"] += 1
             return None
 
         # ── 4. Spread filter (bps 변환 후 z-score — 프로 동일) ──
         spread = features.get("spread", 999)
         spread_bps = spread / price * 10000 if price > 0 else 999
-        if spread_bps > 3.0:  # 3 bps 이상 → 극단 스프레드, 무조건 차단
+        if spread_bps > 3.0:
+            self._gate_stats["spread"] += 1
             return None
 
         # ── 4.5. Book Shock 방어 (30% 깊이 급감) ──
@@ -119,7 +131,8 @@ class ScalpDetector:
 
         # VPIN 4단계 사이징 (Easley et al. 2012)
         if vpin >= 0.7:
-            return None  # Extreme → 거래 금지
+            self._gate_stats["vpin"] += 1
+            return None
         elif vpin >= 0.5:
             vpin_size_mult = 0.25
         elif vpin >= 0.3:
@@ -146,6 +159,7 @@ class ScalpDetector:
         # ── 6. Microstructure Regime → confidence multiplier ──
         micro_conf = self._calc_micro_confidence(features)
         if micro_conf < self.min_micro_confidence:
+            self._gate_stats["micro_conf"] += 1
             return None
 
         # ── 7. Z-Score 정규화 (프로: 모든 피처를 상대값으로) ──
@@ -253,7 +267,28 @@ class ScalpDetector:
         }
 
         self._last_signal_ts = time.time()
+        self._gate_stats["passed"] += 1
         return signal
+
+    def _log_gate_debug(self):
+        """30초마다 게이트 통계 로깅"""
+        now = time.time()
+        if now - self._last_debug_ts < 30:
+            return
+        self._last_debug_ts = now
+        s = self._gate_stats
+        if s["total"] > 0:
+            logger.info(
+                f"[GATE] {s['total']}회 | warmup:{s['warmup']} spread:{s['spread']} "
+                f"vpin:{s['vpin']} regime:{s['regime']} micro:{s['micro_conf']} | "
+                f"burst(dir:{s['burst_dir']} vel:{s['burst_vel']} ofi:{s['burst_ofi']} "
+                f"burst:{s['burst_burst']} bs:{s['burst_bs']}) | "
+                f"ou(z:{s['ou_z']} imbal:{s['ou_imbal']}) | "
+                f"ensemble:{s['ensemble']} → passed:{s['passed']}"
+            )
+        # 리셋
+        for k in self._gate_stats:
+            self._gate_stats[k] = 0
 
     def _check_burst(self, feat: dict, z_feat: dict, price: float) -> dict | None:
         """Signal A: Micro-Momentum Burst (z-score 기반 — 프로 동일)"""
@@ -269,13 +304,13 @@ class ScalpDetector:
         elif move_10s < 0 and move_30s < 0:
             direction = "short"
         else:
+            self._gate_stats["burst_dir"] += 1
             return None
 
-        # z-score 기반 속도 (절대값 아닌 상대값 — "평소 대비 얼마나 큰 움직임인가")
-        if abs(z_move_10s) < 1.5:
-            return None  # 10s 이동이 평소의 1.5σ 미만
-        if abs(z_move_30s) < 1.0:
-            return None  # 30s 이동이 평소의 1.0σ 미만
+        # z-score 기반 속도
+        if abs(z_move_10s) < 1.5 or abs(z_move_30s) < 1.0:
+            self._gate_stats["burst_vel"] += 1
+            return None
 
         # 신선도 (10s가 30s의 40%+ → 가속 중)
         abs_10s = abs(move_10s)
@@ -285,21 +320,22 @@ class ScalpDetector:
 
         # OFI z-score 방향 일치
         ofi_z = z_feat.get("ofi", 0)
-        if direction == "long" and ofi_z < self.burst_min_ofi_z:
-            return None
-        if direction == "short" and ofi_z > -self.burst_min_ofi_z:
+        if (direction == "long" and ofi_z < self.burst_min_ofi_z) or \
+           (direction == "short" and ofi_z > -self.burst_min_ofi_z):
+            self._gate_stats["burst_ofi"] += 1
             return None
 
         # 체결 급증
         if feat.get("trade_burst", 0) < self.burst_min_trade_burst:
+            self._gate_stats["burst_burst"] += 1
             return None
 
-        # BS ratio 5s z-score (프로: 상대값)
+        # BS ratio 5s z-score
         z_bs5 = z_feat.get("bs_ratio_5s", 0)
-        if direction == "long" and z_bs5 < 0.5:
-            return None  # 매수 쏠림이 평소 대비 약함
-        if direction == "short" and z_bs5 > -0.5:
-            return None  # 매도 쏠림이 평소 대비 약함
+        if (direction == "long" and z_bs5 < 0.5) or \
+           (direction == "short" and z_bs5 > -0.5):
+            self._gate_stats["burst_bs"] += 1
+            return None
 
         # 소진 필터: 60s 이동이 10s 이동의 3배 이상 → 이미 큰 움직임 후 추격
         if abs_30s > 0 and abs(move_60s) > abs_30s * 3:
@@ -326,24 +362,26 @@ class ScalpDetector:
         ou_z = feat.get("ou_zscore", 0)
 
         if abs(ou_z) < self.ou_entry_z:
+            self._gate_stats["ou_z"] += 1
             return None
 
         direction = "long" if ou_z < 0 else "short"
 
-        # Book imbalance z-score (프로: 상대값)
+        # Book imbalance z-score
         z_imbal = z_feat.get("book_imbalance", 0)
-        if direction == "long" and z_imbal < 0.3:
-            return None  # 매수 호가 우위가 평소 대비 약함
-        if direction == "short" and z_imbal > -0.3:
-            return None  # 매도 호가 우위가 평소 대비 약함
+        if (direction == "long" and z_imbal < 0.3) or \
+           (direction == "short" and z_imbal > -0.3):
+            self._gate_stats["ou_imbal"] += 1
+            return None
 
         # Delta divergence 보너스
         delta_div = feat.get("delta_div", 0)
 
-        # 스프레드 z-score (프로: bps 상대값)
+        # 스프레드 z-score
         z_spread = z_feat.get("spread_bps", 0)
         if z_spread > 2.0:
-            return None  # 스프레드가 평소 대비 2σ 이상 벌어짐
+            self._gate_stats["ou_spread"] += 1
+            return None
 
         strength = 1.0
         if abs(ou_z) > 3.0:
