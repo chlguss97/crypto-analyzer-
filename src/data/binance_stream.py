@@ -185,11 +185,11 @@ class BinanceStream:
             self._vpin_current_sell += sell_vol
             self._vpin_current_vol += qty
 
-            # 버킷 사이즈 자동 계산 (최근 100버킷 평균 거래량의 1/50)
+            # 버킷 사이즈 자동 계산
             if self._vpin_bucket_size <= 0 and len(self._vpin_vol_history) >= 5:
                 self._vpin_bucket_size = sum(self._vpin_vol_history) / len(self._vpin_vol_history)
             elif self._vpin_bucket_size <= 0:
-                self._vpin_bucket_size = 5.0  # 초기 기본값 5 BTC
+                self._vpin_bucket_size = 0.5  # 초기 기본값 0.5 BTC (5→0.5 수정)
 
             # 버킷 완성
             if self._vpin_current_vol >= self._vpin_bucket_size and self._vpin_bucket_size > 0:
