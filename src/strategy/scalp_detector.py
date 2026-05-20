@@ -195,6 +195,24 @@ class ScalpDetector:
         if signal is None:
             return None
 
+        # ── 8.5. CVD Divergence Override (강도 > 0.3) ──
+        # Bouchaud et al. (2004): 가격↑+CVD↓ = 매수 소진 → 반전
+        delta_div = features.get("delta_div", 0)
+        cvd_5m = features.get("cvd_5m", 0)
+        if delta_div != 0 and signal["type"] == "micro_burst":
+            # CVD divergence 강도 계산 (|cvd_5m| 정규화)
+            cvd_z = abs(z_features.get("cvd_5m", 0))
+            if cvd_z > 0.3:
+                # divergence가 모멘텀 방향과 반대 → 오버라이드
+                div_dir = "long" if delta_div == 1 else "short"
+                if div_dir != signal["direction"]:
+                    logger.info(
+                        f"[SCALP] CVD divergence override: {signal['direction']}→{div_dir} (z={cvd_z:.2f})"
+                    )
+                    signal["direction"] = div_dir
+                    signal["type"] = "cvd_override"
+                    signal["strength"] = min(3.0, signal["strength"])
+
         # ── 9. Build result (VPIN/Hurst 사이즈 배수 포함) ──
         combined_size_mult = round(vpin_size_mult * hurst_size_mult * micro_conf, 4)
         signal["price"] = price

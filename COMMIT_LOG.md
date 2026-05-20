@@ -1,12 +1,13 @@
 # Commit Log
 
 > 자동 생성 — `scripts/update_commit_log.sh` (매 커밋 후 실행)
-> Updated: 2026-05-20 10:54:50    
-> Total commits: 367 (2026-04-03 → 2026-05-20)
+> Updated: 2026-05-20 10:58:52    
+> Total commits: 368 (2026-04-03 → 2026-05-20)
 
 Claude 가 질문/변경 작업 시 이 파일을 참고해서 과거 변경 이력 컨텍스트를 확보합니다. 수동 편집 금지 — 다음 커밋 시 덮어써집니다.
 
 ## 2026-05-20
+- `009745da` feat: 동적 TP (k × Parkinson Vol) + 시그널 반전 청산
 - `ce5983a2` chore: 진입 간격 60초 제거 — VPIN/Hurst/BookShock이 필터
 - `0477bd62` chore: Shadow WR 게이트 제거 — VPIN/Hurst가 선행 필터로 대체
 - `e9427794` chore: 연패 사이즈 축소 제거 (소자본 불필요)

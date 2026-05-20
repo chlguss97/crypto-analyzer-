@@ -83,6 +83,7 @@ class WebSocketStream:
         # OU Z-Score (Uhlenbeck & Ornstein 1930, Elliott et al. 2005)
         self._ou_prices: deque = deque(maxlen=200)  # 5초 간격 가격
         self._ou_last_sample = 0
+        self._ou_last_z = 0.0  # 감쇠 추적용
 
         # Hurst / Parkinson — 5분봉 캐시
         self._candle_5m_cache: deque = deque(maxlen=60)
@@ -512,7 +513,16 @@ class WebSocketStream:
             z = (prices[-1] - mu) / ou_sigma if ou_sigma > 1e-10 else 0
             z = max(-5.0, min(5.0, z))
 
-            await self.redis.set("rt:micro:ou_zscore", str(round(z, 4)), ttl=30)
+            # 시그널 감쇠: 0.93 per update (프로 레퍼런스)
+            # 새 z와 이전 z의 감쇠값 중 절대값이 큰 쪽 사용
+            decayed = self._ou_last_z * 0.93
+            if abs(z) >= abs(decayed):
+                final_z = z  # 새 시그널이 더 강함
+            else:
+                final_z = decayed  # 감쇠 유지
+            self._ou_last_z = final_z
+
+            await self.redis.set("rt:micro:ou_zscore", str(round(final_z, 4)), ttl=30)
             await self.redis.set("rt:micro:ou_mu", str(round(mu, 1)), ttl=30)
         except Exception as e:
             logger.debug(f"OU Z-Score 계산 실패: {e}")
@@ -534,36 +544,48 @@ class WebSocketStream:
                 hurst = self._calc_hurst(returns)
                 await self.redis.set("rt:regime:hurst", str(round(hurst, 4)), ttl=600)
 
-            # ── Parkinson Volatility ──
-            # Parkinson (1980): σ = √[(1/(4n·ln2)) · Σ(ln(H/L))²]
+            # ── Parkinson Volatility + Realized Vol 블렌딩 (50/50) ──
             recent = candles[-20:]
+            # Parkinson: σ_P = √[(1/(4n·ln2)) · Σ(ln(H/L))²]
             sum_sq = 0.0
             for c in recent:
                 if c["high"] > 0 and c["low"] > 0 and c["high"] >= c["low"]:
                     log_hl = math.log(c["high"] / c["low"])
                     sum_sq += log_hl ** 2
             p_vol = math.sqrt(sum_sq / (4 * len(recent) * math.log(2))) if recent else 0
-            await self.redis.set("rt:micro:parkinson_vol", str(round(p_vol, 6)), ttl=600)
+
+            # Realized Vol: σ_R = std(log returns)
+            r_vol = 0.0
+            if len(closes) >= 2:
+                log_rets = [math.log(closes[i] / closes[i-1]) for i in range(1, len(closes)) if closes[i-1] > 0]
+                if log_rets:
+                    mean_r = sum(log_rets) / len(log_rets)
+                    r_vol = math.sqrt(sum((r - mean_r)**2 for r in log_rets) / len(log_rets))
+
+            # 50/50 블렌딩 (프로 레퍼런스)
+            blended_vol = p_vol * 0.5 + r_vol * 0.5
+            await self.redis.set("rt:micro:parkinson_vol", str(round(blended_vol, 6)), ttl=600)
 
         except Exception as e:
             logger.debug(f"regime features 계산 실패: {e}")
 
     @staticmethod
     def _calc_hurst(returns: list[float]) -> float:
-        """Rescaled Range (R/S) Hurst exponent 추정"""
+        """Rescaled Range (R/S) Hurst exponent — 동적 n/8, n/4, n/2, n 스케일"""
         n = len(returns)
-        if n < 10:
-            return 0.5  # 데이터 부족 → 랜덤워크 가정
+        if n < 16:
+            return 0.5
 
         import numpy as np
         ts = np.array(returns)
 
-        # 여러 윈도우 크기에서 R/S 계산
+        # 동적 스케일: n/8, n/4, n/2, n (프로 레퍼런스 동일)
         sizes = []
         rs_values = []
-        for size in [10, 15, 20, 30]:
-            if size > n:
-                break
+        for divisor in [8, 4, 2, 1]:
+            size = max(4, n // divisor)
+            if size > n or size < 4:
+                continue
             rs_list = []
             for start in range(0, n - size + 1, size):
                 chunk = ts[start:start + size]
@@ -580,7 +602,6 @@ class WebSocketStream:
         if len(sizes) < 2:
             return 0.5
 
-        # log(R/S) vs log(n) 선형 회귀 → 기울기 = H
         log_n = np.log(sizes)
         log_rs = np.log(rs_values)
         slope = np.polyfit(log_n, log_rs, 1)[0]
