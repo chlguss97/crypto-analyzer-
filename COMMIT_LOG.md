@@ -1,12 +1,15 @@
 # Commit Log
 
 > 자동 생성 — `scripts/update_commit_log.sh` (매 커밋 후 실행)
-> Updated: 2026-05-20 16:00:55    
-> Total commits: 382 (2026-04-03 → 2026-05-20)
+> Updated: 2026-05-20 17:12:06    
+> Total commits: 385 (2026-04-03 → 2026-05-20)
 
 Claude 가 질문/변경 작업 시 이 파일을 참고해서 과거 변경 이력 컨텍스트를 확보합니다. 수동 편집 금지 — 다음 커밋 시 덮어써집니다.
 
 ## 2026-05-20
+- `a2793ced` fix: config/ 디렉토리 추가 (Docker COPY 에러)
+- `169741ef` feat: ScalpEngine v4 — 100% Rust + Burn 초기 구현
+- `fc26d4fd` feat: 진입 시장가 전환 — post-only→market (즉시 체결)
 - `4f3b606d` fix: 시간정지 제거 — 프로에 없음 (SL/TP/시그널반전만)
 - `baeb1d29` fix: 청산 시 NoneType 에러 — order.fee None 처리
 - `751f8f33` feat: 실거래 전환 — Shadow 307건 WR 57%, ML Phase A
