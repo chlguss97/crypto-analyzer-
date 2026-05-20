@@ -29,3 +29,12 @@
 2026-05-20 14:10:56 [WARNING] src.strategy.ml_engine: [ML] Phase 전환: A → A | 마일스톤: 200건 라벨 도달! (총 240건)
 2026-05-20 15:00:17 [WARNING] src.strategy.ml_engine: [ML] Phase 전환: A → A | 마일스톤: 100건 라벨 도달! (총 240건)
 2026-05-20 15:00:17 [WARNING] src.strategy.ml_engine: [ML] Phase 전환: A → A | 마일스톤: 200건 라벨 도달! (총 240건)
+2026-05-20 15:30:21 [WARNING] src.strategy.ml_engine: [ML] OOS 0.232 < 0.52 → 모델 미교체 (연속 1회)
+2026-05-20 15:35:21 [WARNING] src.strategy.ml_engine: [ML] OOS 0.197 < 0.52 → 모델 미교체 (연속 2회)
+2026-05-20 15:35:21 [ERROR] src.strategy.ml_engine: [ML] OOS 2연속 미달 → Phase A 복귀
+2026-05-20 15:35:21 [WARNING] src.strategy.ml_engine: [ML] Phase 전환: A → A | OOS 19.7% 2연속 미달 → 룰 기반 복귀
+2026-05-20 15:40:40 [WARNING] src.strategy.ml_engine: [ML] Phase 전환: A → A | 마일스톤: 100건 라벨 도달! (총 353건)
+2026-05-20 15:40:40 [WARNING] src.strategy.ml_engine: [ML] Phase 전환: A → A | 마일스톤: 200건 라벨 도달! (총 353건)
+2026-05-20 15:40:42 [WARNING] src.strategy.ml_engine: [ML] OOS 0.197 < 0.52 → 모델 미교체 (연속 1회)
+2026-05-20 15:43:40 [WARNING] src.strategy.scalp_manager: 레버리지 설정 실패: OrderExecutor.set_leverage() missing 1 required positional argument: 'direction'
+2026-05-20 15:44:40 [WARNING] src.strategy.scalp_manager: 레버리지 설정 실패: OrderExecutor.set_leverage() missing 1 required positional argument: 'direction'
