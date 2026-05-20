@@ -50,3 +50,7 @@
 2026-05-20 15:55:42 [WARNING] src.strategy.ml_engine: [ML] Phase 전환: B → B+ | 300건 라벨 도달 — 회귀 모델 전환 준비 완료
 2026-05-20 15:56:07 [ERROR] src.strategy.scalp_manager: 청산 실패: 'NoneType' object has no attribute 'get'
 2026-05-20 15:59:57 [WARNING] src.strategy.ml_engine: [ML] Phase 전환: B → B+ | 300건 라벨 도달 — 회귀 모델 전환 준비 완료
+2026-05-20 16:02:01 [WARNING] src.strategy.ml_engine: [ML] Phase 전환: B → B+ | 300건 라벨 도달 — 회귀 모델 전환 준비 완료
+2026-05-20 16:12:17 [WARNING] src.strategy.scalp_manager: 레버리지 설정 실패: OrderExecutor.set_leverage() missing 1 required positional argument: 'direction'
+2026-05-20 16:12:17 [ERROR] src.trading.executor: 미체결 처리 에러: okx {"code":"1","data":[{"clOrdId":"","ordId":"3582228797410762752","sCode":"51400","sMsg":"Order cancellation failed as the order has been filled, canceled or does not exist.","ts":"1779261137728"}],"inTime":"1779261137727993","msg":"All operations failed","outTime":"1779261137729077"}
+2026-05-20 16:12:19 [WARNING] src.strategy.scalp_manager: 레버리지 설정 실패: OrderExecutor.set_leverage() missing 1 required positional argument: 'direction'
