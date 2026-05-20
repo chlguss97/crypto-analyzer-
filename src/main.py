@@ -93,14 +93,8 @@ class ScalpEngine:
         self._trades_this_hour = 0
         self._hour_reset_ts = 0
 
-        # 쿨다운
-        self._cooldown_until = 0
-
         # 리스크 설정
-        self.max_trades_per_hour = scalp_cfg.get("max_trades_per_hour", 8)
         self.min_entry_interval = self.config.get("risk", {}).get("min_entry_interval_sec", 60)
-        self.cooldown_after_win = self.config.get("cooldown", {}).get("after_win_sec", 30)
-        self.cooldown_after_loss = self.config.get("cooldown", {}).get("after_loss_sec", 90)
 
         # Shadow phase
         self.shadow_mode = scalp_cfg.get("shadow_mode", True)  # 초기: Shadow only
@@ -178,20 +172,8 @@ class ScalpEngine:
         if not allowed:
             return
 
-        # 쿨다운
-        if now < self._cooldown_until:
-            return
-
         # 진입 간격
         if now - self._last_trade_time < self.min_entry_interval:
-            return
-
-        # 시간당 최대 거래
-        current_hour = int(now) // 3600
-        if current_hour != self._hour_reset_ts:
-            self._hour_reset_ts = current_hour
-            self._trades_this_hour = 0
-        if self._trades_this_hour >= self.max_trades_per_hour:
             return
 
         # ── Redis 상태 갱신 (텔레그램/대시보드용, 30초마다) ──
@@ -406,13 +388,9 @@ class ScalpEngine:
                 label = 1 if pnl_pct > 0 else 0
                 self.ml_engine.record_decision_result(True, label)
 
-                # 쿨다운 설정
-                cd = self.cooldown_after_loss if pnl_pct < 0 else self.cooldown_after_win
-                self._cooldown_until = _time.time() + cd
-
                 logger.info(
                     f"[SCALP] 후처리: PnL {pnl_pct:+.1f}% ${pnl_usdt:+.2f} | "
-                    f"연패:{self.risk_manager.get_streak()} | 쿨다운:{cd}초"
+                    f"연패:{self.risk_manager.get_streak()}"
                 )
         except Exception as e:
             logger.error(f"청산 후처리 실패: {e}")

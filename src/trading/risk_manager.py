@@ -179,16 +179,6 @@ class RiskManager:
             self._state["streak"] += 1
             logger.warning(f"손실 기록: {pnl_pct:+.2f}% | 연패: {self._state['streak']}")
 
-            # 쿨다운 설정
-            now = int(time.time())
-            if self._state["streak"] >= 5:
-                cooldown_sec = self.cooldown_cfg["streak_5_min"] * 60
-                self._state["cooldown_until"] = now + cooldown_sec
-                logger.warning(f"5연패 → {self.cooldown_cfg['streak_5_min']}분 쿨다운")
-            elif self._state["streak"] >= 3:
-                cooldown_sec = self.cooldown_cfg["streak_3_min"] * 60
-                self._state["cooldown_until"] = now + cooldown_sec
-                logger.warning(f"3연패 → {self.cooldown_cfg['streak_3_min']}분 쿨다운")
         else:
             self._state["streak"] = 0
             logger.info(f"수익 기록: {pnl_pct:+.2f}% | 연패 리셋")

@@ -24,7 +24,7 @@ scalp:
   time_stop_loss_margin_pct: 1.5    # 시간정지 시 손실 한도
   sl_k_vol: 2.0                     # 동적 SL: k × Parkinson Vol
   ou_entry_z: 2.0                   # OU Z-Score 진입 임계값 (±2σ)
-  max_trades_per_hour: 8
+  # max_trades_per_hour: 제한 없음 (소자본)
   # Regime Gate
   hurst_momentum: 0.6              # H > 0.6 → 모멘텀 스캘핑
   hurst_mean_revert: 0.4           # H < 0.4 → 평균회귀 스캘핑
@@ -59,10 +59,10 @@ risk:
     7: 0.25
 
 cooldown:
-  after_loss_sec: 90
-  after_win_sec: 30
-  streak_3_min: 10
-  streak_5_min: 60
+  after_loss_sec: 0
+  after_win_sec: 0
+  streak_3_min: 0
+  streak_5_min: 0
 
 polling:
   shadow_check_sec: 5

@@ -1,12 +1,14 @@
 # Commit Log
 
 > 자동 생성 — `scripts/update_commit_log.sh` (매 커밋 후 실행)
-> Updated: 2026-05-20 09:59:26    
-> Total commits: 361 (2026-04-03 → 2026-05-20)
+> Updated: 2026-05-20 10:38:00    
+> Total commits: 363 (2026-04-03 → 2026-05-20)
 
 Claude 가 질문/변경 작업 시 이 파일을 참고해서 과거 변경 이력 컨텍스트를 확보합니다. 수동 편집 금지 — 다음 커밋 시 덮어써집니다.
 
 ## 2026-05-20
+- `6ac96e76` fix: 전수검사 — Redis 키 불일치 수정 (sys:regime/trade_state/lab:stats)
+- `8826e832` feat: 프로 레퍼런스 완전 구현 — VPIN/OU/앙상블/동적SL/BookResilience
 - `b8adef16` fix: Hurst 미계산 시 Regime Gate 우회 + 디버그 로그 추가
 - `10a51d9d` docs: 명세서 v3 업데이트 — SPEC/CLAUDE/CHANGELOG/MANUAL/AUDIT
 - `e33f6423` fix: 전수검사 — dashboard/telegram/logger/position_manager 클린업
