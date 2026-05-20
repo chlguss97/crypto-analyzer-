@@ -121,7 +121,7 @@ class TelegramNotifier:
             autotrading = "ON" if self.redis and (await self.redis.get("sys:autotrading")) == "on" else "OFF"
             regime = (await self.redis.get("sys:regime")) if self.redis else "?"
             balance = (await self.redis.get("sys:balance")) if self.redis else "?"
-            positions = len(self.scalp_manager.has_position()) if self.scalp_manager else 0
+            positions = 1 if (self.scalp_manager and self.scalp_manager.has_position()) else 0
 
             # ML 상태
             ml_phase = "?"
@@ -205,7 +205,7 @@ class TelegramNotifier:
             except Exception:
                 pass
 
-        await self._send(f"\U0001f9f9 <b>/clear 완료 ({count}건)</b>\nOKX 직접 확인 권장")
+        await self._send(f"\U0001f9f9 <b>/clear 완료</b>\nOKX 직접 확인 권장")
 
     async def _cmd_market(self):
         try:
@@ -317,7 +317,7 @@ class TelegramNotifier:
     async def _cmd_risk(self):
         try:
             balance = await self.executor.get_balance() if self.executor else 0
-            positions = len(self.scalp_manager.has_position()) if self.scalp_manager else 0
+            positions = 1 if (self.scalp_manager and self.scalp_manager.has_position()) else 0
 
             # risk_manager에서 상태
             streak = 0
