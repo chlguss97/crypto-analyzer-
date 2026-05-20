@@ -27,3 +27,5 @@
 2026-05-20 11:29:28 [WARNING] ScalpEngine: 고아 알고 2개 정리
 2026-05-20 14:05:56 [WARNING] src.strategy.ml_engine: [ML] Phase 전환: A → A | 마일스톤: 100건 라벨 도달! (총 178건)
 2026-05-20 14:10:56 [WARNING] src.strategy.ml_engine: [ML] Phase 전환: A → A | 마일스톤: 200건 라벨 도달! (총 240건)
+2026-05-20 15:00:17 [WARNING] src.strategy.ml_engine: [ML] Phase 전환: A → A | 마일스톤: 100건 라벨 도달! (총 240건)
+2026-05-20 15:00:17 [WARNING] src.strategy.ml_engine: [ML] Phase 전환: A → A | 마일스톤: 200건 라벨 도달! (총 240건)
