@@ -56,6 +56,14 @@ PARTIAL 4건 해소 + 추가 기능:
 - 청산: **시그널 반전 즉시 청산** 추가
 - 제거: 쿨다운/연패축소/시간당제한/진입간격/Shadow WR 게이트
 
+### 임계값 z-score 전환 + VPIN 수정 + Shadow 수집
+
+- Burst 임계값: 절대 달러($46) → **z-score 1.5σ** (시장 자동 적응)
+- 모든 임계값: 절대값 0건 (spread→bps z-score, bs_ratio→z, imbal→z, absorption→z)
+- VPIN: 볼륨 기반→**건수 기반 200건/버킷** (0.9+ 오탐 해결)
+- 봇 시작 시 **5분봉 캐시 DB 초기화** (Hurst 100분 대기 → 즉시)
+- Shadow 결과: **240건/102건 라벨, WR 84.3%** (ou_reversion 92%)
+
 ---
 
 ## 2026-05-07

@@ -97,16 +97,18 @@ Redis에서만 읽음. DB/캔들 접근 없음. 500ms 폴링.
 
 ### 3.1 Signal A: Micro-Momentum Burst (Hurst > 0.6)
 
+모든 임계값 z-score 기반 (절대 달러 0건 — 프로 동일)
+
 | 조건 | 피처 | 임계값 |
 |------|------|--------|
-| 가격 가속 | move_10s | ≥ price × 0.06% |
-| 지속 이동 | move_30s | 같은 방향, ≥ price × 0.10% |
-| 신선도 | move_10s/move_30s | ≥ 0.4 |
-| 호가 지지 | ofi_zscore | ≥ ±1.0 |
-| 체결 급증 | trade_burst | ≥ 1.8 |
-| 플로우 | bs_ratio_5s | ≥ 0.60 / ≤ 0.40 |
-| 유동성 | spread | ≤ $2.0 |
-| 소진 필터 | move_60s | < price × 0.15% |
+| 가격 가속 | z(move_10s) | ≥ 1.5σ |
+| 지속 이동 | z(move_30s) | ≥ 1.0σ, 같은 방향 |
+| 신선도 | move_10s/move_30s | ≥ 0.4 (비율) |
+| 호가 지지 | z(ofi) | ≥ ±1.0σ |
+| 체결 급증 | trade_burst | ≥ 1.8 (60초 평균 대비) |
+| 플로우 | z(bs_ratio_5s) | ≥ ±0.5σ |
+| 유동성 | spread_bps | ≤ 3 bps |
+| 소진 필터 | move_60s/move_30s | < 3x (비율) |
 
 ### 3.2 Signal B: OU Z-Score Reversion (Hurst < 0.4)
 

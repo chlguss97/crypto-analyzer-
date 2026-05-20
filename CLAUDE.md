@@ -27,9 +27,11 @@
 
 ## 현재 상태 (2026-05-20)
 - **Shadow 모드** (실거래 없음, 데이터 수집 중)
-- 마이크로스트럭처 15종 + OFI 활성
-- Hurst/Parkinson: 5분봉 20개 축적 후 자동 계산
-- ML Phase A (labeled 0건, 300건 도달 시 Phase B)
+- 마이크로스트럭처 15종 + OFI + VPIN + OU Z-Score + Book Resilience 활성
+- Hurst/Parkinson: 봇 시작 시 DB 백필로 즉시 계산
+- 임계값: 전부 z-score/상대값 (절대 달러 임계값 0건)
+- Shadow: **240건 시그널, 102건 라벨 (WR 84.3%)** — ou_reversion 92%, burst 18%
+- ML Phase A (labeled 102건, 300건 도달 시 Phase B)
 - 잔고: ~$227
 - 서버: Vultr Singapore, Docker Compose
 
