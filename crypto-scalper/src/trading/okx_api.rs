@@ -180,7 +180,10 @@ impl OkxApi {
                 let contracts: f64 = data["fillSz"].as_str().unwrap_or("0").parse().unwrap_or(0.0);
                 contracts * CONTRACT_SIZE
             },
-            fee: data["fee"].as_str().unwrap_or("0").parse::<f64>().unwrap_or(0.0).abs(),
+            fee: {
+                let f: f64 = data["fee"].as_str().unwrap_or("0").parse().unwrap_or(0.0);
+                f.abs()
+            },
             success: data["state"].as_str() == Some("filled"),
         })
     }
@@ -200,7 +203,7 @@ impl OkxApi {
         let resp = self.request("GET", &path, None).await?;
         if let Some(arr) = resp["data"].as_array() {
             for pos in arr {
-                let contracts: f64 = pos["pos"].as_str().unwrap_or("0").parse().unwrap_or(0.0).abs();
+                let contracts: f64 = pos["pos"].as_str().unwrap_or("0").parse::<f64>().unwrap_or(0.0).abs();
                 if contracts > 0.0 {
                     return Ok(contracts * CONTRACT_SIZE);
                 }
