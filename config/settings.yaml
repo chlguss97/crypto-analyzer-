@@ -52,11 +52,7 @@ risk:
   max_positions: 1
   bot_kill_drawdown: 0.20
   min_entry_interval_sec: 60
-  streak_sizing:
-    2: 0.80
-    3: 0.60
-    5: 0.40
-    7: 0.25
+  # streak_sizing: 제거 (소자본)
 
 cooldown:
   after_loss_sec: 0

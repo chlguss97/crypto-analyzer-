@@ -304,16 +304,7 @@ class ScalpEngine:
         if balance <= 0:
             return
 
-        # 연패 사이즈 축소
-        streak = self.risk_manager.get_streak()
-        streak_sizing = self.config.get("risk", {}).get("streak_sizing", {})
-        streak_mult = 1.0
-        for threshold, mult in sorted(streak_sizing.items(), key=lambda x: int(x[0]), reverse=True):
-            if streak >= int(threshold):
-                streak_mult = mult
-                break
-
-        pos = await self.scalp_manager.open_scalp(signal, balance, streak_mult)
+        pos = await self.scalp_manager.open_scalp(signal, balance)
         if pos:
             self._last_trade_time = now
             self._trades_this_hour += 1
