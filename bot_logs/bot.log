@@ -38,3 +38,15 @@
 2026-05-20 15:40:42 [WARNING] src.strategy.ml_engine: [ML] OOS 0.197 < 0.52 → 모델 미교체 (연속 1회)
 2026-05-20 15:43:40 [WARNING] src.strategy.scalp_manager: 레버리지 설정 실패: OrderExecutor.set_leverage() missing 1 required positional argument: 'direction'
 2026-05-20 15:44:40 [WARNING] src.strategy.scalp_manager: 레버리지 설정 실패: OrderExecutor.set_leverage() missing 1 required positional argument: 'direction'
+2026-05-20 15:45:42 [WARNING] src.strategy.ml_engine: [ML] OOS 0.264 < 0.52 → 모델 미교체 (연속 2회)
+2026-05-20 15:45:42 [ERROR] src.strategy.ml_engine: [ML] OOS 2연속 미달 → Phase A 복귀
+2026-05-20 15:45:42 [WARNING] src.strategy.ml_engine: [ML] Phase 전환: A → A | OOS 26.4% 2연속 미달 → 룰 기반 복귀
+2026-05-20 15:48:19 [WARNING] src.trading.executor: post-only 청산 실패 → 다음 사이클 재시도 (time_profit)
+2026-05-20 15:49:10 [WARNING] src.strategy.scalp_manager: 레버리지 설정 실패: OrderExecutor.set_leverage() missing 1 required positional argument: 'direction'
+2026-05-20 15:49:11 [ERROR] src.trading.executor: 미체결 처리 에러: okx {"code":"1","data":[{"clOrdId":"","ordId":"3582182265332424704","sCode":"51400","sMsg":"Order cancellation failed as the order has been filled, canceled or does not exist.","ts":"1779259750966"}],"inTime":"1779259750966003","msg":"All operations failed","outTime":"1779259750966701"}
+2026-05-20 15:50:34 [WARNING] src.strategy.scalp_manager: 레버리지 설정 실패: OrderExecutor.set_leverage() missing 1 required positional argument: 'direction'
+2026-05-20 15:50:42 [WARNING] src.strategy.ml_engine: [ML] Phase 전환: A → B | OOS 58.3% | 20피처 | Top: z_book_imbalance
+2026-05-20 15:53:54 [WARNING] src.strategy.scalp_manager: 레버리지 설정 실패: OrderExecutor.set_leverage() missing 1 required positional argument: 'direction'
+2026-05-20 15:55:42 [WARNING] src.strategy.ml_engine: [ML] Phase 전환: B → B+ | 300건 라벨 도달 — 회귀 모델 전환 준비 완료
+2026-05-20 15:56:07 [ERROR] src.strategy.scalp_manager: 청산 실패: 'NoneType' object has no attribute 'get'
+2026-05-20 15:59:57 [WARNING] src.strategy.ml_engine: [ML] Phase 전환: B → B+ | 300건 라벨 도달 — 회귀 모델 전환 준비 완료
