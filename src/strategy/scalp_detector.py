@@ -147,7 +147,7 @@ class ScalpDetector:
         if micro_conf < self.min_micro_confidence:
             return None
 
-        # ── 7. Z-Score 정규화 ──
+        # ── 7. Z-Score 정규화 (프로: 모든 피처를 상대값으로) ──
         raw_features = {
             "ofi": features.get("ofi", 0),
             "book_imbalance": features.get("book_imbalance", 0),
@@ -157,6 +157,8 @@ class ScalpDetector:
             "momentum_quality": features.get("momentum_quality", 0),
             "delta_accel": features.get("delta_accel", 0),
             "cvd_5m": features.get("cvd_5m", 0),
+            "move_10s": features.get("move_10s", 0),
+            "move_30s": features.get("move_30s", 0),
         }
         z_features = self._normalizer.update_all(raw_features)
 
@@ -250,10 +252,12 @@ class ScalpDetector:
         return signal
 
     def _check_burst(self, feat: dict, z_feat: dict, price: float) -> dict | None:
-        """Signal A: Micro-Momentum Burst"""
+        """Signal A: Micro-Momentum Burst (z-score 기반 — 프로 동일)"""
         move_10s = feat.get("move_10s", 0)
         move_30s = feat.get("move_30s", 0)
         move_60s = feat.get("move_60s", 0)
+        z_move_10s = z_feat.get("move_10s", 0)
+        z_move_30s = z_feat.get("move_30s", 0)
 
         # 방향 결정 (10s + 30s 동일 방향)
         if move_10s > 0 and move_30s > 0:
@@ -263,16 +267,15 @@ class ScalpDetector:
         else:
             return None
 
-        abs_10s = abs(move_10s)
-        abs_30s = abs(move_30s)
-
-        # 최소 속도
-        if abs_10s < price * self.burst_min_move_10s_pct / 100:
-            return None
-        if abs_30s < price * self.burst_min_move_30s_pct / 100:
-            return None
+        # z-score 기반 속도 (절대값 아닌 상대값 — "평소 대비 얼마나 큰 움직임인가")
+        if abs(z_move_10s) < 1.5:
+            return None  # 10s 이동이 평소의 1.5σ 미만
+        if abs(z_move_30s) < 1.0:
+            return None  # 30s 이동이 평소의 1.0σ 미만
 
         # 신선도 (10s가 30s의 40%+ → 가속 중)
+        abs_10s = abs(move_10s)
+        abs_30s = abs(move_30s)
         if abs_30s > 0 and abs_10s / abs_30s < self.burst_freshness:
             return None
 
@@ -294,8 +297,8 @@ class ScalpDetector:
         if direction == "short" and bs_5s > (1 - self.burst_min_bs_5s):
             return None
 
-        # 소진 필터 (60s 이미 0.15%+ → 추격 방지)
-        if abs(move_60s) > price * self.burst_max_exhaustion_pct / 100:
+        # 소진 필터: 60s 이동이 10s 이동의 3배 이상 → 이미 큰 움직임 후 추격
+        if abs_30s > 0 and abs(move_60s) > abs_30s * 3:
             return None
 
         # Strength scoring
