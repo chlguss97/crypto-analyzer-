@@ -129,13 +129,13 @@ class ScalpDetector:
         vpin = features.get("vpin", 0.3)
         hurst_available = features.get("hurst_available", False)
 
-        # VPIN 4단계 사이징 (Easley et al. 2012)
-        if vpin >= 0.7:
+        # VPIN 4단계 사이징 (BTC 보정: 0.85 extreme)
+        if vpin >= self.vpin_extreme:
             self._gate_stats["vpin"] += 1
             return None
-        elif vpin >= 0.5:
+        elif vpin >= 0.6:
             vpin_size_mult = 0.25
-        elif vpin >= 0.3:
+        elif vpin >= 0.4:
             vpin_size_mult = 0.5
         else:
             vpin_size_mult = 1.0

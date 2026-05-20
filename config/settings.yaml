@@ -29,7 +29,7 @@ scalp:
   # Regime Gate
   hurst_momentum: 0.6              # H > 0.6 → 모멘텀 스캘핑
   hurst_mean_revert: 0.4           # H < 0.4 → 평균회귀 스캘핑
-  vpin_extreme: 0.7                # VPIN > 0.7 → 거래 금지
+  vpin_extreme: 0.85               # VPIN > 0.85 → 거래 금지 (0.7은 BTC에서 너무 타이트)
   # Burst signal
   burst_min_move_10s_pct: 0.06
   burst_min_move_30s_pct: 0.10
