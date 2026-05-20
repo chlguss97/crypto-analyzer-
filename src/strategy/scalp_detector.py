@@ -91,18 +91,23 @@ class ScalpDetector:
         # ── 4. Regime Gate ──
         hurst = features.get("hurst", 0.5)
         vpin = features.get("vpin", 0.3)
+        hurst_available = features.get("hurst_available", False)
 
         if vpin >= self.vpin_extreme:
             return None  # 극단 독성 → 거래 금지
 
-        regime = "random_walk"
-        if hurst > self.hurst_momentum:
-            regime = "momentum"
-        elif hurst < self.hurst_mean_revert:
-            regime = "mean_revert"
+        if hurst_available:
+            regime = "random_walk"
+            if hurst > self.hurst_momentum:
+                regime = "momentum"
+            elif hurst < self.hurst_mean_revert:
+                regime = "mean_revert"
 
-        if regime == "random_walk":
-            return None  # 랜덤워크 → 거래 금지
+            if regime == "random_walk":
+                return None  # 랜덤워크 → 거래 금지
+        else:
+            # Hurst 미계산 (5분봉 부족) → 양쪽 시그널 다 허용
+            regime = "both"
 
         # ── 5. Microstructure Regime → confidence multiplier ──
         micro_conf = self._calc_micro_confidence(features)
@@ -124,9 +129,9 @@ class ScalpDetector:
 
         # ── 7. Signal Check ──
         signal = None
-        if regime == "momentum":
+        if regime in ("momentum", "both"):
             signal = self._check_burst(features, z_features, price)
-        elif regime == "mean_revert":
+        if signal is None and regime in ("mean_revert", "both"):
             signal = self._check_vwap_snap(features, z_features, price)
 
         if signal is None:
@@ -373,6 +378,7 @@ class ScalpDetector:
                 "delta_div": int(div_str) if div_str else 0,
                 "price_impact": float(impact_str) if impact_str else 0,
                 "hurst": float(hurst_str) if hurst_str else 0.5,
+                "hurst_available": hurst_str is not None,
                 "vpin": float(vpin_str) if vpin_str else 0.3,
                 "parkinson_vol": float(pvol_str) if pvol_str else 0,
                 "funding_rate": float(funding_str) if funding_str else 0,

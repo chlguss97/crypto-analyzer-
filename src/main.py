@@ -197,6 +197,21 @@ class ScalpEngine:
         # ── 시그널 감지 ──
         signal = await self.scalp_detector.evaluate()
         if not signal:
+            # 60초마다 상태 로그
+            if now - getattr(self, "_last_eval_debug", 0) >= 60:
+                self._last_eval_debug = now
+                try:
+                    burst = await self.redis.get("rt:micro:trade_burst")
+                    hurst = await self.redis.get("rt:regime:hurst")
+                    vel = await self.redis.hgetall("rt:velocity:BTC-USDT-SWAP")
+                    move10 = vel.get("move_10s", "0")
+                    price = await self.redis.get("rt:price:BTC-USDT-SWAP")
+                    logger.info(
+                        f"[EVAL] 시그널 없음 | price=${price} move10s=${move10} "
+                        f"burst={burst} hurst={hurst or 'N/A'}"
+                    )
+                except Exception:
+                    pass
             return
 
         direction = signal["direction"]
