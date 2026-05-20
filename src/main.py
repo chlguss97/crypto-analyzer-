@@ -275,28 +275,7 @@ class ScalpEngine:
         if self.shadow_mode:
             return
 
-        # ── Shadow WR 게이트 ──
-        if now - getattr(self, "_last_shadow_wr_check", 0) >= 300:
-            self._last_shadow_wr_check = now
-            try:
-                wr, cnt = await self.db.get_recent_shadow_wr(hours=4)
-                self._cached_shadow_wr = wr
-                self._cached_shadow_cnt = cnt
-            except Exception:
-                pass
-
-        shadow_wr = getattr(self, "_cached_shadow_wr", 50.0)
-        shadow_cnt = getattr(self, "_cached_shadow_cnt", 0)
-        if shadow_cnt >= 30 and shadow_wr < 20:
-            logger.info(f"[GATE] Shadow WR {shadow_wr:.1f}% < 20% → 매매 정지")
-            _append_jsonl({
-                "type": "gate_block", "reason": "shadow_wr_low",
-                "detail": f"WR={shadow_wr:.1f}% cnt={shadow_cnt}",
-                "direction": direction, "signal_type": sig_type,
-            })
-            return
-
-        # ── 실거래 실행 ──
+        # ── 실거래 실행 (VPIN/Hurst Regime Gate가 선행 필터) ──
         if not autotrading:
             return
 

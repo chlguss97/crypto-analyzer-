@@ -1,12 +1,13 @@
 # Commit Log
 
 > 자동 생성 — `scripts/update_commit_log.sh` (매 커밋 후 실행)
-> Updated: 2026-05-20 10:48:34    
-> Total commits: 364 (2026-04-03 → 2026-05-20)
+> Updated: 2026-05-20 10:49:35    
+> Total commits: 365 (2026-04-03 → 2026-05-20)
 
 Claude 가 질문/변경 작업 시 이 파일을 참고해서 과거 변경 이력 컨텍스트를 확보합니다. 수동 편집 금지 — 다음 커밋 시 덮어써집니다.
 
 ## 2026-05-20
+- `e9427794` chore: 연패 사이즈 축소 제거 (소자본 불필요)
 - `cc7a4aac` chore: 쿨다운 + 시간당 제한 제거 (소자본 불필요)
 - `6ac96e76` fix: 전수검사 — Redis 키 불일치 수정 (sys:regime/trade_state/lab:stats)
 - `8826e832` feat: 프로 레퍼런스 완전 구현 — VPIN/OU/앙상블/동적SL/BookResilience
