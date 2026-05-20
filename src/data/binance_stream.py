@@ -64,12 +64,12 @@ class BinanceStream:
         self._last_flush = 0
 
         # VPIN (Easley, López de Prado, & O'Hara 2012)
-        self._vpin_bucket_size = 0.0  # 자동 계산 (최근 거래량 기반)
+        # 거래 건수 기반 버킷 (볼륨 기반은 소규모에서 bias 발생)
+        self._vpin_bucket_trades = 200  # 200건마다 1버킷
         self._vpin_buckets: deque = deque(maxlen=50)
         self._vpin_current_buy = 0.0
         self._vpin_current_sell = 0.0
-        self._vpin_current_vol = 0.0
-        self._vpin_vol_history: deque = deque(maxlen=100)  # 버킷 사이즈 자동 보정용
+        self._vpin_current_count = 0
 
     async def start(self):
         self._running = True
@@ -179,30 +179,21 @@ class BinanceStream:
                 })
 
             # VPIN 계산 (Lee-Ready: m=true → taker sell, m=false → taker buy)
+            # 거래 건수 기반 버킷 — 200건마다 buy/sell 비율 측정
             buy_vol = qty if not is_buyer_maker else 0
             sell_vol = qty if is_buyer_maker else 0
             self._vpin_current_buy += buy_vol
             self._vpin_current_sell += sell_vol
-            self._vpin_current_vol += qty
+            self._vpin_current_count += 1
 
-            # 버킷 사이즈 자동 계산
-            if self._vpin_bucket_size <= 0 and len(self._vpin_vol_history) >= 5:
-                self._vpin_bucket_size = sum(self._vpin_vol_history) / len(self._vpin_vol_history)
-            elif self._vpin_bucket_size <= 0:
-                self._vpin_bucket_size = 0.5  # 초기 기본값 0.5 BTC (5→0.5 수정)
-
-            # 버킷 완성
-            if self._vpin_current_vol >= self._vpin_bucket_size and self._vpin_bucket_size > 0:
-                imbal = abs(self._vpin_current_buy - self._vpin_current_sell)
-                vol = self._vpin_current_vol
-                self._vpin_buckets.append(imbal / vol if vol > 0 else 0)
-                self._vpin_vol_history.append(vol)
-                # 버킷 사이즈 갱신 (50버킷마다)
-                if len(self._vpin_vol_history) >= 10:
-                    self._vpin_bucket_size = sum(self._vpin_vol_history) / len(self._vpin_vol_history)
+            if self._vpin_current_count >= self._vpin_bucket_trades:
+                total_vol = self._vpin_current_buy + self._vpin_current_sell
+                if total_vol > 0:
+                    imbal = abs(self._vpin_current_buy - self._vpin_current_sell) / total_vol
+                    self._vpin_buckets.append(imbal)
                 self._vpin_current_buy = 0.0
                 self._vpin_current_sell = 0.0
-                self._vpin_current_vol = 0.0
+                self._vpin_current_count = 0
 
             # Redis flush (100 trades마다 또는 whale 시)
             self._ws_trade_count += 1
