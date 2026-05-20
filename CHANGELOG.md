@@ -5,6 +5,48 @@
 
 ---
 
+## 2026-05-20 — ScalpEngine v3 전면 재설계
+
+### 전략 교체: 모멘텀 → 마이크로스트럭처 스캘핑
+
+v2 모멘텀 전략 폐기. 4계층 파이프라인 아키텍처로 전면 재구축.
+
+**핵심 변경:**
+- 5분봉 캔들 기반 → **실시간 마이크로스트럭처** (500ms Redis 폴링)
+- CandidateDetector 3종 → **ScalpDetector** (Burst + VWAP Snap)
+- PositionManager 러너/TP2/TP3 → **ScalpManager** (TP 0.20% / SL 0.15% / 시간정지)
+- ML 피처 8종 (캔들) → **20종** (OFI, Hurst, VPIN, Welford Z-Score 등)
+- Regime Gate 신설: Hurst 지수로 추세/횡보/랜덤 자동 분류
+
+**신규 파일:**
+- `src/strategy/scalp_detector.py` — 실시간 시그널 감지
+- `src/strategy/scalp_manager.py` — 스캘핑 포지션 관리
+- `src/strategy/welford.py` — Welford 온라인 z-score
+
+**삭제:**
+- CandidateDetector, PaperLab, SimTrader, SignalTracker, SetupTracker
+- engine/ 전체 (BaseIndicator, RegimeDetector, ATR/BB/EMA/RSI)
+- PositionManager, LeverageCalculator
+- candles.db, 레거시 JSONL 데이터
+
+**DB:** `candles.db` → `scalp.db` (candles + scalp_signals + scalp_trades)
+
+**피처 엔진 강화:**
+- OFI 멀티레벨 (Cont et al. 2014) — books5 ΔBid-ΔAsk
+- Hurst R/S 분석 — 추세/횡보/랜덤 분류
+- Parkinson Volatility — SL 동적 배치
+- 마이크로스트럭처 15종 활성화 (2초 갱신)
+
+**전수검사 + 클린업:**
+- dashboard.py SQL 10곳 테이블명 수정
+- telegram_bot.py position_manager→scalp_manager 전환
+- trade_logger.py 스캘핑용 간소화
+- SPEC/CLAUDE.md/MANUAL 업데이트
+
+**배포:** Shadow 모드 (실거래 없음). 300건 Shadow 수집 → ML 학습 → 실거래 전환.
+
+---
+
 ## 2026-05-07
 
 ### Binance CVD + 1분 고속 감지 + 마이크로 비활성

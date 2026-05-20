@@ -1,4 +1,4 @@
-# OKX CryptoAnalyzer 운영 매뉴얼
+# ScalpEngine v3 운영 매뉴얼
 
 ## 목차
 1. [클라우드 서버 운영 (실전)](#1-클라우드-서버-운영)

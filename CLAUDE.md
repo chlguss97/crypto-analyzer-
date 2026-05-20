@@ -1,33 +1,33 @@
-# OKX CryptoAnalyzer v2.0
+# ScalpEngine v3
 
 ## 프로젝트 개요
 - BTC 무기한 선물(OKX) 자동매매 시스템
-- **모멘텀 스캘핑**: CandidateDetector 3종(Momentum/Breakout/Cascade) + ML Meta-Label Go/NoGo
-- 설계서: `SPEC_V2.md` (2026-04-28 전면 재설계)
+- **마이크로스트럭처 스캘핑**: 4계층 파이프라인 (Raw → Feature → Regime → ML)
+- 설계서: `SPEC_V2.md` (2026-05-20 v3 전면 재설계)
 - 변경 인덱스: `COMMIT_LOG.md` (자동 갱신, 매 커밋 후)
 - 사람용 변경 큐레이션: `CHANGELOG.md`
 - 운영 매뉴얼: `MANUAL.md`
 
-## 핵심 설계 결정 (SPEC v2, 2026-05-07 현행)
-- **3경로**: Shadow(시장관찰) + PaperLab(A/B실험) + 실거래(검증)
-- 시그널: 3종 후보(Momentum/Breakout/Cascade) → ML Go/NoGo → 확신도 점수
-- **확신도 사이즈**: 0~5점 → 0%~100% (이진 차단 대신 비율 사이즈)
-- **AdaptiveParams**: TP/SL/방향 자동 보정 (10건+ 활성, 매 거래 갱신)
-- **SL/TP**: SL 마진 -5% (보정 가능) / TP1 ATR기반 (보정 가능, RR≥1.3)
-- **주문**: Maker 강제 (post-only), strength≥1.5만 taker, 실패→포기
-- **보호 주문**: SL market-on-trigger + TP limit-on-trigger + sl_failsafe
+## 핵심 설계 결정 (v3, 2026-05-20)
+- **4계층**: Raw Data → Feature Engine → Regime Gate → ML Scorer → Execute
+- **Regime Gate**: Hurst(추세/횡보/랜덤) + VPIN(독성) → 자동 거래허용 판단
+- **시그널 2종**: Micro-Momentum Burst (추세장) / VWAP Snap (횡보장)
+- **TP/SL**: TP +0.20% (maker) / SL -0.15% (market) / 시간정지 3~5분
+- **ML**: 20종 마이크로스트럭처 피처 → XGBoost (Phase A 규칙 → B ML)
+- **주문**: post-only maker 강제, 실패→포기 (market 전환 없음)
+- **보호**: SL market-on-trigger + 5초 self-heal + 3회 소실 강제청산
 
 ## 기술스택
 - Python 3.11 / ccxt / scikit-learn / FastAPI
-- DB: SQLite(캔들) + Redis(실시간)
+- DB: SQLite(scalp.db: candles + scalp_signals + scalp_trades) + Redis(실시간)
 - 알림: Telegram
 
-## 현재 상태 (2026-05-07)
-- 실거래 운영 중 (잔고 ~$315, Phase A 데이터 수집)
-- Shadow: 전 시그널 추적 + reach%/mae% 연속값 수집
-- PaperLab: 3 Variant A/B 테스트 (tight/base/wide)
-- AdaptiveParams: TP/SL 보정 10건+ 활성, 매 거래 자동 갱신
-- ML: Phase A (labeled ~28건), Phase B 100건 도달 시 전환
+## 현재 상태 (2026-05-20)
+- **Shadow 모드** (실거래 없음, 데이터 수집 중)
+- 마이크로스트럭처 15종 + OFI 활성
+- Hurst/Parkinson: 5분봉 20개 축적 후 자동 계산
+- ML Phase A (labeled 0건, 300건 도달 시 Phase B)
+- 잔고: ~$227
 - 서버: Vultr Singapore, Docker Compose
 
 ## 메모리 자동 저장

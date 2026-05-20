@@ -1,958 +1,265 @@
-# SPEC v2 — BTC 모멘텀 스캘핑 봇 최종 명세서
+# SPEC v3 — BTC 마이크로스트럭처 스캘핑 엔진
 
-> 작성: 2026-04-28  
-> 목표: 자본 $700~$1,400, 월 +20~30%, 추세장에 크게 먹고 횡보장에 쉬기  
-> 원칙: 단순한 후보 감지 + ML이 진입 결정 + Maker 우선 실행  
-> 기반: 기존 코드 리팩토링 (신규 파일 0개)
-
----
-
-## 0. 실패 교훈 (이 설계의 근거)
-
-| # | 실패 | 원인 | 이 설계의 대응 |
-|---|------|------|---------------|
-| 1 | 복잡한 룰(764줄 7셋업)이 나쁜 진입만 생성 | 조건 많으면 "쉬운 기회"(역추세)만 통과 | 후보 감지 ~50줄, 3종만 |
-| 2 | 점수 시스템 차별력 없음 | 6.0~7.5 범위에 몰림 | 점수 폐지, ML Go/NoGo |
-| 3 | ML이 장식 (±2점 보정) | 결정권 없이 보조만 | ML이 진입 최종 결정 |
-| 4 | 역추세(PB/DIV/LVL) 전패 | 떨어지는데 삼 | 모멘텀 추종만 |
-| 5 | RR 0.25 (이기면 작게 지면 크게) | SL -8% vs 실현 TP 낮음 | SL -5%, TP ATR기반(RR 1.3~2.4) |
-| 6 | 수수료 > 수익 | taker 0.05% 양쪽 | maker 강제 (완료) |
-| 7 | 게이트 13개가 기회 살해 | 과도한 필터 | 확신도 점수(0~5)로 전환, 이진 차단 최소화 |
+> 작성: 2026-05-20 (v2 → v3 전면 재설계)  
+> 목표: 횡보장에서도 수익, 레버리지 변동성 활용, 3%+ 마진 스캘핑  
+> 원칙: 4계층 파이프라인 (Raw → Feature → Regime → ML) + 빠른 진출입  
+> 참조: Vadim.blog ML Features for Crypto Scalping, Cont et al. (2014) OFI
 
 ---
 
-## 1. 아키텍처 개요
+## 0. v2 실패 교훈 → v3 설계 근거
+
+| # | v2 실패 | 원인 | v3 대응 |
+|---|---------|------|---------|
+| 1 | 횡보에서 SL 반복 | 5분봉 모멘텀 = 횡보에서 노이즈 | 실시간 마이크로스트럭처 (500ms) |
+| 2 | 러너 3건이 수익 85% | 큰 트렌드에 의존 | TP 0.20% 빠른 확정 (러너 없음) |
+| 3 | ML 필터 무력화 | 피처 품질 낮음 (캔들 기반) | 20종 마이크로스트럭처 피처 |
+| 4 | SL algo OKX 소실 -$44 | SL 등록 후 OKX가 자체 취소 | 5초 self-heal + 3회 소실 강제청산 |
+| 5 | Shadow WR 1.7%에도 매매 | 시장 상태 무시 | Hurst Regime Gate + Shadow WR 게이트 |
+| 6 | 보유 30분~24시간 | 레짐 전환에 노출 | 최대 5분 (시간 정지) |
+
+---
+
+## 1. 아키텍처 — 4계층 파이프라인
 
 ```
-┌─ Binance (데이터 100%) ──────────────────────────────────────────┐
-│  WebSocket: aggTrade, kline(1m~1w), forceOrder, miniTicker       │
-│  수집: CVD, 고래, 청산, 캔들, 가격 → Redis + SQLite              │
-└──────────────────────────────────────────────────────────────────┘
-         ↓ (매 3초)
-┌─ CandidateDetector ──────────────────────────────────────────────┐
-│  A. Momentum Ignition  (큰 캔들 + 큰 거래량)      일 12~20건     │
-│  B. Volatility Breakout (BB 스퀴즈→돌파)          일 3~6건      │
-│  C. Liquidation Cascade ($500K+ 청산 폭주)        일 0~4건      │
-│  합계: 일 15~30건 후보                                           │
-└──────────────────────────────────────────────────────────────────┘
-         ↓
-┌─ FeatureExtractor (8→25 피처) ───────────────────────────────────┐
-│  시장 상태를 숫자로 스냅샷 → signals 테이블 기록 (전수)            │
-└──────────────────────────────────────────────────────────────────┘
-         ↓
-┌─ Shadow (시장 관찰) ──────────────────────────────────────────────┐
-│  모든 시그널 가격 궤적 추적 → label + reach%/mae%/best_move%       │
-│  → ML 학습 + AdaptiveParams 보정 데이터                           │
-└──────────────────────────────────────────────────────────────────┘
-         ↓ (동시)
-┌─ PaperLab (A/B 파라미터 실험) ───────────────────────────────────┐
-│  3 Variant(tight/base/wide) 동시 시뮬 → 최적 TP/SL 발견          │
-│  → AdaptiveParams 보정 데이터                                     │
-└──────────────────────────────────────────────────────────────────┘
-         ↓ (동시)
-┌─ Risk Gate (is_trading_allowed) ─────────────────────────────────┐
-│  일일/주간/DD/쿨다운/포지션 → 불통과 시 실거래만 차단              │
-└──────────────────────────────────────────────────────────────────┘
-         ↓
-┌─ ML DecisionEngine ──────────────────────────────────────────────┐
-│  Phase A (<100건): 무조건 Go (데이터 수집 우선)                    │
-│  Phase B (100건+): GBM P(Win) > 55% → Go                       │
-└──────────────────────────────────────────────────────────────────┘
-         ↓
-┌─ 확신도 점수 (0~5점 → 사이즈 비율) ──────────────────────────────┐
-│  +1: 1h일치 +1: 4h일치 +1: 레짐일치 +1: str≥0.8 +1: CVD지지     │
-│  0점=차단, 1점=15%, 3점=60%, 5점=100%                             │
-└──────────────────────────────────────────────────────────────────┘
-         ↓
-┌─ OKX Executor ───────────────────────────────────────────────────┐
-│  약한(<1.5): post-only only (실패→포기)                           │
-│  강한(≥1.5): market 허용 | TP/SL: AdaptiveParams 보정값           │
-└──────────────────────────────────────────────────────────────────┘
-         ↓
-┌─ PositionManager ────────────────────────────────────────────────┐
-│  0~90초: Adverse Selection (마진+CVD+거래량 AND → 조기 탈출)      │
-│  TP1 50% 청산 → 러너 트레일링                                    │
-│  결과 → AdaptiveParams 검증 + ML 버퍼                             │
-└──────────────────────────────────────────────────────────────────┘
+[1층] Raw Data
+  Binance aggTrade (CVD/VPIN/Whale)
+  OKX trades (Velocity/마이크로스트럭처)
+  OKX books5 (OFI/호가 불균형)
+  OKX candles (Hurst/Parkinson)
+        ↓
+[2층] Feature Engine (Redis, 2초 갱신)
+  OFI 멀티레벨, CVD, VPIN, Hurst R/S, Parkinson Vol
+  trade_burst, bs_ratio, momentum_quality, VWAP, delta_div
+  Welford Z-Score 정규화 (100개 윈도우)
+        ↓
+[3층] Regime Gate
+  Hurst > 0.6 → 모멘텀 스캘핑 (Burst 시그널)
+  Hurst < 0.4 → 평균회귀 스캘핑 (VWAP Snap)
+  Hurst 0.4~0.6 → 랜덤워크 → 거래 금지
+  VPIN > 0.7 → 극단 독성 → 거래 금지
+        ↓
+[4층] ML Scorer (Phase A: 규칙, Phase B: XGBoost)
+  20종 피처 → P(Win) ≥ 0.55 → Go
+        ↓
+[실행] ScalpManager
+  진입: post-only (maker 0.02%)
+  TP: +0.20% (서버 limit-on-trigger)
+  SL: -0.15% (서버 market-on-trigger)
+  시간 정지: 3분(수익시) / 5분(최대)
 ```
 
 ---
 
 ## 2. 데이터 소스
 
-### 2.1 Binance Futures WS (binance_stream.py — CVD/Whale)
+### 2.1 Binance Futures
 
-> URL: `wss://fstream.binancefuture.com/ws/btcusdt@aggTrade`
-> (fstream.binance.com 싱가포르 차단 → 대체 도메인)
+| 데이터 | 채널/REST | Redis 키 | 갱신 |
+|--------|----------|----------|------|
+| CVD 5m/15m/1h | aggTrade WS | `flow:combined:cvd_*` | 100체결 or 2초 |
+| Whale Bias | aggTrade WS | `flow:combined:whale_bias` | 고래 발생 시 |
+| 청산 | REST 5초 | `flow:liq:1m_*` | 5초 |
+| 펀딩비 | REST 30초 | `rt:funding:BTC-USDT-SWAP` | 30초 |
+| OI | REST 30초 | `rt:oi:BTC-USDT-SWAP` | 30초 |
+| Vol Ratio | aggTrade | `bn:vol_ratio_1m` | 2초 |
 
-| 데이터 | Redis 키 | TTL | 계산 |
-|--------|----------|-----|------|
-| CVD 5m | `flow:combined:cvd_5m` | 400s | aggTrade delta 누적 (300초 리셋) |
-| CVD 15m | `flow:combined:cvd_15m` | 1200s | 900초 리셋 |
-| CVD 1h | `flow:combined:cvd_1h` | 4800s | 3600초 리셋 |
-| Whale Bias | `flow:combined:whale_bias` | 600s | $50K+ 거래 5분 윈도우 |
-| Vol Ratio 1m | `bn:vol_ratio_1m` | 120s | 1분 거래수 / 20분 평균 |
-
-### 2.2 Binance REST (binance_stream.py — 청산/펀딩/OI)
-
-| 데이터 | 주기 | Redis 키 | TTL |
-|--------|------|----------|-----|
-| 청산 (allForceOrders) | 5초 | `flow:liq:1m_total/long/short`, `flow:liq:surge` | 120s |
-| 펀딩비 (premiumIndex) | 30초 | `rt:funding:BTC-USDT-SWAP` | 120s |
-| OI (openInterest) | 30초 | `rt:oi:BTC-USDT-SWAP` | 120s |
-
-### 2.3 OKX WS (ws_stream.py — 캔들/가격/호가)
+### 2.2 OKX WebSocket
 
 | 채널 | Redis 키 | 용도 |
 |------|----------|------|
-| tickers | `rt:price:*`, `rt:ticker:*` | 현재가, bid/ask (주문 기준) |
-| books5 | `rt:micro:book_*` | 호가 5단계 (실행 스프레드) |
-| candle 1m~1w (7TF) | DB + `ch:kline:ready` | 후보 감지, SL/TP 기준가 |
+| tickers | `rt:price:*`, `rt:ticker:*` | 현재가, bid/ask |
+| trades | `rt:velocity:*` (10s/30s/60s) | 가격 변속도 |
+| trades | `rt:micro:*` (15종) | 마이크로스트럭처 피처 |
+| books5 | `rt:micro:book_imbalance`, `rt:micro:ofi` | OFI, 호가 불균형 |
+| candle 7TF | DB + `ch:kline:ready` | Hurst/Parkinson 계산 |
 
-> CVD/Whale은 Binance WS 담당. OKX trades는 마이크로스트럭처용 (현재 비활성).
+### 2.3 신규 피처 (v3)
 
-### 2.4 OKX REST (executor.py + candle_collector.py)
-
-- 주문 실행: `create_order`, `fetch_positions`, `fetch_balance`
-- 캔들 백업: 30초마다 7TF × 5캔들 (WS 끊김 대비)
-- 시작 시 백필: 1m~1w (3일~365일)
-
----
-
-## 3. CandidateDetector — 3종 후보 감지
-
-### 3.1 구현 위치: `src/strategy/candidate_detector.py`
-
-```python
-class CandidateDetector:
-    """
-    후보 감지기 — "시장이 움직이고 있는가?" 만 판단.
-    복잡한 셋업/점수 없음. ML이 진입 결정.
-    """
-```
-
-### 3.2 후보 A: Momentum Ignition
-
-**근거:** Jegadeesh & Titman (1993) 모멘텀 프리미엄. Liu & Tsyvinski (2021) BTC 모멘텀.
-
-```
-감지 조건 (AND):
-  1. 직전 완성 5m 캔들 body > ATR(14) × 0.8
-  2. 해당 캔들 거래량 > 20봉 평균 × 1.3
-  3. body / (high - low) > 0.6 (몸통 비율 — 꼬리 작음)
-
-방향: 양봉 → long, 음봉 → short
-strength: body / ATR (1.0 = 평균적, 2.0 = 매우 강함)
-
-출력:
-  {
-    "type": "momentum",
-    "direction": "long" | "short",
-    "strength": float,     # body/ATR
-    "price": float,        # 현재 가격
-    "atr": float,
-    "vol_ratio": float,    # 거래량/평균
-  }
-```
-
-### 3.3 후보 B: Volatility Breakout
-
-**근거:** Bollinger (2001), Turtle Trading (Dennis, 1983). Kang et al. (2021) BTC BB.
-
-```
-감지 조건 (AND):
-  1. BB width percentile < 25% (최근 100봉 중 하위 25%)
-  2. 현재 가격 > upper BB (long) or < lower BB (short)
-  3. 돌파 캔들 거래량 > 20봉 평균 × 1.2
-
-방향: upper 돌파 → long, lower 돌파 → short
-strength: (price - BB_mid) / (BB_upper - BB_mid) (>1.0 = 돌파)
-
-출력:
-  {
-    "type": "breakout",
-    "direction": "long" | "short",
-    "strength": float,     # BB 돌파 정도
-    "price": float,
-    "bb_width_pctl": float, # 스퀴즈 정도 (0~100)
-    "vol_ratio": float,
-  }
-```
-
-### 3.4 후보 C: Liquidation Cascade
-
-**근거:** Schär (2021), Aramonte et al. (BIS, 2022) 강제청산 가격 영향.
-
-```
-감지 조건 (AND):
-  1. flow:liq:1m_total > $500,000 (1분간 청산 총액)
-  2. 한쪽 편중 > 80% (long_liq/total > 0.8 or short_liq/total > 0.8)
-  3. 5m 가격 변동 > 0.2% (이미 움직이는 중)
-
-방향: 롱 청산 폭주 → short, 숏 청산 폭주 → long
-strength: total_liq / 1,000,000 (1.0 = $1M, 2.0 = $2M)
-
-출력:
-  {
-    "type": "cascade",
-    "direction": "long" | "short",
-    "strength": float,     # 청산 규모/$1M
-    "price": float,
-    "liq_total": float,
-    "liq_bias": float,     # 편중도
-  }
-```
-
-### 3.5 빈도 예상
-
-| 후보 | 추세장 | 보통 | 횡보장 |
-|------|--------|------|--------|
-| A. Momentum | 15~20 | 10~15 | 5~8 |
-| B. Breakout | 4~6 | 2~4 | 1~2 |
-| C. Cascade | 2~4 | 0~2 | 0 |
-| **합계** | **21~30** | **12~21** | **6~10** |
-
-### 3.6 1분 고속 감지 (Fast Momentum)
-
-```
-detect_fast(df_1m, df_5m) — 5분 detect() 앞에서 호출
-
-감지 조건 (AND, 엄격):
-  1. 직전 완성 1m 캔들 body > ATR_1m(14) × 1.5
-  2. 해당 캔들 거래량 > 20봉 평균 × 1.5
-  3. body / (high - low) > 0.6
-  4. body > ATR_5m × 0.5 (5분 기준으로도 의미 있는 움직임)
-
-type: "fast_momentum"
-hold_mode: "quick" (max_hold 120분, SL 4%)
-TP: ATR_1m 기반 (자동으로 5분보다 짧은 목표)
-
-평가 순서:
-  1분 detect_fast() → 잡히면 즉시 진행
-  못 잡으면 → 5분 detect() → 정규 평가
-
-빈도: 하루 2~5건 (강한 움직임만)
-```
-
-### 3.7 후보 D: Drift (점진적 추세)
-
-```
-detect() 내부 4번째 후보. 캔들 하나는 작지만 방향 일관적 누적 이동.
-
-감지 조건 (AND):
-  1. 6캔들(30분) 누적 이동 > ATR_5m × 1.0
-  2. 방향 일관성: 6캔들 중 4개 이상 같은 방향
-  3. 마지막 캔들도 같은 방향 (반전 시작이면 차단)
-  4. 평균 거래량 > 20봉 평균 × 0.5
-
-type: "drift"
-hold_mode: "momentum"
-strength: drift_abs / ATR (1.0~5.0)
-빈도: 하루 0~3건 (점진적 추세 구간에서만)
-```
-
-### 3.8 약한 후보 (Shadow 전용)
-
-```
-정규 후보 없을 때 완화 기준으로 감지 — 진입 안 하고 shadow ML 데이터만 수집.
-
-조건 (Phase A 완화): body > ATR × 0.4, vol > avg × 1.0, body_ratio > 0.4
-type: "weak_momentum", weak: true
-```
-
-### 3.9 빈도 예상 (전체)
-
-| 후보 | 추세장 | 보통 | 횡보장 |
-|------|--------|------|--------|
-| Fast Momentum (1m) | 3~5 | 1~3 | 0~1 |
-| Momentum (5m) | 15~20 | 10~15 | 5~8 |
-| Drift (5m 6캔들) | 2~3 | 1~2 | 0 |
-| Breakout | 4~6 | 2~4 | 1~2 |
-| Cascade | 2~4 | 0~2 | 0 |
-| Weak (shadow) | 5~10 | 3~5 | 2~3 |
+| 피처 | Redis 키 | 계산 | 참조 |
+|------|----------|------|------|
+| OFI 멀티레벨 | `rt:micro:ofi` | books5 ΔBid - ΔAsk (5레벨) | Cont et al. (2014) |
+| Hurst Exponent | `rt:regime:hurst` | R/S 분석, 5분봉 20~50개 | Hurst (1951) |
+| Parkinson Vol | `rt:micro:parkinson_vol` | √[Σ(ln H/L)² / 4n·ln2] | Parkinson (1980) |
+| Welford Z-Score | ScalpDetector 내부 | 100개 윈도우 온라인 정규화 | Welford (1962) |
+| VPIN | `rt:micro:vpin` (미구현) | 볼륨 버킷 |V_buy-V_sell|/V | Easley et al. (2012) |
 
 ---
 
-## 4. FeatureExtractor — 피처 스냅샷
+## 3. ScalpDetector — 시그널 감지
 
-### 4.1 핵심 8 피처 (Phase B 초기, 200건)
+### 구현: `src/strategy/scalp_detector.py`
 
-| # | 이름 | 계산 | 범위 | 의미 |
-|---|------|------|------|------|
-| 1 | `price_momentum` | (close - close[5봉전]) / close × 100 | -3~+3% | 5분 모멘텀 |
-| 2 | `trend_strength` | (EMA8 - EMA21) / ATR | -3~+3 | 추세 방향+강도 |
-| 3 | `cvd_norm` | CVD_5m / 5분_총거래량 | -1~+1 | 매수/매도 압력 |
-| 4 | `cvd_matches` | direction과 CVD 부호 일치 | 0 or 1 | 흐름 확인 |
-| 5 | `vol_ratio` | 5m_vol / 20봉_avg_vol | 0.2~5.0 | 거래량 수준 |
-| 6 | `adx` | ADX(14) | 0~80 | 추세 강도 |
-| 7 | `bb_position` | (price-BB_low)/(BB_up-BB_low) | -0.5~1.5 | 밴드 내 위치 |
-| 8 | `hour_sin` | sin(2π × hour_utc / 24) | -1~+1 | 시간대 (순환) |
+Redis에서만 읽음. DB/캔들 접근 없음. 500ms 폴링.
 
-### 4.2 확장 피처 (500건 이후 추가)
+### 3.1 Signal A: Micro-Momentum Burst (Hurst > 0.6)
 
-| # | 이름 | 의미 |
-|---|------|------|
-| 9 | `price_change_15m` | 15분 모멘텀 |
-| 10 | `price_change_1h` | 1시간 모멘텀 |
-| 11 | `cvd_15m_norm` | 15분 CVD |
-| 12 | `whale_bias` | 고래 편향 |
-| 13 | `liq_pressure` | 청산 압력 |
-| 14 | `atr_pct` | ATR / 가격 |
-| 15 | `bb_width_pctl` | BB 폭 백분위 |
-| 16 | `vol_trend` | 3봉 거래량 추세 |
-| 17 | `regime_score` | 레짐 수치 |
-| 18 | `di_spread` | |+DI - -DI| |
-| 19 | `loss_streak` | 연패 수 |
-| 20 | `daily_pnl_pct` | 당일 손익 |
-| 21 | `hour_cos` | cos(시간) |
-| 22 | `candle_body_ratio` | 몸통 비율 |
-| 23 | `price_vs_ema50` | EMA50 거리 |
-| 24 | `vol_ratio_1m` | 1분 거래량 |
-| 25 | `minutes_since_last` | 마지막 거래 후 시간 |
+| 조건 | 피처 | 임계값 |
+|------|------|--------|
+| 가격 가속 | move_10s | ≥ price × 0.06% |
+| 지속 이동 | move_30s | 같은 방향, ≥ price × 0.10% |
+| 신선도 | move_10s/move_30s | ≥ 0.4 |
+| 호가 지지 | ofi_zscore | ≥ ±1.0 |
+| 체결 급증 | trade_burst | ≥ 1.8 |
+| 플로우 | bs_ratio_5s | ≥ 0.60 / ≤ 0.40 |
+| 유동성 | spread | ≤ $2.0 |
+| 소진 필터 | move_60s | < price × 0.15% |
 
-### 4.3 signals 테이블 (전수 기록)
+### 3.2 Signal B: VWAP Snap (Hurst < 0.4)
+
+| 조건 | 피처 | 임계값 |
+|------|------|--------|
+| VWAP 이탈 | vwap_deviation | ≥ 0.12% |
+| 다이버전스 | delta_div | 1 (long) / -1 (short) |
+| 흡수 | absorption_score | ≥ 1.0 |
+| 호가 지지 | book_imbalance | ≥ ±0.15 |
+| 유동성 | spread | ≤ $1.5 |
+
+---
+
+## 4. ML DecisionEngine
+
+### 구현: `src/strategy/ml_engine.py`
+
+**Phase A** (< 300건): 무조건 Go (데이터 수집)  
+**Phase B** (300건+): XGBoost, P(Win) ≥ 0.55 → Go
+
+### 피처 (20종)
+
+```
+[z-score 정규화]
+z_ofi, z_book_imbalance, z_trade_burst, z_bs_ratio_5s, z_bs_ratio_30s,
+z_momentum_quality, z_delta_accel, z_cvd_5m
+
+[원시]
+spread, vwap_deviation, delta_div, absorption_score, whale_bias, price_impact
+
+[레짐]
+hurst, vpin, parkinson_vol, micro_confidence
+
+[플로우]
+cvd_5m_raw, funding_rate
+```
+
+### 학습 사이클
+- 300건 도달 → Walk-Forward 80/20 학습
+- OOS accuracy ≥ 52% → Phase B 활성화
+- 100건마다 재학습
+
+---
+
+## 5. 청산 로직
+
+| 유형 | 가격 | 넷 마진 (20x) | 방식 |
+|------|------|--------------|------|
+| TP | +0.20% | **+3.2%** | 서버 limit-on-trigger (maker) |
+| SL | -0.15% | **-4.4%** | 서버 market-on-trigger (taker) |
+
+**시간 정지**: 180초(수익/본전→즉시), 300초(무조건)
+
+**러너 없음, 부분청산 없음.** 100% TP or 100% SL or Time.
+
+**손익분기 승률: 57.9%**
+
+---
+
+## 6. 리스크 컨트롤
+
+| 항목 | 값 |
+|------|-----|
+| 레버리지 | 20x 고정 |
+| 마진 | balance × 80% |
+| 연패 축소 | 2:80%, 3:60%, 5:40%, 7:25% |
+| 쿨다운 | 승 30초, 패 90초, 3연패 10분, 5연패 60분 |
+| 시간당 최대 | 8건 |
+| 진입 간격 | 60초 |
+| BOT_KILL | -20% DD |
+| Shadow WR | 4시간 < 20% → 매매 정지 |
+
+---
+
+## 7. DB 스키마 (scalp.db)
 
 ```sql
-CREATE TABLE IF NOT EXISTS signals (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    ts INTEGER NOT NULL,
-    candidate_type TEXT NOT NULL,        -- momentum/breakout/cascade
-    direction TEXT NOT NULL,             -- long/short
-    strength REAL NOT NULL,
-    price REAL NOT NULL,
-    features TEXT NOT NULL,              -- JSON {피처명: 값}
-    ml_go INTEGER DEFAULT -1,           -- 1=Go, 0=NoGo, -1=ML비활성
-    ml_prob REAL DEFAULT 0,             -- P(Win)
-    entry_executed INTEGER DEFAULT 0,   -- 실제 진입 여부
-    reject_reason TEXT,                 -- 미진입 사유
-    -- Triple Barrier 결과 (shadow + 실거래 공통)
-    label INTEGER DEFAULT -1,           -- 1=Win, 0=Loss, -1=미확정
-    barrier_hit TEXT,                   -- tp/sl/time/adverse
-    pnl_pct REAL DEFAULT 0,
-    resolve_ts INTEGER DEFAULT 0,       -- 라벨 확정 시각
-    regime TEXT,
-    reach_pct REAL DEFAULT 0,       -- TP 방향 최대 도달률 (§5.3 연속값)
-    mae_pct REAL DEFAULT 0,         -- SL 방향 최대 역행
-    best_move_pct REAL DEFAULT 0,   -- TP 방향 최대 이동 %
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+-- candles (변경 없음)
+CREATE TABLE candles (...);
+
+-- scalp_signals (Shadow + ML 라벨링)
+CREATE TABLE scalp_signals (
+    id, ts, signal_type, direction, price, features,
+    regime, hurst, vpin, ml_prob, ml_go,
+    entry_executed, reject_reason,
+    label, barrier_hit, pnl_pct, resolve_ts, reach_pct, mae_pct
 );
-CREATE INDEX IF NOT EXISTS idx_signals_ts ON signals(ts);
-CREATE INDEX IF NOT EXISTS idx_signals_label ON signals(label);
+
+-- scalp_trades (실거래)
+CREATE TABLE scalp_trades (
+    id, signal_id, direction, entry_price, exit_price,
+    entry_time, exit_time, exit_reason,
+    size_btc, leverage, pnl_usdt, pnl_pct, fee_total,
+    hold_sec, regime, hurst, features_snapshot
+);
 ```
 
 ---
 
-## 5. ML DecisionEngine — Meta-Labeling
-
-### 5.1 Phase A: 룰 기반 (0~100건)
+## 8. 파일 구조
 
 ```
-Go 조건 (2개 AND):
-  1. cvd_matches == 1 (CVD가 방향 지지)
-  2. vol_ratio > 1.0 (거래량 평균 이상)
-
-→ 후보의 ~60% 통과 = 일 9~18건
-→ 쿨다운/포지션 제한 후 일 6~12건
-
-목적: ML 학습 데이터 수집. "돈 버는 것"보다 "데이터 모으기".
-자본: $100~200 micro.
-```
-
-### 5.2 Phase B: ML Go/NoGo (100건+)
-
-```python
-model = GradientBoostingClassifier(
-    n_estimators=100,
-    max_depth=3,
-    learning_rate=0.1,
-    min_samples_leaf=20,
-    subsample=0.8,
-    max_features=0.7,
-)
-```
-
-**학습 데이터:**
-- signals 테이블에서 label != -1 인 행 전부
-- 진입한 거래 + shadow 추적 완료된 미진입 후보
-- 가중치: 진입한 거래 × 2.0, shadow × 1.0 (실거래가 더 신뢰)
-
-**결정:**
-```
-P(Win) > 55% → Go (진입)
-P(Win) ≤ 55% → NoGo (shadow 추적)
-```
-
-**ML이 NoGo 한 후보도 shadow 추적 → 라벨 확정 → 재학습 데이터**
-
-### 5.3 Triple Barrier 라벨링 (Shadow — 모든 시그널 추적)
-
-```
-모든 후보 (진입 여부 무관) shadow 추적. 레버리지 15x 가정.
-
-SL: sl_margin_pct / 15 (momentum/breakout 0.333%, cascade 0.267%)
-TP: ATR 기반 = clamp(ATR_5m × 1.5, 0.25%, 0.80%), RR ≥ 1.3
-Time: hold_mode별 max_hold_min (momentum/breakout 240분, cascade 120분)
-
-  횡보(ATR 0.3%): TP 0.45% / SL 0.33% / RR 1.35
-  추세(ATR 0.6%): TP 0.80% / SL 0.33% / RR 2.40
-
-  (short은 TP/SL 반대)
-
-이후 가격 관찰 (5초 간격, Redis rt:price):
-  TP 먼저 → label = 1
-  SL 먼저 → label = 0
-  시간 초과 → PnL > 0이면 1, 아니면 0
-
-추적 중 연속값 동시 기록 (DB signals + JSONL):
-  reach_pct:     TP 방향 최대 도달률 (best_move / tp_dist × 100)
-  mae_pct:       SL 방향 최대 역행 (worst 가격 기반)
-  best_move_pct: TP 방향 최대 이동 %
-
-용도:
-  0~300건: label(0/1)은 ML 분류용, 연속값은 AdaptiveParams TP/SL 보정
-  300건+: ML 회귀 모델 전환 (reach_pct 예측 → TP 직접 제안)
-```
-
-### 5.4 Walk-Forward 재학습
-
-```
-윈도우: 최근 500건 (라벨 확정된 것)
-트리거: 100건 새 데이터마다 재학습
-검증: 윈도우 마지막 20% (100건) OOS
-
-OOS 정확도:
-  > 55%: 정상, 모델 교체
-  52~55%: 경고, 모델 교체
-  < 52%: ML 비활성 → Phase A (룰) 복귀
-  < 52% 2연속: 텔레그램 알림 "ML 퇴화"
-```
-
-### 5.5 콜드스타트 타임라인
-
-```
-Day 1~3:   후보 감지 + 룰 필터 진입 + shadow (50~90건 축적)
-Day 4~7:   계속 축적 (100~200건)
-Day 8~10:  200건 도달 → 첫 ML 학습 → OOS 확인
-           > 55%: Phase B 전환
-           < 55%: 계속 룰 필터 + 축적
-Day 11~14: ML 활성 운영 + 100건 추가 → 재학습
+src/
+  data/
+    binance_stream.py    — Binance aggTrade/REST (CVD/Whale/Liq/Funding)
+    ws_stream.py         — OKX WS (trades/tickers/books/candles) + 마이크로스트럭처
+    candle_collector.py  — OKX REST 캔들 백필
+    storage.py           — SQLite (scalp.db) + Redis 래퍼
+  strategy/
+    scalp_detector.py    — 실시간 시그널 감지 (Redis only, 500ms)
+    scalp_manager.py     — 스캘핑 포지션 관리 (TP/SL/TimeStop)
+    ml_engine.py         — XGBoost Go/NoGo (Phase A→B)
+    adaptive_params.py   — TP/SL 자동 보정
+    welford.py           — Welford 온라인 z-score 정규화
+  trading/
+    executor.py          — OKX CCXT 주문 실행
+    risk_manager.py      — BOT_KILL + 쿨다운
+  monitoring/
+    telegram_bot.py      — Telegram 알림/명령
+    trade_logger.py      — JSONL 로깅
+    dashboard.py         — FastAPI 대시보드
+  utils/
+    helpers.py           — 설정 로딩
+  main.py               — ScalpEngine 오케스트레이션
 ```
 
 ---
 
-## 6. 주문 실행
+## 9. JSONL 이벤트 타입
 
-### 6.1 진입 (executor.py — 구현 완료 + 수정)
-
-```
-strength < 1.5 (약한 시그널):
-  post-only limit 3회 추격 (maker 0.02%)
-  미체결 → 진입 포기 (taker 없음)
-
-strength ≥ 1.5 (강한 시그널):
-  post-only 3회 추격 (maker 시도)
-  미체결 → market 주문 (taker 0.05% 허용)
-  이유: 강한 모멘텀은 체결이 더 중요
-
-SL/TP 알고:
-  SL: market-on-trigger + sl_failsafe 백업 (체결 보장, 사고 방지)
-  TP: limit-on-trigger (maker)
-```
-
-### 6.2 수수료 시뮬레이션
-
-```
-$1,000 자본, 마진 30%, 레버리지 15x
-포지션: $4,500 notional, 하루 8건
-
-최적 (전부 maker):     $4,500 × 0.02% × 2 × 8 = $14.4/일
-현실적 (30% taker SL): maker 5건 $9.0 + 혼합 3건 $9.45 = $18.45/일
-수익 대비:             목표 $25/일 중 수수료 $18.45 = 74%...
-
-→ 수수료 비중이 너무 높음. 해결:
-  1. 마진을 더 키움 (30→40%) → 포지션 $6,000 → 수익↑ 수수료비중↓
-  2. 거래 수를 줄임 (8→6건) → 더 확실한 것만
-  
-보정: margin_pct 0.40 (Phase B 목표) / 0.80 (Phase A 데이터 수집), 일 6건
-  포지션 $6,000, 6건: maker 4건 $9.6 + 혼합 2건 $8.4 = $18.0
-  목표 수익: $6,000 × 10% × 50% × 55% × 6 = ~$30/일
-  수수료 비중: $18/$30 = 60%... 여전히 높음
-
-→ 근본 해결: TP를 키우거나, 레버리지를 낮추거나, 자본을 키움
-  자본 $1,400 + 마진 40% + 15x: 포지션 $8,400
-  수수료 비중 $18/$42 = 43% — 수용 가능 수준
-```
-
-> 결론: 자본 $1,000 이상 + margin_pct 0.40 + 일 6건 이하가 수수료 구조상 최적.
-
----
-
-## 7. SL/TP/보유 전략
-
-### 7.1 후보 유형별 설정
-
-```yaml
-hold_modes:
-  momentum:       # 후보 A
-    max_hold_min: 240
-    sl_margin_pct: 5.0          # 마진 -5%
-    tp1_margin_pct: 10.0        # shadow 라벨용 (실거래는 ATR 기반)
-    tp2_mult: 2.5               # sl_dist × 2.5
-    tp3_mult: 4.0
-
-  breakout:       # 후보 B
-    max_hold_min: 240
-    sl_margin_pct: 5.0
-    tp1_margin_pct: 10.0
-    tp2_mult: 3.0               # sl_dist × 3.0
-    tp3_mult: 5.0
-
-  cascade:        # 후보 C
-    max_hold_min: 120
-    sl_margin_pct: 4.0          # 타이트
-    tp1_margin_pct: 8.0
-    tp2_mult: 2.0               # sl_dist × 2.0
-    tp3_mult: 3.0
-```
-
-### 7.2 TP 구조
-
-```
-TP1 거리 계산 (실거래):
-  tp1_dist = price × clamp(ATR_5m × adaptive_tp_mult, 0.25%, 0.80%)
-  adaptive_tp_mult: 기본 1.5, AdaptiveParams TPCalibrator가 10건+ 후 보정 (§10)
-  RR 최소 1.3 보장: tp1_dist = max(tp1_dist, sl_dist × 1.3)
-
-  횡보장 (ATR 0.3%): TP1 ≈ 0.45%, RR ≈ 1.35
-  추세장 (ATR 0.6%): TP1 ≈ 0.80%, RR ≈ 2.4
-
-TP1 도달 시:
-  50% 포지션 청산 (확정 수익)
-  SL → 진입가 + 수수료 (본절)
-  나머지 50% → 러너 트레일링
-
-러너:
-  trail_distance = max(ATR × 1.5, 수익 × giveback)
-  giveback: <15분 35%, 15~30분 25%, 30분+ 15%
-  cap: 최대 0.8%, 최소 0.1%
-  R-lock: 2R 수익 → 1R 잠금, 3R → 2R 잠금
-```
-
-### 7.3 Adverse Selection (진입 후 90초)
-
-```
-조건 (AND — 3개 전부 충족해야 탈출):
-  1. 마진 -2.5% 이상 역행
-  2. CVD가 진입 반대로 전환 (5m CVD 부호 반전)
-  3. 역행 방향 거래량 급증 (vol_ratio_1m > 1.5)
-
-탈출: post-only 청산 시도 → 실패 시 market
-손실: 마진 ~-2.5% (SL -5%의 절반)
-```
-
----
-
-## 8. 리스크 관리
-
-### 8.1 리스크 게이트 (이진 차단) + 확신도 점수 (사이즈 조절)
-
-**이진 게이트 (is_trading_allowed):**
-
-| # | 게이트 | 임계값 | 복구 |
-|---|--------|--------|------|
-| 1 | 일일 손실 | -10% (Phase A) / -5% (Phase B) | 다음날 자동 리셋 |
-| 2 | 최대 DD | -12% | 수동 리셋 (텔레그램 알림) |
-| 3 | 봇 정지 DD | -15% | 봇 완전 정지 (수동 재시작만) |
-| 4 | 연패 쿨다운 | 5연패 → 1시간 | 시간 경과 |
-| 5 | 포지션/간격 | 1개 + 30초 | 청산/경과 |
-
-**확신도 점수 (0~5점 → 사이즈 비율):**
-
-```
-+1  1h EMA20 추세 일치
-+1  4h EMA20 추세 일치
-+1  15m 레짐 일치 (trending순방향 or ranging+momentum)
-+1  strength ≥ 0.8
-+1  CVD 방향 지지
-
-특수: 1h+4h 둘다 반대 → 강제 0점
-
-  5점 → 100%  4점 → 80%  3점 → 60%
-  2점 → 30%   1점 → 15% (최소 0.01 BTC)  0점 → 차단
-```
-
-- Shadow/PaperLab: 확신도 무관 (전부 진입)
-- 실거래: 확신도 기반 사이즈 + AdaptiveParams EV 보정 (30건+)
-
-### 8.2 연패 사이즈 축소
-
-```yaml
-streak_sizing:
-  2: 0.80
-  3: 0.60
-  5: 0.40
-  7: 0.25
-```
-
-### 8.3 수익 보호
-
-```
-일일 +3% → 이후 마진 50%로 축소
-일일 +5% → 추가 진입 차단 + 텔레그램 "좋은 날" 알림
-```
-
----
-
-## 9. 기존 코드 처리
-
-### 9.1 파일별 처리 계획
-
-**전면 교체 (내용 완전히 새로 씀):**
-
-| 파일 | 현재 | 새로 |
-|------|------|------|
-| `src/strategy/flow_engine.py` | 764줄 FlowEngine 7셋업 | ~200줄 CandidateDetector 3종 |
-| `src/strategy/flow_ml.py` | 329줄 점수보정 | ~400줄 ML Go/NoGo + Walk-Forward |
-
-**대폭 수정:**
-
-| 파일 | 변경 |
+| 타입 | 설명 |
 |------|------|
-| `src/main.py` | _evaluate_unified → 새 흐름, 게이트 13→5, signals 기록 |
-| `src/strategy/paper_lab.py` | PaperLab A/B 3-Variant 테스터 (paper_trader 대체) |
-| `src/trading/risk_manager.py` | 주간/DD 한도, 수익보호 추가 |
-| `src/trading/position_manager.py` | Adverse Selection 추가 |
-| `src/strategy/setup_tracker.py` | 셋업명 → 후보 유형명 |
-| `src/data/storage.py` | signals 테이블 추가 |
-| `config/settings.yaml` | 수치 전면 변경 |
-
-**유지 (변경 없음):**
-
-| 파일 | 이유 |
-|------|------|
-| `src/trading/executor.py` | maker 강제 이미 완료 + taker 허용 조건 추가만 |
-| `src/data/binance_stream.py` | 데이터 수집 잘 작동 중 |
-| `src/data/ws_stream.py` | OKX 가격 수집 |
-| `src/data/candle_collector.py` | 캔들 수집 |
-| `src/engine/regime_detector.py` | 레짐 판별 정상 작동 |
-| `src/trading/leverage.py` | 레버리지 계산 |
-| `src/utils/helpers.py` | 유틸리티 |
-
-**삭제 (레거시):**
-
-| 파일/디렉토리 | 이유 |
-|--------------|------|
-| `src/signal_engine/` (aggregator, grader) | 옛 14기법 합산기, 미사용 |
-| `src/strategy/adaptive_ml.py` | 옛 ML v2, 미사용 |
-| `src/strategy/historical_learner.py` | 옛 학습기, 미사용 |
-| `src/strategy/scalp_engine.py` | 옛 스캘핑 엔진, 미사용 |
-| `src/strategy/unified_engine.py` | 옛 통합 엔진, 미사용 |
-| `src/strategy/meta_learner.py` | 옛 메타러너, 미사용 |
-| `src/strategy/auto_backtest.py` | 옛 백테스트, 미사용 |
-| `src/engine/fast/fractal.py` | 프랙탈, 미사용 |
-| `src/engine/slow/` 전체 | 옛 Slow Path 기법들, 미사용 |
-| `src/engine/fast/` 일부 | market_structure, vwap — CandidateDetector에서 미사용 |
-| `src/data/oi_funding.py` | OI/펀딩 수집, 미사용 |
-| `src/trading/news_filter.py` | 뉴스 필터, 미사용 |
-| `backtest/` 전체 | 새 구조에 맞지 않음, 나중에 재작성 |
-| `tmp_analyze.py` | 임시 파일 |
-
-### 9.2 대시보드 변경
-
-```
-기존 표시:  셋업 (LVL/MOM/PB/BRK/DIV/SES/LIQ) + ML 점수 + 레짐
-새 표시:    후보 (Momentum/Breakout/Cascade) + ML P(Win) + 레짐
-
-제거: 옛 셋업 API, Signal Performance, ML 모델 카드 (옛 형식)
-추가: ML Go/NoGo 현황, signals 테이블 최근 20건, shadow 결과
-```
-
-### 9.3 텔레그램 변경
-
-```
-진입 알림: "📊 MOMENTUM LONG @ $78,200 | ML 62% | vol 2.1x | 15x"
-청산 알림: "✅ TP1 hit +$15.2 (+10.1%) | 12min"
-일일 리포트: 거래수/승률/PnL + ML 정확도 + shadow 정확도
-경고: DD -12%, ML 퇴화, 연패 5
-```
+| `candidate` | 시그널 감지 (Shadow 포함) |
+| `shadow_result` | Shadow 라벨 확정 (TP/SL/Time) |
+| `scalp_entry` | 실거래 진입 |
+| `scalp_exit` | 실거래 청산 |
+| `gate_block` | 게이트 차단 (shadow_wr_low 등) |
+| `hourly_snapshot` | 시간별 스냅샷 (잔고/레짐/ML) |
+| `adaptive_update` | AdaptiveParams 갱신 |
 
 ---
 
-## 10. AdaptiveParams — 수치 자동 보정 엔진
+## 10. 비동기 태스크 (12개)
 
-### 10.1 목적
-
-매 거래 결과로부터 TP/SL/방향/사이즈 수치를 이동 통계로 자동 보정.
-ML Go/NoGo와 독립 — ML은 "들어갈까", AdaptiveParams는 "어떻게 들어갈까".
-
-### 10.2 모듈 구조
-
-```
-src/strategy/adaptive_params.py
-
-AdaptiveParams:
-  ├── EntryQualityScorer    # 진입 품질 (time_to_first_profit, initial_speed)
-  ├── DirectionScorer       # 방향 EV (regime × htf × direction)
-  ├── TPCalibrator          # TP1 ATR 배수 보정 (reach% 기반)
-  ├── SLCalibrator          # SL 거리 보정 (MAE 기반)
-  ├── HoldOptimizer         # 보유시간 vs 승률 → 트레일 강도
-  ├── RegimeScorer          # 레짐별 EV → 사이즈 배수
-  └── TimeOfDayTracker      # 시간대별 EV → 사이즈 배수
-```
-
-### 10.3 각 모듈 상세
-
-**EntryQualityScorer** (최우선)
-```
-측정: time_to_first_profit, 진입 후 5분 이동속도
-활용: avg_time_to_profit > 30분 → "진입 타이밍 늦음" 경고 + 소진 체크 강화
-대체: 기존 모멘텀 소진 하드코딩 50% → 적응형 threshold
-```
-
-**DirectionScorer** (계층적 EV)
-```
-키: (1h_trend, 4h_trend, direction) → 기대값(EV) 추적
-EV = win_rate × avg_win - loss_rate × avg_loss
-  EV < -1.0 → 차단
-  EV < 0    → 사이즈 50%
-  EV > 2.0  → 사이즈 120%
-계층 폴백: Level3(regime+htf+dir) → Level2(htf+dir) → Level1(dir), 최소 10건
-대체: 기존 _is_regime_aligned + _check_htf_trend 하드코딩 → EV 기반
-```
-
-**TPCalibrator** (레짐별)
-```
-측정: tp1_reach_pct = best_price_move / tp1_dist × 100
-보정:
-  패배 near_miss_rate(reach 60~99%) > 40% → atr_mult × 0.95
-  승리 avg_overshoot > 80% → atr_mult × 1.05
-  레짐별 분리 (trending vs ranging 별도 배수)
-범위: atr_mult clamp(0.8, 2.5), 1회 ±5%
-대체: 기존 하드코딩 atr_mult=1.5 → 적응형
-```
-
-**SLCalibrator** (MAE 기반)
-```
-측정: winning MAE (승리 거래의 최대 역행, ATR 배수)
-보정: optimal_sl = mae_95pct × 1.2 × current_atr
-경고: winning_mae와 losing_mae 분포 80%+ 겹침 → "진입 품질 문제"
-범위: sl_margin_pct clamp(3.0, 8.0)
-대체: 기존 하드코딩 sl_margin_pct=5.0 → 적응형
-필수 추가: Position.worst_price 추적
-```
-
-**HoldOptimizer**
-```
-측정: 시간대별 승률 커브 (0~30분, 30~120분, 120분+)
-활용: hold_min > optimal_max + 미실현 손실 → 트레일 축소 신호
-대체: 기존 giveback 35/25/15% → 적응형 (Phase 3에서)
-```
-
-**RegimeScorer**
-```
-측정: 레짐별 EV
-활용: ranging EV < -1 → 사이즈 50% 축소
-대체: 기존 leverage_mult 0.7/0.5 하드코딩 → EV 기반
-```
-
-**TimeOfDayTracker**
-```
-측정: UTC 4시간 구간별 EV
-활용: 나쁜 시간대 사이즈 축소
-```
-
-### 10.4 페이즈별 활성화
-
-| 거래 수 | 활성 모듈 | 비활성 (수집만) |
-|---------|----------|---------------|
-| 0~10건 | 없음 (전체 수집만) | 전부 |
-| 10~30건 | + TP/SL Calibrator | Direction/Hold/Time |
-| 30~300건 | + Direction + Entry Quality | Hold/Time |
-| 300건+ | 전체 | 없음 |
-
-※ TP/SL 보정(10건)을 Direction(30건)보다 먼저 활성화 — Paper+Shadow 데이터 빠른 축적
-
-### 10.5 Position 추가 필드
-
-```python
-worst_price: float       # SL 방향 최대 역행 (MAE 계산용)
-first_profit_ts: float   # 처음 수익 전환 시점
-entry_atr: float         # 진입 시점 ATR
-entry_h1_trend: str      # 진입 시점 1h EMA 방향
-entry_h4_trend: str      # 진입 시점 4h EMA 방향
-params_snapshot: dict    # 진입 시 사용된 파라미터 (자기참조 방지)
-```
-
-### 10.6 기존 코드 대체 관계
-
-| 기존 | 파일:라인 | AdaptiveParams | 시점 |
-|------|-----------|---------------|------|
-| `_is_regime_aligned()` | main.py:394 | DirectionScorer | 30건+ |
-| `_check_htf_trend()` | main.py:406 | DirectionScorer | 30건+ |
-| 모멘텀 소진 50% | main.py:481 | EntryQualityScorer | 30건+ |
-| ATR mult 1.5 | main.py:461 | TPCalibrator | 100건+ |
-| sl_margin_pct 5.0 | main.py:455 | SLCalibrator | 100건+ |
-| min_sl 0.5% | main.py:457 | SLCalibrator | 100건+ |
-| giveback 35/25/15% | pos_mgr:172 | HoldOptimizer | 300건+ |
-
-기존 하드코딩은 **초기값(default)으로 유지** — AdaptiveParams가 충분한 데이터 모으면 override.
-
-### 10.7 안전장치
-
-```
-- 최소 샘플: 모듈별 10건 이상일 때만 보정
-- 1회 변동: ±5% 이내
-- 하드 범위: 각 파라미터별 min/max cap
-- 감쇠: 지수 이동 평균 (최근 20건 가중)
-- 저장: Redis persist (재시작 생존)
-- 로깅: 보정 시 JSONL 기록 + 텔레그램 알림
-- 유지 안 되는 것: RR 최소 1.3, R-lock 2R/3R, trail cap/floor (구조적 안전장치)
-```
-
----
-
-## 11. settings.yaml 전체
-
-> 아래는 Phase B 목표값. 실서버는 Phase A (margin_pct: 0.80, max_daily_loss: 0.10) 운영 중.
-
-```yaml
-exchange:
-  name: "okx"
-  symbol: "BTC/USDT:USDT"
-  margin_mode: "isolated"
-
-# 분석 전부 Binance, 실행만 OKX
-data_source: "binance"
-
-timeframes:
-  primary: "5m"
-  confirmation: "15m"
-  filter: "1h"
-  candles: ["1m", "5m", "15m", "1h", "4h", "1d"]
-
-risk:
-  sizing_mode: "margin_loss_cap"
-  margin_pct: 0.40
-  leverage_range: [15, 20]
-  max_positions: 1
-  max_daily_loss: 0.05
-  max_drawdown: 0.12
-  bot_kill_drawdown: 0.15
-  max_margin_loss_pct: 5.0
-  tp1_margin_gain_pct: 10.0
-  min_entry_interval_sec: 30
-
-  streak_sizing:
-    2: 0.80
-    3: 0.60
-    5: 0.40
-    7: 0.25
-
-hold_modes:
-  momentum:
-    max_hold_min: 45
-    sl_margin_pct: 5.0
-    tp1_margin_pct: 10.0
-    tp2_mult: 2.5
-    tp3_mult: 4.0
-  breakout:
-    max_hold_min: 90
-    sl_margin_pct: 5.0
-    tp1_margin_pct: 10.0
-    tp2_mult: 3.0
-    tp3_mult: 5.0
-  cascade:
-    max_hold_min: 20
-    sl_margin_pct: 4.0
-    tp1_margin_pct: 8.0
-    tp2_mult: 2.0
-    tp3_mult: 3.0
-
-trailing:
-  tp1_close_pct: 0.5
-  tp2_close_pct: 0.3
-  tp3_close_pct: 0.2
-  trail_atr_mult: 1.5
-  trail_profit_giveback: 0.25
-  trail_min_price_pct: 0.15
-
-adverse_selection:
-  enabled: true
-  window_sec: 90
-  margin_threshold_pct: 2.5
-  require_cvd_reversal: true
-  require_vol_surge: true
-
-candidate:
-  momentum:
-    min_body_atr_ratio: 0.8
-    min_vol_ratio: 1.3
-    min_body_ratio: 0.6
-  breakout:
-    bb_squeeze_pctl: 25
-    min_vol_ratio: 1.2
-  cascade:
-    min_liq_usd: 500000
-    min_bias_pct: 0.80
-    min_price_change_pct: 0.2
-
-ml:
-  phase_a_min_samples: 200
-  retrain_interval: 100
-  window_size: 500
-  min_oos_accuracy: 0.52
-  go_threshold: 0.55
-  initial_features: 8
-  expanded_features_at: 500
-
-cooldown:
-  after_loss_sec: 60
-  after_win_sec: 20
-  streak_5_min: 60
-
-polling:
-  candle_fast_sec: 2
-  candle_slow_sec: 6
-  signal_eval_sec: 3
-  position_check_sec: 1
-  shadow_check_sec: 5
-
-fees:
-  taker: 0.0005
-  maker: 0.0002
-
-telegram:
-  enabled: true
-
-redis:
-  host: "localhost"
-  port: 6379
-  db: 0
-
-data:
-  candle_backfill_days: 30
-```
-
----
-
-## 11. 성공/실패 기준
-
-| 기준 | 성공 | 부분 성공 | 실패 |
-|------|------|----------|------|
-| 2주 일평균 | +1.5%+ | +0.5~1.5% | < +0.5% |
-| 최대 DD | < 8% | < 12% | > 12% |
-| 승률 | > 50% | > 45% | < 45% |
-| RR | > 1.5:1 | > 1.0:1 | < 1.0:1 |
-| ML OOS | > 55% | > 52% | < 52% |
-
-실패 시: signals 테이블 분석 → 피처/임계값 조정 → 재시도.
-
----
-
-## 부록: 기존 명세서 처리
-
-```
-명세서.md → 명세서_v1_archive.md (리네임, 보존)
-SPEC_V2.md → 이 파일이 현행 명세서
-CLAUDE.md → 설계서 참조를 SPEC_V2.md로 변경
-```
+| 태스크 | 주기 | 역할 |
+|--------|------|------|
+| ws_stream.start() | 상시 | OKX WS 데이터 수집 |
+| binance_stream.start() | 상시 | Binance 데이터 수집 |
+| periodic_candle_update | 30초 | REST 캔들 백업 |
+| periodic_scalp_eval | 500ms | 시그널 감지 + ML + 실행 |
+| periodic_scalp_position | 500ms | 포지션 관리 (시간정지/failsafe) |
+| periodic_shadow_check | 5초 | Triple Barrier 라벨링 |
+| periodic_ml_retrain | 300초 | ML 재학습 |
+| periodic_daily_reset | 60초 | 일일 리셋 |
+| periodic_heartbeat | 60초 | 헬스체크 + 스냅샷 |
+| periodic_orphan_algo_sweeper | 120초 | 고아 알고 정리 |
+| periodic_dashboard_commands | 5초 | Redis 명령 큐 |
+| telegram.poll_commands | 상시 | 텔레그램 명령 |

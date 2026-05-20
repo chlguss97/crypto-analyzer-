@@ -1,12 +1,13 @@
 # Commit Log
 
 > 자동 생성 — `scripts/update_commit_log.sh` (매 커밋 후 실행)
-> Updated: 2026-05-20 09:39:46    
-> Total commits: 358 (2026-04-03 → 2026-05-20)
+> Updated: 2026-05-20 09:50:16    
+> Total commits: 359 (2026-04-03 → 2026-05-20)
 
 Claude 가 질문/변경 작업 시 이 파일을 참고해서 과거 변경 이력 컨텍스트를 확보합니다. 수동 편집 금지 — 다음 커밋 시 덮어써집니다.
 
 ## 2026-05-20
+- `e33f6423` fix: 전수검사 — dashboard/telegram/logger/position_manager 클린업
 - `50af961d` feat: ScalpEngine v3 — 마이크로스트럭처 스캘핑 엔진 전면 재설계
 - `9d763c66` fix: SL 소실 근본 대응 + Shadow WR 매매 자동정지
 
