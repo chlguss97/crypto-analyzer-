@@ -7,7 +7,7 @@ OKX WebSocket — 전체 데이터 수집 (Binance 대체)
   3. candle 7종 → DB 직접 저장 + 이벤트 발행
   4. books5 → 호가 불균형 (향후)
 
-Redis 키 (기존과 동일 — candidate_detector/dashboard 변경 없음):
+Redis 키:
   flow:combined:cvd_5m/15m/1h   — CVD
   flow:combined:whale_bias       — 고래 편향
   rt:price:BTC-USDT-SWAP         — 가격
@@ -68,6 +68,15 @@ class WebSocketStream:
 
         # 고래 추적
         self._whales: deque = deque(maxlen=200)
+
+        # OFI (Order Flow Imbalance) — 이전 호가 스냅샷
+        self._prev_bids: list = []
+        self._prev_asks: list = []
+        self._ofi_accumulator = 0.0
+        self._ofi_reset_ts = 0
+
+        # Hurst / Parkinson — 5분봉 캐시
+        self._candle_5m_cache: deque = deque(maxlen=60)
 
         # 통계
         self._trade_count = 0
@@ -276,10 +285,10 @@ class WebSocketStream:
         # CVD/Whale → Binance Futures WS로 이관 (binance_stream.py)
         # OKX trades는 마이크로스트럭처 + 속도 계산에만 사용
 
-        # 마이크로 — Phase B+ 까지 비활성 (CPU 절약, 사용처 없음)
-        # if now_f - self._last_micro_flush >= 2:
-        #     self._last_micro_flush = now_f
-        #     await self._flush_microstructure(price)
+        # 마이크로스트럭처 (2초마다 Redis flush)
+        if now_f - self._last_micro_flush >= 2:
+            self._last_micro_flush = now_f
+            await self._flush_microstructure(price)
 
         # ── 가격 변속도 ──
         if price > 0 and ts > 0:
@@ -360,7 +369,13 @@ class WebSocketStream:
             except Exception as e:
                 logger.debug(f"OKX candle DB 저장 실패 ({std_tf}): {e}")
 
-        # 캔들 확정 → 이벤트 발행 (eval 루프 트리거)
+        # 5분봉 캐시 (Hurst/Parkinson 계산용)
+        if is_closed and std_tf == "5m":
+            self._candle_5m_cache.append(candle_dict)
+            if len(self._candle_5m_cache) >= 20:
+                await self._compute_regime_features()
+
+        # 캔들 확정 → 이벤트 발행
         if is_closed:
             try:
                 await self.redis.publish("ch:kline:ready", json.dumps({
@@ -374,31 +389,123 @@ class WebSocketStream:
     # ══════════════════════════════════════════
 
     async def _handle_books(self, book: dict):
-        """호가 불균형 계산 (향후 ML 피처)"""
-        # OKX books5: {"asks":[[price,size,0,count],...], "bids":[[price,size,0,count],...]}
+        """호가 불균형 + OFI (Order Flow Imbalance) 계산"""
         try:
             bids = book.get("bids", [])
             asks = book.get("asks", [])
             if not bids or not asks:
                 return
 
-            bid_total = sum(float(b[1]) for b in bids[:5])
-            ask_total = sum(float(a[1]) for a in asks[:5])
+            bid_sizes = [float(b[1]) for b in bids[:5]]
+            ask_sizes = [float(a[1]) for a in asks[:5]]
+            bid_total = sum(bid_sizes)
+            ask_total = sum(ask_sizes)
             total = bid_total + ask_total
             if total <= 0:
                 return
 
-            imbalance = (bid_total - ask_total) / total  # -1 ~ +1
+            imbalance = (bid_total - ask_total) / total
             spread = float(asks[0][0]) - float(bids[0][0])
 
             await self.redis.set("rt:micro:book_imbalance", str(round(imbalance, 4)), ttl=15)
             await self.redis.set("rt:micro:spread", str(round(spread, 2)), ttl=15)
+
+            # ── OFI (Multi-Level Order Flow Imbalance) ──
+            # Cont, Kukanov, & Stoikov (2014): OFI = Σ(ΔBid_k - ΔAsk_k)
+            if self._prev_bids and self._prev_asks:
+                ofi_tick = 0.0
+                for k in range(min(5, len(bid_sizes), len(self._prev_bids))):
+                    delta_bid = bid_sizes[k] - self._prev_bids[k]
+                    delta_ask = ask_sizes[k] - self._prev_asks[k] if k < len(ask_sizes) and k < len(self._prev_asks) else 0
+                    ofi_tick += delta_bid - delta_ask
+
+                # 5초 윈도우 누적 후 리셋
+                now_sec = int(time.time())
+                if now_sec // 5 != self._ofi_reset_ts:
+                    self._ofi_reset_ts = now_sec // 5
+                    self._ofi_accumulator = ofi_tick
+                else:
+                    self._ofi_accumulator += ofi_tick
+
+                await self.redis.set("rt:micro:ofi", str(round(self._ofi_accumulator, 4)), ttl=15)
+
+            self._prev_bids = bid_sizes
+            self._prev_asks = ask_sizes
         except Exception:
             pass
 
     # ══════════════════════════════════════════
     #  마이크로스트럭처 집계 (2초마다)
     # ══════════════════════════════════════════
+
+    async def _compute_regime_features(self):
+        """5분봉에서 Hurst Exponent + Parkinson Volatility 계산 → Redis"""
+        candles = list(self._candle_5m_cache)
+        n = len(candles)
+        if n < 20:
+            return
+
+        try:
+            closes = [c["close"] for c in candles[-50:]]
+
+            # ── Hurst Exponent (R/S analysis) ──
+            # Hurst (1951), Mandelbrot & Wallis (1969)
+            returns = [math.log(closes[i] / closes[i-1]) for i in range(1, len(closes)) if closes[i-1] > 0]
+            if len(returns) >= 15:
+                hurst = self._calc_hurst(returns)
+                await self.redis.set("rt:regime:hurst", str(round(hurst, 4)), ttl=600)
+
+            # ── Parkinson Volatility ──
+            # Parkinson (1980): σ = √[(1/(4n·ln2)) · Σ(ln(H/L))²]
+            recent = candles[-20:]
+            sum_sq = 0.0
+            for c in recent:
+                if c["high"] > 0 and c["low"] > 0 and c["high"] >= c["low"]:
+                    log_hl = math.log(c["high"] / c["low"])
+                    sum_sq += log_hl ** 2
+            p_vol = math.sqrt(sum_sq / (4 * len(recent) * math.log(2))) if recent else 0
+            await self.redis.set("rt:micro:parkinson_vol", str(round(p_vol, 6)), ttl=600)
+
+        except Exception as e:
+            logger.debug(f"regime features 계산 실패: {e}")
+
+    @staticmethod
+    def _calc_hurst(returns: list[float]) -> float:
+        """Rescaled Range (R/S) Hurst exponent 추정"""
+        n = len(returns)
+        if n < 10:
+            return 0.5  # 데이터 부족 → 랜덤워크 가정
+
+        import numpy as np
+        ts = np.array(returns)
+
+        # 여러 윈도우 크기에서 R/S 계산
+        sizes = []
+        rs_values = []
+        for size in [10, 15, 20, 30]:
+            if size > n:
+                break
+            rs_list = []
+            for start in range(0, n - size + 1, size):
+                chunk = ts[start:start + size]
+                mean_c = np.mean(chunk)
+                cumdev = np.cumsum(chunk - mean_c)
+                r = np.max(cumdev) - np.min(cumdev)
+                s = np.std(chunk, ddof=1)
+                if s > 1e-10:
+                    rs_list.append(r / s)
+            if rs_list:
+                sizes.append(size)
+                rs_values.append(np.mean(rs_list))
+
+        if len(sizes) < 2:
+            return 0.5
+
+        # log(R/S) vs log(n) 선형 회귀 → 기울기 = H
+        log_n = np.log(sizes)
+        log_rs = np.log(rs_values)
+        slope = np.polyfit(log_n, log_rs, 1)[0]
+        return max(0.0, min(1.0, slope))
 
     async def _flush_microstructure(self, current_price: float):
         """trades 이력에서 15종 마이크로 피처 계산 → Redis"""

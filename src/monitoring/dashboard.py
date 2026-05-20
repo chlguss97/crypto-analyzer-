@@ -543,13 +543,8 @@ async def manual_update_tp(req: ManualTpRequest):
 @app.get("/api/setup-tracker")
 async def get_setup_tracker():
     await _ensure_initialized()
-    """SetupTracker 셋업별 성과 조회"""
-    try:
-        from src.strategy.setup_tracker import SetupTracker
-        tracker = SetupTracker()
-        return tracker.get_summary()
-    except Exception as e:
-        return {"error": str(e)}
+    """Legacy — 제거됨 (v3 스캘핑 엔진)"""
+    return {"info": "setup_tracker removed in v3"}
 
 
 @app.get("/api/ml/flow-stats")
@@ -633,12 +628,6 @@ async def get_engine_overview():
 
     # 3) SetupTracker 요약
     setup_summary = {}
-    try:
-        from src.strategy.setup_tracker import SetupTracker
-        setup_summary = SetupTracker().get_summary()
-    except Exception as e:
-        logger.debug(f"setup_tracker load 실패: {e}")
-        setup_summary = {}
 
     # 4) Real vs Paper 비교 (동일 grade family 필터)
     real_stats = {"total": 0, "wins": 0, "wr": 0.0, "total_pnl": 0.0, "avg_pnl": 0.0}

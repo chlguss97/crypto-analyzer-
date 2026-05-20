@@ -1,10 +1,20 @@
 # Commit Log
 
 > 자동 생성 — `scripts/update_commit_log.sh` (매 커밋 후 실행)
-> Updated: 2026-05-14 11:01:32    
-> Total commits: 350 (2026-04-03 → 2026-05-14)
+> Updated: 2026-05-18 16:03:07    
+> Total commits: 356 (2026-04-03 → 2026-05-18)
 
 Claude 가 질문/변경 작업 시 이 파일을 참고해서 과거 변경 이력 컨텍스트를 확보합니다. 수동 편집 금지 — 다음 커밋 시 덮어써집니다.
+
+## 2026-05-18
+- `155be494` fix: self-heal SL 검증 주기 60초→10초 — OKX SL 소실 시 failsafe 전 복구
+
+## 2026-05-15
+- `99dbd53c` fix: SL 보정 축소 — 최소 사이즈(0.02 BTC 미만)에서 스킵
+- `3f5953fe` fix: 포지션 복원 시 최소 사이즈(0.01 BTC)에서 TP1 미등록 버그
+- `7ac07e0b` chore: dead code 제거 — max_daily_loss/max_weekly_loss/max_drawdown
+- `fae72479` fix: momentum 임계값 복원 (Phase A 완료) + breakout 비활성화
+- `d26dd509` fix: SL 구조 개선 — ATR 바닥 1.5x + h4 역행 감점 + 최소 확신도 2점 + SL 캘리브레이터 패자보정
 
 ## 2026-05-14
 - `49b94011` fix: 전수검사 — AdaptiveParams 데이터 손실 + params_snapshot + PaperLab 오염 외 8건

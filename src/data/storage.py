@@ -1,3 +1,9 @@
+"""
+Storage layer — SQLite (candles, scalp_signals, scalp_trades) + Redis async wrapper
+
+v3: 스캘핑 엔진용 클린 스키마 (기존 signals/trades 테이블 폐기)
+"""
+
 import aiosqlite
 import sqlite3
 import redis.asyncio as redis
@@ -9,7 +15,7 @@ from src.utils.helpers import load_config, DATA_DIR
 
 logger = logging.getLogger(__name__)
 
-# ── SQLite ──────────────────────────────────────────────
+# ── SQLite Schema ──────────────────────────────────────────
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS candles (
@@ -27,67 +33,63 @@ CREATE TABLE IF NOT EXISTS candles (
 CREATE INDEX IF NOT EXISTS idx_candles_lookup
     ON candles(symbol, timeframe, timestamp DESC);
 
-CREATE TABLE IF NOT EXISTS trades (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    symbol TEXT NOT NULL,
-    direction TEXT NOT NULL,
-    grade TEXT NOT NULL,
-    score REAL NOT NULL,
-    entry_price REAL NOT NULL,
-    entry_time INTEGER NOT NULL,
-    exit_price REAL,
-    exit_time INTEGER,
-    exit_reason TEXT,
-    leverage INTEGER NOT NULL,
-    position_size REAL NOT NULL,
-    pnl_usdt REAL,
-    pnl_pct REAL,
-    fee_total REAL,
-    funding_cost REAL DEFAULT 0,
-    signals_snapshot TEXT
-    -- notes: 미사용 컬럼 제거 (2026-05-07)
-);
-
-
-CREATE TABLE IF NOT EXISTS signals (
+CREATE TABLE IF NOT EXISTS scalp_signals (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     ts INTEGER NOT NULL,
-    candidate_type TEXT NOT NULL,
+    signal_type TEXT NOT NULL,
     direction TEXT NOT NULL,
-    strength REAL NOT NULL,
     price REAL NOT NULL,
     features TEXT NOT NULL,
+    regime TEXT NOT NULL,
+    hurst REAL DEFAULT 0,
+    vpin REAL DEFAULT 0,
+    ml_prob REAL DEFAULT -1,
     ml_go INTEGER DEFAULT -1,
-    ml_prob REAL DEFAULT 0,
     entry_executed INTEGER DEFAULT 0,
     reject_reason TEXT,
     label INTEGER DEFAULT -1,
     barrier_hit TEXT,
     pnl_pct REAL DEFAULT 0,
     resolve_ts INTEGER DEFAULT 0,
-    regime TEXT,
     reach_pct REAL DEFAULT 0,
     mae_pct REAL DEFAULT 0,
-    best_move_pct REAL DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-CREATE INDEX IF NOT EXISTS idx_signals_ts ON signals(ts);
-CREATE INDEX IF NOT EXISTS idx_signals_label ON signals(label);
+CREATE INDEX IF NOT EXISTS idx_scalp_signals_ts ON scalp_signals(ts);
+CREATE INDEX IF NOT EXISTS idx_scalp_signals_label ON scalp_signals(label);
 
+CREATE TABLE IF NOT EXISTS scalp_trades (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    signal_id INTEGER,
+    direction TEXT NOT NULL,
+    entry_price REAL NOT NULL,
+    exit_price REAL,
+    entry_time INTEGER NOT NULL,
+    exit_time INTEGER,
+    exit_reason TEXT,
+    size_btc REAL NOT NULL,
+    leverage INTEGER NOT NULL,
+    pnl_usdt REAL,
+    pnl_pct REAL,
+    fee_total REAL,
+    hold_sec INTEGER,
+    regime TEXT,
+    hurst REAL,
+    features_snapshot TEXT
+);
 """
 
 
 class Database:
-    """SQLite 비동기 래퍼"""
+    """SQLite 비동기 래퍼 — v3 스캘핑 스키마"""
 
     def __init__(self):
-        self.db_path = DATA_DIR / "candles.db"
+        self.db_path = DATA_DIR / "scalp.db"
         self._db: aiosqlite.Connection | None = None
 
     async def connect(self):
         DATA_DIR.mkdir(parents=True, exist_ok=True)
 
-        # ── DB integrity check + 자동 백업/재생성 (BUG: 04-08 무한 restart loop) ──
         if self.db_path.exists():
             try:
                 _check = await aiosqlite.connect(str(self.db_path))
@@ -97,52 +99,29 @@ class Database:
                 if not row or row[0] != "ok":
                     raise sqlite3.DatabaseError(f"integrity_check 실패: {row}")
             except Exception as e:
-                # 손상 감지 → 백업 + 재생성 (auto-recover)
                 import time as _t
                 backup = self.db_path.with_suffix(f".db.broken.{int(_t.time())}")
-                logger.critical(
-                    f"💀 SQLite 손상 감지: {e} → 백업 후 재생성 ({backup.name})"
-                )
+                logger.critical(f"SQLite 손상 감지: {e} → 백업 후 재생성 ({backup.name})")
                 try:
                     self.db_path.rename(backup)
-                    # WAL/SHM 사이드 파일도 함께 백업
-                    for sfx in ("-wal", "-shm"):
-                        side = self.db_path.with_name(self.db_path.name + sfx)
-                        if side.exists():
-                            side.rename(side.with_suffix(side.suffix + f".broken.{int(_t.time())}"))
-                except Exception as e2:
-                    logger.error(f"손상 DB 백업 실패: {e2} → 직접 삭제")
-                    try:
-                        self.db_path.unlink(missing_ok=True)
-                    except Exception:
-                        pass
+                except Exception:
+                    self.db_path.unlink(missing_ok=True)
 
         self._db = await aiosqlite.connect(str(self.db_path))
         self._db.row_factory = aiosqlite.Row
-        # WAL 모드 비활성 — docker volume + 강제 종료 환경에서 손상 발생
-        # (2026-04-08 사고 후 롤백). 봇 부하가 작아 동시성 이점 미미.
-        # synchronous=FULL 로 전환해 손상 방지 강화
-        await self._db.execute("PRAGMA journal_mode=DELETE")  # 기본 journal 모드
-        await self._db.execute("PRAGMA synchronous=FULL")     # 안전 우선
+        await self._db.execute("PRAGMA journal_mode=DELETE")
+        await self._db.execute("PRAGMA synchronous=FULL")
         await self._db.executescript(SCHEMA_SQL)
-        # 마이그레이션: 기존 signals 테이블에 연속값 컬럼 추가
-        for col in [("reach_pct", "REAL DEFAULT 0"), ("mae_pct", "REAL DEFAULT 0"), ("best_move_pct", "REAL DEFAULT 0")]:
-            try:
-                await self._db.execute(f"ALTER TABLE signals ADD COLUMN {col[0]} {col[1]}")
-            except Exception:
-                pass  # 이미 존재
         await self._db.commit()
-        logger.info(f"SQLite 연결: {self.db_path} (journal=DELETE, sync=FULL, integrity OK)")
+        logger.info(f"SQLite 연결: {self.db_path}")
 
     async def close(self):
         if self._db:
             await self._db.close()
-            logger.info("SQLite 연결 종료")
 
     # ── 캔들 ──
 
     async def insert_candles(self, symbol: str, timeframe: str, candles: list[dict]):
-        """캔들 데이터 벌크 삽입 (중복 무시)"""
         if not candles:
             return
         await self._db.executemany(
@@ -158,78 +137,33 @@ class Database:
         )
         await self._db.commit()
 
-    async def get_candles(
-        self, symbol: str, timeframe: str, limit: int = 500, since: int = None
-    ) -> list[dict]:
-        """캔들 조회 (항상 시간순 ASC 정렬 반환)"""
-        if since:
-            cursor = await self._db.execute(
-                """SELECT timestamp, open, high, low, close, volume
-                   FROM candles
-                   WHERE symbol=? AND timeframe=? AND timestamp>=?
-                   ORDER BY timestamp ASC LIMIT ?""",
-                (symbol, timeframe, since, limit),
-            )
-            rows = await cursor.fetchall()
-            return [dict(r) for r in rows]
-        else:
-            # 최신 N개를 가져온 후 시간순으로 뒤집어 반환
-            cursor = await self._db.execute(
-                """SELECT timestamp, open, high, low, close, volume
-                   FROM candles
-                   WHERE symbol=? AND timeframe=?
-                   ORDER BY timestamp DESC LIMIT ?""",
-                (symbol, timeframe, limit),
-            )
-            rows = await cursor.fetchall()
-            return [dict(r) for r in reversed(rows)]
+    async def get_candles(self, symbol: str, timeframe: str, limit: int = 500) -> list[dict]:
+        cursor = await self._db.execute(
+            """SELECT timestamp, open, high, low, close, volume
+               FROM candles WHERE symbol=? AND timeframe=?
+               ORDER BY timestamp DESC LIMIT ?""",
+            (symbol, timeframe, limit),
+        )
+        rows = await cursor.fetchall()
+        return [dict(r) for r in reversed(rows)]
 
     async def get_latest_candle_time(self, symbol: str, timeframe: str) -> int | None:
-        """가장 최근 캔들 timestamp 조회"""
         cursor = await self._db.execute(
-            """SELECT MAX(timestamp) FROM candles
-               WHERE symbol=? AND timeframe=?""",
+            "SELECT MAX(timestamp) FROM candles WHERE symbol=? AND timeframe=?",
             (symbol, timeframe),
         )
         row = await cursor.fetchone()
         return row[0] if row and row[0] else None
 
-    # ── 트레이드 ──
+    # ── 스캘핑 시그널 ──
 
-    async def insert_trade(self, trade: dict) -> int:
+    async def insert_scalp_signal(self, signal: dict) -> int:
         cursor = await self._db.execute(
-            """INSERT INTO trades
-               (symbol, direction, grade, score, entry_price, entry_time,
-                leverage, position_size, signals_snapshot)
-               VALUES (:symbol, :direction, :grade, :score, :entry_price,
-                       :entry_time, :leverage, :position_size, :signals_snapshot)""",
-            trade,
-        )
-        await self._db.commit()
-        return cursor.lastrowid
-
-    async def update_trade_exit(self, trade_id: int, exit_data: dict):
-        await self._db.execute(
-            """UPDATE trades SET
-               exit_price=:exit_price, exit_time=:exit_time, exit_reason=:exit_reason,
-               pnl_usdt=:pnl_usdt, pnl_pct=:pnl_pct, fee_total=:fee_total,
-               funding_cost=:funding_cost
-               WHERE id=:id""",
-            {"id": trade_id, **exit_data},
-        )
-        await self._db.commit()
-
-    # ── Signals (후보 전수 기록) ──
-
-    async def insert_signal(self, signal: dict) -> int:
-        """후보 시그널 기록 (진입 여부 무관)"""
-        cursor = await self._db.execute(
-            """INSERT INTO signals
-               (ts, candidate_type, direction, strength, price, features,
-                ml_go, ml_prob, entry_executed, reject_reason, regime)
-               VALUES (:ts, :candidate_type, :direction, :strength, :price,
-                       :features, :ml_go, :ml_prob, :entry_executed,
-                       :reject_reason, :regime)""",
+            """INSERT INTO scalp_signals
+               (ts, signal_type, direction, price, features, regime,
+                hurst, vpin, ml_prob, ml_go, entry_executed, reject_reason)
+               VALUES (:ts, :signal_type, :direction, :price, :features, :regime,
+                       :hurst, :vpin, :ml_prob, :ml_go, :entry_executed, :reject_reason)""",
             signal,
         )
         await self._db.commit()
@@ -237,59 +171,54 @@ class Database:
 
     async def update_signal_label(self, signal_id: int, label: int,
                                   barrier_hit: str, pnl_pct: float, resolve_ts: int,
-                                  reach_pct: float = 0, mae_pct: float = 0,
-                                  best_move_pct: float = 0):
-        """Triple Barrier 결과로 라벨 확정 + 연속값 기록"""
+                                  reach_pct: float = 0, mae_pct: float = 0):
         await self._db.execute(
-            """UPDATE signals SET label=?, barrier_hit=?, pnl_pct=?, resolve_ts=?,
-               reach_pct=?, mae_pct=?, best_move_pct=?
-               WHERE id=?""",
-            (label, barrier_hit, pnl_pct, resolve_ts,
-             reach_pct, mae_pct, best_move_pct, signal_id),
+            """UPDATE scalp_signals SET label=?, barrier_hit=?, pnl_pct=?,
+               resolve_ts=?, reach_pct=?, mae_pct=? WHERE id=?""",
+            (label, barrier_hit, pnl_pct, resolve_ts, reach_pct, mae_pct, signal_id),
         )
         await self._db.commit()
 
     async def update_signal_entry(self, signal_id: int):
-        """실제 진입 완료 표시"""
         await self._db.execute(
-            "UPDATE signals SET entry_executed=1 WHERE id=?", (signal_id,)
+            "UPDATE scalp_signals SET entry_executed=1 WHERE id=?", (signal_id,)
         )
         await self._db.commit()
 
-    async def get_labeled_signals(self, limit: int = 500) -> list[dict]:
-        """ML 학습용: 라벨 확정된 시그널 조회 (최신 순)"""
+    async def get_pending_shadows(self) -> list[dict]:
         cursor = await self._db.execute(
-            """SELECT * FROM signals WHERE label != -1
-               ORDER BY ts DESC LIMIT ?""",
+            """SELECT id, ts, signal_type, direction, price, features, regime
+               FROM scalp_signals WHERE label = -1 ORDER BY ts ASC"""
+        )
+        rows = await cursor.fetchall()
+        return [dict(r) for r in rows]
+
+    async def get_labeled_signals(self, limit: int = 500) -> list[dict]:
+        cursor = await self._db.execute(
+            "SELECT * FROM scalp_signals WHERE label != -1 ORDER BY ts DESC LIMIT ?",
             (limit,),
         )
         rows = await cursor.fetchall()
         return [dict(r) for r in reversed(rows)]
 
-    async def get_pending_shadows(self) -> list[dict]:
-        """라벨 미확정 시그널 (진입 여부 무관, 모든 후보 shadow 추적)"""
-        cursor = await self._db.execute(
-            """SELECT id, ts, candidate_type, direction, price, features, regime
-               FROM signals
-               WHERE label = -1
-               ORDER BY ts ASC"""
-        )
-        rows = await cursor.fetchall()
-        return [dict(r) for r in rows]
+    async def get_signal_count(self, labeled_only: bool = True) -> int:
+        q = "SELECT COUNT(*) FROM scalp_signals WHERE label != -1" if labeled_only \
+            else "SELECT COUNT(*) FROM scalp_signals"
+        cursor = await self._db.execute(q)
+        row = await cursor.fetchone()
+        return row[0] if row else 0
 
     async def get_recent_shadow_wr(self, hours: int = 4) -> tuple[float, int]:
-        """최근 N시간 shadow WR 반환 → (wr_pct, total_count)"""
         import time as _t
         cutoff = int(_t.time()) - hours * 3600
         cursor = await self._db.execute(
-            """SELECT label, COUNT(*) as cnt FROM signals
+            """SELECT label, COUNT(*) as cnt FROM scalp_signals
                WHERE label IN (0, 1) AND resolve_ts > ?
                GROUP BY label""",
             (cutoff,),
         )
         rows = await cursor.fetchall()
-        wins = 0
-        total = 0
+        wins = total = 0
         for r in rows:
             total += r["cnt"]
             if r["label"] == 1:
@@ -298,28 +227,33 @@ class Database:
             return 50.0, 0
         return round(wins / total * 100, 1), total
 
-    async def get_signal_count(self, labeled_only: bool = True) -> int:
-        """라벨 확정된 시그널 수"""
-        if labeled_only:
-            cursor = await self._db.execute(
-                "SELECT COUNT(*) FROM signals WHERE label != -1"
-            )
-        else:
-            cursor = await self._db.execute("SELECT COUNT(*) FROM signals")
-        row = await cursor.fetchone()
-        return row[0] if row else 0
+    # ── 스캘핑 트레이드 ──
 
-    async def get_recent_signals(self, limit: int = 20) -> list[dict]:
-        """대시보드용: 최근 시그널 조회"""
+    async def insert_scalp_trade(self, trade: dict) -> int:
         cursor = await self._db.execute(
-            "SELECT * FROM signals ORDER BY ts DESC LIMIT ?", (limit,)
+            """INSERT INTO scalp_trades
+               (signal_id, direction, entry_price, entry_time,
+                size_btc, leverage, regime, hurst, features_snapshot)
+               VALUES (:signal_id, :direction, :entry_price, :entry_time,
+                       :size_btc, :leverage, :regime, :hurst, :features_snapshot)""",
+            trade,
         )
-        rows = await cursor.fetchall()
-        return [dict(r) for r in rows]
+        await self._db.commit()
+        return cursor.lastrowid
+
+    async def update_scalp_trade_exit(self, trade_id: int, exit_data: dict):
+        await self._db.execute(
+            """UPDATE scalp_trades SET
+               exit_price=:exit_price, exit_time=:exit_time, exit_reason=:exit_reason,
+               pnl_usdt=:pnl_usdt, pnl_pct=:pnl_pct, fee_total=:fee_total,
+               hold_sec=:hold_sec
+               WHERE id=:id""",
+            {"id": trade_id, **exit_data},
+        )
+        await self._db.commit()
 
 
 def _json_default(obj):
-    """numpy/bool 등 JSON 직렬화 헬퍼"""
     import numpy as np
     if isinstance(obj, (np.integer,)):
         return int(obj)
@@ -340,7 +274,6 @@ class RedisClient:
     def __init__(self):
         config = load_config()
         redis_cfg = config.get("redis", {})
-        # 환경변수 우선 (Docker용), 없으면 config 사용
         self.host = os.getenv("REDIS_HOST") or redis_cfg.get("host", "localhost")
         self.port = int(os.getenv("REDIS_PORT", redis_cfg.get("port", 6379)))
         self.db_num = redis_cfg.get("db", 0)
@@ -354,20 +287,18 @@ class RedisClient:
             await self._client.ping()
             logger.info(f"Redis 연결: {self.host}:{self.port}")
         except Exception as e:
-            logger.warning(f"Redis 연결 실패: {e} → 메모리 폴백 모드")
+            logger.warning(f"Redis 연결 실패: {e}")
             self._client = None
 
     async def close(self):
         if self._client:
             await self._client.close()
-            logger.info("Redis 연결 종료")
 
     @property
     def connected(self) -> bool:
         return self._client is not None
 
     async def _ensure_connected(self):
-        """04-13: Redis 재연결 시도 (H14: 시작 실패 시 영구 None 방지)"""
         if self._client is not None:
             return
         try:
@@ -375,9 +306,8 @@ class RedisClient:
                 host=self.host, port=self.port, db=self.db_num, decode_responses=True
             )
             await self._client.ping()
-            logger.info(f"Redis 재연결 성공: {self.host}:{self.port}")
-        except Exception as e:
-            logger.warning(f"Redis 재연결 실패: {e}")
+            logger.info(f"Redis 재연결 성공")
+        except Exception:
             self._client = None
 
     async def set(self, key: str, value, ttl: int = None):
@@ -394,7 +324,7 @@ class RedisClient:
                 await self._client.set(key, value)
         except Exception as e:
             logger.warning(f"Redis set error ({key}): {e}")
-            self._client = None  # 다음 호출 시 재연결 시도
+            self._client = None
 
     async def get(self, key: str) -> str | None:
         if not self._client:
@@ -437,13 +367,11 @@ class RedisClient:
             return {}
 
     async def keys(self, pattern: str) -> list[str]:
-        """패턴 매칭 키 목록 — sync 단계 stale 정리용"""
         if not self._client:
             return []
         try:
             return await self._client.keys(pattern)
-        except Exception as e:
-            logger.debug(f"Redis keys error ({pattern}): {e}")
+        except Exception:
             return []
 
     async def delete(self, key: str):
@@ -453,11 +381,10 @@ class RedisClient:
             return
         try:
             await self._client.delete(key)
-        except Exception as e:
-            logger.debug(f"Redis delete error ({key}): {e}")
+        except Exception:
+            pass
 
     async def rpush(self, key: str, value):
-        """리스트 끝에 추가 (대시보드 명령 큐)"""
         if not self._client:
             await self._ensure_connected()
         if not self._client:
@@ -471,15 +398,13 @@ class RedisClient:
             self._client = None
 
     async def lpop(self, key: str) -> str | None:
-        """리스트 앞에서 꺼내기 (봇 명령 소비)"""
         if not self._client:
             await self._ensure_connected()
         if not self._client:
             return None
         try:
             return await self._client.lpop(key)
-        except Exception as e:
-            logger.debug(f"Redis lpop error ({key}): {e}")
+        except Exception:
             return None
 
     async def publish(self, channel: str, message: str):
@@ -487,5 +412,5 @@ class RedisClient:
             return
         try:
             await self._client.publish(channel, message)
-        except Exception as e:
-            logger.debug(f"Redis publish error ({channel}): {e}")
+        except Exception:
+            pass

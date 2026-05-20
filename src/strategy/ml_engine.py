@@ -21,45 +21,38 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 DATA_DIR = Path(__file__).parent.parent.parent / "data"
-MODEL_PATH = DATA_DIR / "ml_meta_label.pkl"
+MODEL_PATH = DATA_DIR / "ml_scalp_model.pkl"
 
-# 핵심 8 피처 이름 (순서 고정)
+# 스캘핑 피처 — 마이크로스트럭처 + 레짐 + 플로우 (20종)
 CORE_FEATURES = [
-    "price_momentum",    # 5봉 변동%
-    "trend_strength",    # (EMA8-EMA21)/ATR
-    "cvd_norm",          # CVD/거래량 (-1~+1)
-    "cvd_matches",       # CVD 방향 일치 (0/1)
-    "vol_ratio",         # 거래량/평균
-    "adx",               # 추세 강도
-    "bb_position",       # BB 내 위치
-    "hour_sin",          # 시간대
+    # 마이크로스트럭처 (z-score 정규화됨)
+    "z_ofi",                # OFI z-score (1등 피처, 가격변동 65% 설명)
+    "z_book_imbalance",     # 호가 불균형
+    "z_trade_burst",        # 체결 빈도 급증
+    "z_bs_ratio_5s",        # 매수/매도 비율 5초
+    "z_bs_ratio_30s",       # 매수/매도 비율 30초
+    "z_momentum_quality",   # burst × imbalance × CVD 정렬
+    "z_delta_accel",        # CVD 가속도
+    "z_cvd_5m",             # CVD 5분
+    # 원시 피처
+    "spread",               # bid-ask 스프레드
+    "vwap_deviation",       # VWAP 이탈률
+    "delta_div",            # 가격/CVD 다이버전스
+    "absorption_score",     # 대량 흡수 감지
+    "whale_bias",           # 고래 편향
+    "price_impact",         # 가격 충격
+    # 레짐
+    "hurst",                # Hurst 지수 (추세/횡보/랜덤)
+    "vpin",                 # VPIN (정보 비대칭)
+    "parkinson_vol",        # Parkinson 변동성
+    "micro_confidence",     # 마이크로스트럭처 레짐 신뢰도
+    # 플로우
+    "cvd_5m_raw",           # CVD 5분 원시값
+    "funding_rate",         # 펀딩레이트
 ]
 
-# 확장 피처 (500건 이후 추가)
-EXTENDED_FEATURES = CORE_FEATURES + [
-    "price_change_15m",
-    "price_change_1h",
-    "cvd_15m_norm",
-    "whale_bias",
-    "liq_pressure",
-    "atr_pct",
-    "vol_trend",
-    "hour_cos",
-    "candle_body_ratio",
-    "price_vs_ema50",
-    "vol_ratio_1m",
-    # 마이크로스트럭처 (binance_stream 2초 갱신)
-    "micro_trade_rate",
-    "micro_burst",
-    "micro_bs_30s",
-    "micro_absorption_score",
-    "micro_whale_cluster",
-    "micro_delta_accel",
-    "micro_price_impact",
-    "micro_vwap_dev",
-    "micro_delta_div",
-    "micro_momentum_quality",
-]
+# 스캘핑에서는 확장 없이 20종 고정
+EXTENDED_FEATURES = list(CORE_FEATURES)
 
 
 class MLDecisionEngine:
