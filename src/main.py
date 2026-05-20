@@ -93,8 +93,7 @@ class ScalpEngine:
         self._trades_this_hour = 0
         self._hour_reset_ts = 0
 
-        # 리스크 설정
-        self.min_entry_interval = self.config.get("risk", {}).get("min_entry_interval_sec", 60)
+        pass  # 리스크: VPIN/Hurst/BookShock/BOT_KILL만 사용
 
         # Shadow phase
         self.shadow_mode = scalp_cfg.get("shadow_mode", True)  # 초기: Shadow only
@@ -172,9 +171,7 @@ class ScalpEngine:
         if not allowed:
             return
 
-        # 진입 간격
-        if now - self._last_trade_time < self.min_entry_interval:
-            return
+        pass  # 진입 간격 제한 없음 (VPIN/Hurst가 필터)
 
         # ── Redis 상태 갱신 (텔레그램/대시보드용, 30초마다) ──
         if now - getattr(self, "_last_state_flush", 0) >= 30:
