@@ -135,6 +135,18 @@ class ScalpEngine:
         await self.candle_collector.backfill_all()
         logger.info("캔들 백필 완료")
 
+        # ws_stream 5분봉 캐시 초기화 (DB 백필 → Hurst/Parkinson 즉시 계산)
+        try:
+            candles_5m = await self.db.get_candles(self.symbol, "5m", limit=60)
+            if candles_5m:
+                for c in candles_5m:
+                    self.ws_stream._candle_5m_cache.append(c)
+                logger.info(f"5분봉 캐시 초기화: {len(candles_5m)}개 → Hurst/Parkinson 즉시 계산")
+                if len(self.ws_stream._candle_5m_cache) >= 20:
+                    await self.ws_stream._compute_regime_features()
+        except Exception as e:
+            logger.warning(f"5분봉 캐시 초기화 실패: {e}")
+
         mode = "SHADOW" if self.shadow_mode else "LIVE"
         logger.info(f"스캘핑 모드: {mode}")
 

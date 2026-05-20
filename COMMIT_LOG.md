@@ -1,12 +1,13 @@
 # Commit Log
 
 > 자동 생성 — `scripts/update_commit_log.sh` (매 커밋 후 실행)
-> Updated: 2026-05-20 11:06:45    
-> Total commits: 370 (2026-04-03 → 2026-05-20)
+> Updated: 2026-05-20 11:18:04    
+> Total commits: 371 (2026-04-03 → 2026-05-20)
 
 Claude 가 질문/변경 작업 시 이 파일을 참고해서 과거 변경 이력 컨텍스트를 확보합니다. 수동 편집 금지 — 다음 커밋 시 덮어써집니다.
 
 ## 2026-05-20
+- `e30cae22` fix: 전수검사 5건 수정 — test삭제/ML피처누락/텔레그램버그
 - `fe8b9880` docs: 명세서 최신화 — 프로 12/12 EXACT + 제거 항목 반영
 - `aafff35e` fix: PARTIAL 4건 → EXACT 전환 — Hurst/OU감쇠/Vol블렌딩/CVD오버라이드
 - `009745da` feat: 동적 TP (k × Parkinson Vol) + 시그널 반전 청산
