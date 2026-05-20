@@ -22,6 +22,8 @@ scalp:
   time_stop_sec: 180                # 3분 시간 정지
   time_stop_max_sec: 300            # 5분 최대 보유
   time_stop_loss_margin_pct: 1.5    # 시간정지 시 손실 한도
+  sl_k_vol: 2.0                     # 동적 SL: k × Parkinson Vol
+  ou_entry_z: 2.0                   # OU Z-Score 진입 임계값 (±2σ)
   max_trades_per_hour: 8
   # Regime Gate
   hurst_momentum: 0.6              # H > 0.6 → 모멘텀 스캘핑

@@ -63,6 +63,14 @@ class BinanceStream:
         self._ws_trade_count = 0
         self._last_flush = 0
 
+        # VPIN (Easley, López de Prado, & O'Hara 2012)
+        self._vpin_bucket_size = 0.0  # 자동 계산 (최근 거래량 기반)
+        self._vpin_buckets: deque = deque(maxlen=50)
+        self._vpin_current_buy = 0.0
+        self._vpin_current_sell = 0.0
+        self._vpin_current_vol = 0.0
+        self._vpin_vol_history: deque = deque(maxlen=100)  # 버킷 사이즈 자동 보정용
+
     async def start(self):
         self._running = True
         # REST + WS 병렬 실행
@@ -170,6 +178,32 @@ class BinanceStream:
                     "size_usd": size_usd, "price": price,
                 })
 
+            # VPIN 계산 (Lee-Ready: m=true → taker sell, m=false → taker buy)
+            buy_vol = qty if not is_buyer_maker else 0
+            sell_vol = qty if is_buyer_maker else 0
+            self._vpin_current_buy += buy_vol
+            self._vpin_current_sell += sell_vol
+            self._vpin_current_vol += qty
+
+            # 버킷 사이즈 자동 계산 (최근 100버킷 평균 거래량의 1/50)
+            if self._vpin_bucket_size <= 0 and len(self._vpin_vol_history) >= 5:
+                self._vpin_bucket_size = sum(self._vpin_vol_history) / len(self._vpin_vol_history)
+            elif self._vpin_bucket_size <= 0:
+                self._vpin_bucket_size = 5.0  # 초기 기본값 5 BTC
+
+            # 버킷 완성
+            if self._vpin_current_vol >= self._vpin_bucket_size and self._vpin_bucket_size > 0:
+                imbal = abs(self._vpin_current_buy - self._vpin_current_sell)
+                vol = self._vpin_current_vol
+                self._vpin_buckets.append(imbal / vol if vol > 0 else 0)
+                self._vpin_vol_history.append(vol)
+                # 버킷 사이즈 갱신 (50버킷마다)
+                if len(self._vpin_vol_history) >= 10:
+                    self._vpin_bucket_size = sum(self._vpin_vol_history) / len(self._vpin_vol_history)
+                self._vpin_current_buy = 0.0
+                self._vpin_current_sell = 0.0
+                self._vpin_current_vol = 0.0
+
             # Redis flush (100 trades마다 또는 whale 시)
             self._ws_trade_count += 1
             if self._ws_trade_count >= 100 or size_usd >= WHALE_THRESHOLD_USD or (now - self._last_flush >= 2):
@@ -197,6 +231,11 @@ class BinanceStream:
                 total = buy_vol + sell_vol
                 bias = (buy_vol - sell_vol) / total if total > 0 else 0
                 await self.redis.set("flow:combined:whale_bias", str(round(bias, 4)), ttl=600)
+
+            # VPIN (50버킷 이동 평균)
+            if len(self._vpin_buckets) >= 10:
+                vpin = sum(self._vpin_buckets) / len(self._vpin_buckets)
+                await self.redis.set("rt:micro:vpin", str(round(vpin, 4)), ttl=30)
 
             # Vol ratio (1분 거래 수 대비 20분 평균)
             if self._vol_avg_20:

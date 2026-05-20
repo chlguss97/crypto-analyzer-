@@ -52,13 +52,26 @@ class ScalpDetector:
         self.snap_min_absorption = cfg.get("snap_min_absorption", 1.0)
         self.snap_min_book_imbal = cfg.get("snap_min_book_imbal", 0.15)
 
+        # OU Z-Score (mean reversion — replaces simple VWAP snap)
+        self.ou_entry_z = cfg.get("ou_entry_z", 2.0)
+
         # Common filters
         self.max_spread = cfg.get("max_spread", 2.0)
         self.min_micro_confidence = cfg.get("min_micro_confidence", 0.3)
         self.stale_threshold_ms = cfg.get("stale_threshold_ms", 5000)
 
-        # Welford normalizer
+        # VPIN 4단계 사이징 (Easley et al. 2012)
+        self.vpin_size_mult = {
+            "low": 1.0,      # < 0.3
+            "medium": 0.5,   # 0.3~0.5
+            "high": 0.25,    # 0.5~0.7
+            "extreme": 0.0,  # > 0.7
+        }
+
+        # Welford normalizer + 워밍업
         self._normalizer = FeatureNormalizer(window=100)
+        self._warmup_count = 0
+        self._warmup_threshold = 100  # 100 샘플 전까지 시그널 억제
 
         # State
         self._last_signal_ts = 0
@@ -83,38 +96,58 @@ class ScalpDetector:
         if velocity_ts > 0 and (now_ms - velocity_ts) > self.stale_threshold_ms:
             return None
 
-        # ── 3. Spread filter ──
+        # ── 3. Welford 워밍업 (100샘플 미달 시 시그널 억제) ──
+        self._warmup_count += 1
+        if self._warmup_count < self._warmup_threshold:
+            return None
+
+        # ── 4. Spread filter ──
         spread = features.get("spread", 999)
         if spread > self.max_spread:
             return None
 
-        # ── 4. Regime Gate ──
+        # ── 4.5. Book Shock 방어 (30% 깊이 급감) ──
+        depth_shock = features.get("depth_shock", False)
+        if depth_shock:
+            return None
+
+        # ── 5. Regime Gate (Hurst + VPIN 4단계) ──
         hurst = features.get("hurst", 0.5)
         vpin = features.get("vpin", 0.3)
         hurst_available = features.get("hurst_available", False)
 
-        if vpin >= self.vpin_extreme:
-            return None  # 극단 독성 → 거래 금지
+        # VPIN 4단계 사이징 (Easley et al. 2012)
+        if vpin >= 0.7:
+            return None  # Extreme → 거래 금지
+        elif vpin >= 0.5:
+            vpin_size_mult = 0.25
+        elif vpin >= 0.3:
+            vpin_size_mult = 0.5
+        else:
+            vpin_size_mult = 1.0
 
+        # Hurst Regime (데드존 세분화)
+        hurst_size_mult = 1.0
         if hurst_available:
-            regime = "random_walk"
             if hurst > self.hurst_momentum:
                 regime = "momentum"
             elif hurst < self.hurst_mean_revert:
                 regime = "mean_revert"
-
-            if regime == "random_walk":
-                return None  # 랜덤워크 → 거래 금지
+            elif 0.45 <= hurst <= 0.55:
+                regime = "dead_zone"
+                hurst_size_mult = 0.25  # 랜덤워크 → 0.25x (차단 대신 축소)
+            else:
+                regime = "neutral"
+                hurst_size_mult = 0.5
         else:
-            # Hurst 미계산 (5분봉 부족) → 양쪽 시그널 다 허용
             regime = "both"
 
-        # ── 5. Microstructure Regime → confidence multiplier ──
+        # ── 6. Microstructure Regime → confidence multiplier ──
         micro_conf = self._calc_micro_confidence(features)
         if micro_conf < self.min_micro_confidence:
             return None
 
-        # ── 6. Z-Score 정규화 ──
+        # ── 7. Z-Score 정규화 ──
         raw_features = {
             "ofi": features.get("ofi", 0),
             "book_imbalance": features.get("book_imbalance", 0),
@@ -127,22 +160,51 @@ class ScalpDetector:
         }
         z_features = self._normalizer.update_all(raw_features)
 
-        # ── 7. Signal Check ──
+        # ── 8. Signal Check (앙상블: Burst + OU + CVD) ──
+        signals_found = []
+
+        # Signal A: Burst (momentum / both / neutral / dead_zone)
+        if regime in ("momentum", "both", "neutral", "dead_zone"):
+            burst_sig = self._check_burst(features, z_features, price)
+            if burst_sig:
+                signals_found.append(burst_sig)
+
+        # Signal B: OU Z-Score 평균회귀 (mean_revert / both / neutral / dead_zone)
+        if regime in ("mean_revert", "both", "neutral", "dead_zone"):
+            ou_sig = self._check_ou_reversion(features, z_features, price)
+            if ou_sig:
+                signals_found.append(ou_sig)
+
+        # 앙상블 합의 — 복수 시그널 있으면 방향 일치 확인
         signal = None
-        if regime in ("momentum", "both"):
-            signal = self._check_burst(features, z_features, price)
-        if signal is None and regime in ("mean_revert", "both"):
-            signal = self._check_vwap_snap(features, z_features, price)
+        if len(signals_found) == 0:
+            pass
+        elif len(signals_found) == 1:
+            signal = signals_found[0]
+        else:
+            # 2개 이상: 방향 일치 → 강화, 불일치 → 차단
+            dirs = [s["direction"] for s in signals_found]
+            if len(set(dirs)) == 1:
+                # 합의 → 가장 강한 시그널 + 보너스
+                signal = max(signals_found, key=lambda s: s["strength"])
+                signal["strength"] = min(3.0, signal["strength"] + 0.5)
+                signal["ensemble_agree"] = True
+            else:
+                signal = None  # 불일치 → 차단
 
         if signal is None:
             return None
 
-        # ── 8. Build result ──
+        # ── 9. Build result (VPIN/Hurst 사이즈 배수 포함) ──
+        combined_size_mult = round(vpin_size_mult * hurst_size_mult * micro_conf, 4)
         signal["price"] = price
         signal["regime"] = regime
         signal["hurst"] = round(hurst, 4)
         signal["vpin"] = round(vpin, 4)
         signal["micro_confidence"] = round(micro_conf, 2)
+        signal["vpin_size_mult"] = vpin_size_mult
+        signal["hurst_size_mult"] = hurst_size_mult
+        signal["combined_size_mult"] = combined_size_mult
         signal["features"] = {
             **{f"z_{k}": round(v, 4) for k, v in z_features.items()},
             "ofi_raw": round(features.get("ofi", 0), 4),
@@ -230,50 +292,42 @@ class ScalpDetector:
 
         return {"type": "micro_burst", "direction": direction, "strength": round(strength, 2)}
 
-    def _check_vwap_snap(self, feat: dict, z_feat: dict, price: float) -> dict | None:
-        """Signal B: VWAP Snap (평균회귀)"""
-        vwap_dev = feat.get("vwap_deviation", 0)
+    def _check_ou_reversion(self, feat: dict, z_feat: dict, price: float) -> dict | None:
+        """Signal B: OU Z-Score 평균회귀 (Uhlenbeck & Ornstein 1930)
+        z < -2.0 → long (과매도), z > +2.0 → short (과매수)
+        """
+        ou_z = feat.get("ou_zscore", 0)
 
-        if abs(vwap_dev) < self.snap_min_vwap_dev:
+        if abs(ou_z) < self.ou_entry_z:
             return None
 
-        # 방향: VWAP 위→short (과매수 회귀), VWAP 아래→long (과매도 회귀)
-        direction = "short" if vwap_dev > 0 else "long"
+        direction = "long" if ou_z < 0 else "short"
 
-        # Delta divergence 확인
-        delta_div = feat.get("delta_div", 0)
-        if direction == "long" and delta_div != 1:
-            return None
-        if direction == "short" and delta_div != -1:
-            return None
-
-        # Absorption 확인
-        absorption = feat.get("absorption_score", 0)
-        absorption_dir = feat.get("absorption_dir", "neutral")
-        if absorption < self.snap_min_absorption:
-            return None
-        if absorption_dir != direction:
-            return None
-
-        # Book imbalance 확인
+        # Book imbalance 확인 (회귀 방향 지지)
         book_imbal = feat.get("book_imbalance", 0)
-        if direction == "long" and book_imbal < self.snap_min_book_imbal:
+        if direction == "long" and book_imbal < 0.10:
             return None
-        if direction == "short" and book_imbal > -self.snap_min_book_imbal:
+        if direction == "short" and book_imbal > -0.10:
             return None
 
-        # 스프레드 더 타이트하게
+        # Delta divergence 추가 확인 (있으면 보너스)
+        delta_div = feat.get("delta_div", 0)
+
+        # 스프레드 타이트
         if feat.get("spread", 999) > 1.5:
             return None
 
         strength = 1.0
-        if abs(vwap_dev) > 0.20:
-            strength += 0.5
-        cvd_5m = feat.get("cvd_5m", 0)
-        if (direction == "long" and cvd_5m > 0) or (direction == "short" and cvd_5m < 0):
+        if abs(ou_z) > 3.0:
+            strength += 0.5  # 극단 이탈
+        if (direction == "long" and delta_div == 1) or (direction == "short" and delta_div == -1):
+            strength += 0.3  # CVD 다이버전스 확인
+        # Absorption 보너스
+        absorption = feat.get("absorption_score", 0)
+        if absorption >= 1.0 and feat.get("absorption_dir", "") == direction:
             strength += 0.3
 
-        return {"type": "vwap_snap", "direction": direction, "strength": round(strength, 2)}
+        return {"type": "ou_reversion", "direction": direction, "strength": round(strength, 2)}
 
     def _calc_micro_confidence(self, feat: dict) -> float:
         """마이크로스트럭처 레짐 → 신뢰도 배수 (0.0~1.0)"""
@@ -343,6 +397,9 @@ class ScalpDetector:
             funding_str = await self.redis.get("rt:funding:BTC-USDT-SWAP")
             whale_str = await self.redis.get("flow:combined:whale_bias")
             cvd_str = await self.redis.get("flow:combined:cvd_5m")
+            ou_z_str = await self.redis.get("rt:micro:ou_zscore")
+            resilience_str = await self.redis.get("rt:micro:book_resilience")
+            depth_shock_str = await self.redis.get("rt:micro:depth_shock")
 
             # VWAP (JSON)
             vwap_str = await self.redis.get("rt:micro:vwap")
@@ -384,6 +441,9 @@ class ScalpDetector:
                 "funding_rate": float(funding_str) if funding_str else 0,
                 "whale_bias": float(whale_str) if whale_str else 0,
                 "cvd_5m": float(cvd_str) if cvd_str else 0,
+                "ou_zscore": float(ou_z_str) if ou_z_str else 0,
+                "book_resilience": float(resilience_str) if resilience_str else 1.0,
+                "depth_shock": depth_shock_str == "1" if depth_shock_str else False,
                 "vwap_deviation": vwap_dev,
                 "absorption_score": abs_score,
                 "absorption_dir": abs_dir,

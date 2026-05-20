@@ -1,12 +1,13 @@
 # Commit Log
 
 > 자동 생성 — `scripts/update_commit_log.sh` (매 커밋 후 실행)
-> Updated: 2026-05-20 09:55:55    
-> Total commits: 360 (2026-04-03 → 2026-05-20)
+> Updated: 2026-05-20 09:59:26    
+> Total commits: 361 (2026-04-03 → 2026-05-20)
 
 Claude 가 질문/변경 작업 시 이 파일을 참고해서 과거 변경 이력 컨텍스트를 확보합니다. 수동 편집 금지 — 다음 커밋 시 덮어써집니다.
 
 ## 2026-05-20
+- `b8adef16` fix: Hurst 미계산 시 Regime Gate 우회 + 디버그 로그 추가
 - `10a51d9d` docs: 명세서 v3 업데이트 — SPEC/CLAUDE/CHANGELOG/MANUAL/AUDIT
 - `e33f6423` fix: 전수검사 — dashboard/telegram/logger/position_manager 클린업
 - `50af961d` feat: ScalpEngine v3 — 마이크로스트럭처 스캘핑 엔진 전면 재설계

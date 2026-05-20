@@ -75,6 +75,15 @@ class WebSocketStream:
         self._ofi_accumulator = 0.0
         self._ofi_reset_ts = 0
 
+        # Book Resilience (Kyle 1985, Foucault et al. 2013)
+        self._depth_ewma = 0.0
+        self._depth_ewma_alpha = 0.15
+        self._depth_initialized = False
+
+        # OU Z-Score (Uhlenbeck & Ornstein 1930, Elliott et al. 2005)
+        self._ou_prices: deque = deque(maxlen=200)  # 5초 간격 가격
+        self._ou_last_sample = 0
+
         # Hurst / Parkinson — 5분봉 캐시
         self._candle_5m_cache: deque = deque(maxlen=60)
 
@@ -285,6 +294,13 @@ class WebSocketStream:
         # CVD/Whale → Binance Futures WS로 이관 (binance_stream.py)
         # OKX trades는 마이크로스트럭처 + 속도 계산에만 사용
 
+        # OU Z-Score 샘플링 (5초 간격)
+        if now_f - self._ou_last_sample >= 5 and price > 0:
+            self._ou_last_sample = now_f
+            self._ou_prices.append(price)
+            if len(self._ou_prices) >= 30:
+                await self._compute_ou_zscore()
+
         # 마이크로스트럭처 (2초마다 Redis flush)
         if now_f - self._last_micro_flush >= 2:
             self._last_micro_flush = now_f
@@ -431,12 +447,75 @@ class WebSocketStream:
 
             self._prev_bids = bid_sizes
             self._prev_asks = ask_sizes
+
+            # ── Book Resilience (EWMA depth tracking) ──
+            total_depth = bid_total + ask_total
+            if not self._depth_initialized:
+                self._depth_ewma = total_depth
+                self._depth_initialized = True
+            else:
+                self._depth_ewma = (self._depth_ewma_alpha * total_depth +
+                                    (1 - self._depth_ewma_alpha) * self._depth_ewma)
+
+            resilience = min(2.0, total_depth / max(self._depth_ewma, 1e-10)) / 2.0
+            depth_shock = total_depth < self._depth_ewma * 0.7
+
+            await self.redis.set("rt:micro:book_resilience", str(round(resilience, 4)), ttl=15)
+            if depth_shock:
+                await self.redis.set("rt:micro:depth_shock", "1", ttl=30)
+            else:
+                await self.redis.set("rt:micro:depth_shock", "0", ttl=30)
+
         except Exception:
             pass
 
     # ══════════════════════════════════════════
     #  마이크로스트럭처 집계 (2초마다)
     # ══════════════════════════════════════════
+
+    async def _compute_ou_zscore(self):
+        """Ornstein-Uhlenbeck Z-Score (Elliott et al. 2005)
+        X_{t+1} - X_t = a + b*X_t + ε → μ = -a/b, σ = std(ε)/√(-2b)
+        """
+        try:
+            import numpy as np
+            prices = np.array(list(self._ou_prices))
+            if len(prices) < 30:
+                return
+
+            # OLS: ΔX = a + b*X_{t-1}
+            x = prices[:-1]
+            dx = np.diff(prices)
+            n = len(dx)
+            sx = np.sum(x)
+            sy = np.sum(dx)
+            sxy = np.sum(x * dx)
+            sxx = np.sum(x * x)
+
+            denom = n * sxx - sx * sx
+            if abs(denom) < 1e-10:
+                return
+
+            b = (n * sxy - sx * sy) / denom
+            a = (sy - b * sx) / n
+
+            if b >= 0:
+                # b >= 0 → 비정상 (mean-reverting 아님)
+                await self.redis.set("rt:micro:ou_zscore", "0.0", ttl=30)
+                return
+
+            mu = -a / b  # 평균 회귀 수준
+            residuals = dx - (a + b * x)
+            sigma = float(np.std(residuals))
+            ou_sigma = sigma / math.sqrt(-2 * b) if -2 * b > 1e-10 else sigma
+
+            z = (prices[-1] - mu) / ou_sigma if ou_sigma > 1e-10 else 0
+            z = max(-5.0, min(5.0, z))
+
+            await self.redis.set("rt:micro:ou_zscore", str(round(z, 4)), ttl=30)
+            await self.redis.set("rt:micro:ou_mu", str(round(mu, 1)), ttl=30)
+        except Exception as e:
+            logger.debug(f"OU Z-Score 계산 실패: {e}")
 
     async def _compute_regime_features(self):
         """5분봉에서 Hurst Exponent + Parkinson Volatility 계산 → Redis"""
