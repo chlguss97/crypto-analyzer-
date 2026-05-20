@@ -551,7 +551,7 @@ async def get_engine_state():
 async def get_regime():
     """현재 마켓 레짐 조회"""
     await _ensure_initialized()
-    regime_detail = await redis.get_json("sys:regime_detail")
+    regime_detail = await redis.get_json("sys:trade_state")
     regime = await redis.get("sys:regime") or "ranging"
 
     if not regime_detail:
@@ -570,7 +570,7 @@ async def get_engine_overview():
     symbol = config["exchange"]["symbol"]
 
     # 1) regime
-    regime_detail = await redis.get_json("sys:regime_detail")
+    regime_detail = await redis.get_json("sys:trade_state")
     regime = await redis.get("sys:regime") or "ranging"
     if not regime_detail:
         regime_detail = {"regime": regime, "confidence": 0, "scores": {}}

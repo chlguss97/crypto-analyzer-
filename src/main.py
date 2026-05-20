@@ -194,6 +194,31 @@ class ScalpEngine:
         if self._trades_this_hour >= self.max_trades_per_hour:
             return
 
+        # ── Redis 상태 갱신 (텔레그램/대시보드용, 30초마다) ──
+        if now - getattr(self, "_last_state_flush", 0) >= 30:
+            self._last_state_flush = now
+            try:
+                hurst_val = await self.redis.get("rt:regime:hurst")
+                vpin_val = await self.redis.get("rt:micro:vpin")
+                regime = "scalp"
+                if hurst_val:
+                    h = float(hurst_val)
+                    if h > 0.6: regime = "momentum"
+                    elif h < 0.4: regime = "mean_revert"
+                    elif 0.45 <= h <= 0.55: regime = "dead_zone"
+                    else: regime = "neutral"
+                await self.redis.set("sys:regime", regime, ttl=60)
+                await self.redis.set("sys:trade_state", json.dumps({
+                    "mode": "shadow" if self.shadow_mode else "live",
+                    "regime": regime,
+                    "hurst": hurst_val or "N/A",
+                    "vpin": vpin_val or "N/A",
+                    "streak": self.risk_manager.get_streak(),
+                    "trades_hour": self._trades_this_hour,
+                }), ttl=60)
+            except Exception:
+                pass
+
         # ── 시그널 감지 ──
         signal = await self.scalp_detector.evaluate()
         if not signal:

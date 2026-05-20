@@ -141,14 +141,16 @@ class TelegramNotifier:
                 f"ML: Phase {ml_phase} ({ml_labeled}건 labeled)"
             )
 
-            # PaperLab 요약
+            # 스캘핑 상태
             if self.redis:
-                lab = await self.redis.get_json("lab:stats")
-                if lab and isinstance(lab, dict):
-                    total = lab.get("total_trades", 0)
-                    best = lab.get("best")
-                    best_str = f"{best['name']}(EV {best['ev']:+.1f})" if best else "데이터 부족"
-                    text += f"\n\nLab: {total}건 | Best: {best_str}"
+                ts = await self.redis.get_json("sys:trade_state")
+                if ts and isinstance(ts, dict):
+                    text += (
+                        f"\n\nMode: {ts.get('mode', '?')}"
+                        f" | Hurst: {ts.get('hurst', 'N/A')}"
+                        f" | VPIN: {ts.get('vpin', 'N/A')}"
+                        f" | Trades/h: {ts.get('trades_hour', 0)}"
+                    )
 
             await self._send(text)
         except Exception as e:
@@ -384,26 +386,7 @@ class TelegramNotifier:
             if not self.redis:
                 return await self._send("\u26a0\ufe0f Redis 미연결")
 
-            lab_raw = await self.redis.get("lab:stats")
-            if not lab_raw:
-                return await self._send("\U0001f9ea <b>PaperLab</b>\n\n데이터 없음")
-
-            lab = json.loads(lab_raw) if isinstance(lab_raw, str) else lab_raw
-            variants = lab.get("variants", [])
-            best = lab.get("best")
-
-            text = "\U0001f9ea <b>PaperLab A/B Test</b>\n\n"
-            for v in variants:
-                marker = " \u2b50" if best and v["name"] == best.get("name") else ""
-                text += (
-                    f"<b>{v['name']}</b> (ATR\u00d7{v['atr_mult']}, SL{v['sl_pct']}%){marker}\n"
-                    f"  {v['trades']}건 | WR {v['win_rate']}% | EV {v['ev']:+.1f}%\n"
-                )
-
-            if best:
-                text += f"\n\U0001f3c6 Best: <b>{best['name']}</b> (EV {best['ev']:+.1f}%)"
-
-            await self._send(text)
+            await self._send("\U0001f9ea <b>PaperLab</b>\n\nv3에서 제거됨. Shadow 모드로 대체.")
         except Exception as e:
             await self._send(f"\u26a0\ufe0f Lab 조회 실패: {e}")
 
