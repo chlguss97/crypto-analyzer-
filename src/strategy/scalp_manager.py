@@ -305,26 +305,8 @@ class ScalpManager:
             await self._close_and_finalize(pos, "sl_failsafe", hold_sec)
             return
 
-        # ── 3. 시간 정지 ──
-        margin_pct = self._calc_margin_pct(pos, current_price)
-
-        if hold_sec >= self.time_stop_max_sec:
-            logger.info(f"[SCALP] 시간 정지 (최대 {self.time_stop_max_sec}초)")
-            reason = "time_profit" if margin_pct > 0 else "time_loss"
-            await self._close_and_finalize(pos, reason, hold_sec)
-            return
-
-        if hold_sec >= self.time_stop_sec:
-            if margin_pct >= 0:
-                logger.info(f"[SCALP] 시간 정지 (수익/본전 {margin_pct:+.1f}%)")
-                await self._close_and_finalize(pos, "time_profit", hold_sec)
-                return
-            if margin_pct <= -self.time_stop_loss_margin_pct:
-                logger.info(f"[SCALP] 시간 정지 (손실 {margin_pct:.1f}% > 한도)")
-                await self._close_and_finalize(pos, "time_loss", hold_sec)
-                return
-
-        # ── 4. SL Self-Heal (5초 간격) ──
+        # ── 3. SL Self-Heal (5초 간격) ──
+        # 시간 정지 없음 — 프로 동일 (SL/TP/시그널반전으로만 청산)
         sl_id = pos.algo_ids.get("sl")
         if sl_id and (now - pos._last_sl_verify) >= 5:
             pos._last_sl_verify = now
