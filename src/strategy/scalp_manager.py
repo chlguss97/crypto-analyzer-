@@ -58,9 +58,10 @@ class ScalpManager:
         self.telegram = telegram
         cfg = (config or {}).get("scalp", {})
 
-        self.tp_pct = cfg.get("tp_price_pct", 0.20) / 100  # 0.002
-        self.sl_pct = cfg.get("sl_price_pct", 0.15) / 100  # 0.0015 (fallback)
+        self.tp_pct = cfg.get("tp_price_pct", 0.20) / 100  # fallback
+        self.sl_pct = cfg.get("sl_price_pct", 0.15) / 100  # fallback
         self.sl_k = cfg.get("sl_k_vol", 2.0)  # 동적 SL: k × Parkinson Vol
+        self.tp_k = cfg.get("tp_k_vol", 2.0)  # 동적 TP: k × Parkinson Vol (SL과 대칭)
         self.time_stop_sec = cfg.get("time_stop_sec", 180)
         self.time_stop_max_sec = cfg.get("time_stop_max_sec", 300)
         self.time_stop_loss_margin_pct = cfg.get("time_stop_loss_margin_pct", 1.5)
@@ -97,16 +98,16 @@ class ScalpManager:
         size = math.floor(raw_size / MIN_ORDER_SIZE_BTC) * MIN_ORDER_SIZE_BTC
         size = max(round(size, 4), MIN_ORDER_SIZE_BTC)
 
-        # 동적 SL (k × Parkinson Vol) — Parkinson (1980)
+        # 동적 SL/TP (k × Parkinson Vol) — Parkinson (1980)
         parkinson_vol_str = await self.redis.get("rt:micro:parkinson_vol")
         if parkinson_vol_str and float(parkinson_vol_str) > 0:
             p_vol = float(parkinson_vol_str)
             sl_dist_pct = min(max(self.sl_k * p_vol, 0.001), 0.005)  # 0.1% ~ 0.5%
+            tp_dist_pct = min(max(self.tp_k * p_vol, 0.001), 0.005)  # 동적 TP (대칭)
         else:
-            sl_dist_pct = self.sl_pct  # fallback 0.15%
+            sl_dist_pct = self.sl_pct
+            tp_dist_pct = self.tp_pct
 
-        # TP/SL 계산
-        tp_dist_pct = self.tp_pct
         # RR 최소 1.0 보장
         if tp_dist_pct < sl_dist_pct:
             tp_dist_pct = sl_dist_pct

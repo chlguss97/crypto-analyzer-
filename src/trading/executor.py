@@ -615,8 +615,8 @@ class OrderExecutor:
 
         # 긴급 사유 → market (SL은 체결이 최우선, 수수료 < 미체결 손실)
         URGENT_REASONS = (
-            "sl_failsafe", "sl_hit", "sl_repeated_loss", "kill_switch",
-            "kill_switch_dashboard", "manual_sl_failed", "emergency",
+            "sl_failsafe", "sl_hit", "sl_repeated_loss", "signal_reversal",
+            "kill_switch", "kill_switch_dashboard", "manual_sl_failed", "emergency",
         )
         is_urgent = any(u in reason for u in URGENT_REASONS)
 
