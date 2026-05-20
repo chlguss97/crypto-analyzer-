@@ -27,8 +27,8 @@ redis = { version = "0.27", features = ["tokio-comp", "aio"] }
 rusqlite = { version = "0.32", features = ["bundled"] }
 
 # ML / Deep Learning
-burn = { version = "0.15", features = ["train", "ndarray"] }
-burn-ndarray = "0.15"
+burn = { version = "0.20", features = ["train", "ndarray"] }
+burn-ndarray = "0.20"
 
 # Math
 ndarray = "0.16"

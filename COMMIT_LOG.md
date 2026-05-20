@@ -1,12 +1,13 @@
 # Commit Log
 
 > 자동 생성 — `scripts/update_commit_log.sh` (매 커밋 후 실행)
-> Updated: 2026-05-20 17:13:19    
-> Total commits: 386 (2026-04-03 → 2026-05-20)
+> Updated: 2026-05-20 17:14:51    
+> Total commits: 387 (2026-04-03 → 2026-05-20)
 
 Claude 가 질문/변경 작업 시 이 파일을 참고해서 과거 변경 이력 컨텍스트를 확보합니다. 수동 편집 금지 — 다음 커밋 시 덮어써집니다.
 
 ## 2026-05-20
+- `5370fcf1` fix: Rust nightly (burn 의존성 1.88+ 요구)
 - `c49ee34f` fix: Rust 1.80→1.85 (burn edition2024 요구)
 - `a2793ced` fix: config/ 디렉토리 추가 (Docker COPY 에러)
 - `169741ef` feat: ScalpEngine v4 — 100% Rust + Burn 초기 구현
