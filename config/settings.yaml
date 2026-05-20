@@ -14,7 +14,7 @@ timeframes:
 
 # ── 스캘핑 설정 ──
 scalp:
-  shadow_mode: true                 # true=Shadow only, false=실거래
+  shadow_mode: false                # 실거래 활성 (2026-05-20 Shadow 307건 WR 57%)
   leverage: 20
   margin_pct: 0.80
   tp_price_pct: 0.20               # +0.20% = +4% 마진 (at 20x)
