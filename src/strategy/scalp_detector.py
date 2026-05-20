@@ -101,9 +101,10 @@ class ScalpDetector:
         if self._warmup_count < self._warmup_threshold:
             return None
 
-        # ── 4. Spread filter ──
+        # ── 4. Spread filter (bps 변환 후 z-score — 프로 동일) ──
         spread = features.get("spread", 999)
-        if spread > self.max_spread:
+        spread_bps = spread / price * 10000 if price > 0 else 999
+        if spread_bps > 3.0:  # 3 bps 이상 → 극단 스프레드, 무조건 차단
             return None
 
         # ── 4.5. Book Shock 방어 (30% 깊이 급감) ──
@@ -148,6 +149,7 @@ class ScalpDetector:
             return None
 
         # ── 7. Z-Score 정규화 (프로: 모든 피처를 상대값으로) ──
+        price_for_bps = price if price > 0 else 1
         raw_features = {
             "ofi": features.get("ofi", 0),
             "book_imbalance": features.get("book_imbalance", 0),
@@ -159,6 +161,8 @@ class ScalpDetector:
             "cvd_5m": features.get("cvd_5m", 0),
             "move_10s": features.get("move_10s", 0),
             "move_30s": features.get("move_30s", 0),
+            "spread_bps": features.get("spread", 0) / price_for_bps * 10000,  # $ → bps
+            "absorption": features.get("absorption_score", 0),
         }
         z_features = self._normalizer.update_all(raw_features)
 
@@ -290,12 +294,12 @@ class ScalpDetector:
         if feat.get("trade_burst", 0) < self.burst_min_trade_burst:
             return None
 
-        # BS ratio 5s 확인
-        bs_5s = feat.get("bs_ratio_5s", 0.5)
-        if direction == "long" and bs_5s < self.burst_min_bs_5s:
-            return None
-        if direction == "short" and bs_5s > (1 - self.burst_min_bs_5s):
-            return None
+        # BS ratio 5s z-score (프로: 상대값)
+        z_bs5 = z_feat.get("bs_ratio_5s", 0)
+        if direction == "long" and z_bs5 < 0.5:
+            return None  # 매수 쏠림이 평소 대비 약함
+        if direction == "short" and z_bs5 > -0.5:
+            return None  # 매도 쏠림이 평소 대비 약함
 
         # 소진 필터: 60s 이동이 10s 이동의 3배 이상 → 이미 큰 움직임 후 추격
         if abs_30s > 0 and abs(move_60s) > abs_30s * 3:
@@ -317,6 +321,7 @@ class ScalpDetector:
     def _check_ou_reversion(self, feat: dict, z_feat: dict, price: float) -> dict | None:
         """Signal B: OU Z-Score 평균회귀 (Uhlenbeck & Ornstein 1930)
         z < -2.0 → long (과매도), z > +2.0 → short (과매수)
+        모든 확인 조건도 z-score 상대값 (프로 동일)
         """
         ou_z = feat.get("ou_zscore", 0)
 
@@ -325,28 +330,29 @@ class ScalpDetector:
 
         direction = "long" if ou_z < 0 else "short"
 
-        # Book imbalance 확인 (회귀 방향 지지)
-        book_imbal = feat.get("book_imbalance", 0)
-        if direction == "long" and book_imbal < 0.10:
-            return None
-        if direction == "short" and book_imbal > -0.10:
-            return None
+        # Book imbalance z-score (프로: 상대값)
+        z_imbal = z_feat.get("book_imbalance", 0)
+        if direction == "long" and z_imbal < 0.3:
+            return None  # 매수 호가 우위가 평소 대비 약함
+        if direction == "short" and z_imbal > -0.3:
+            return None  # 매도 호가 우위가 평소 대비 약함
 
-        # Delta divergence 추가 확인 (있으면 보너스)
+        # Delta divergence 보너스
         delta_div = feat.get("delta_div", 0)
 
-        # 스프레드 타이트
-        if feat.get("spread", 999) > 1.5:
-            return None
+        # 스프레드 z-score (프로: bps 상대값)
+        z_spread = z_feat.get("spread_bps", 0)
+        if z_spread > 2.0:
+            return None  # 스프레드가 평소 대비 2σ 이상 벌어짐
 
         strength = 1.0
         if abs(ou_z) > 3.0:
-            strength += 0.5  # 극단 이탈
+            strength += 0.5
         if (direction == "long" and delta_div == 1) or (direction == "short" and delta_div == -1):
-            strength += 0.3  # CVD 다이버전스 확인
-        # Absorption 보너스
-        absorption = feat.get("absorption_score", 0)
-        if absorption >= 1.0 and feat.get("absorption_dir", "") == direction:
+            strength += 0.3
+        # Absorption z-score 보너스
+        z_abs = z_feat.get("absorption", 0)
+        if abs(z_abs) > 1.0 and feat.get("absorption_dir", "") == direction:
             strength += 0.3
 
         return {"type": "ou_reversion", "direction": direction, "strength": round(strength, 2)}
