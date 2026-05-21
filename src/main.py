@@ -147,6 +147,14 @@ class ScalpEngine:
         except Exception as e:
             logger.warning(f"5분봉 캐시 초기화 실패: {e}")
 
+        # 재시작 시 거래소 포지션 복원 (나체 포지션 방지)
+        try:
+            recovered = await self.scalp_manager.recover_position()
+            if recovered:
+                logger.info("[STARTUP] 기존 포지션 복원 완료 — SL/TP 유지")
+        except Exception as e:
+            logger.error(f"[STARTUP] 포지션 복원 실패: {e}")
+
         mode = "SHADOW" if self.shadow_mode else "LIVE"
         logger.info(f"스캘핑 모드: {mode}")
 
@@ -597,14 +605,15 @@ class ScalpEngine:
             await asyncio.sleep(60)
 
     async def periodic_orphan_algo_sweeper(self):
-        # 시작 직후 즉시 1회 정리 (재시작 시 고아 알고 즉시 제거)
-        await asyncio.sleep(5)
-        try:
-            cleaned = await self.executor.cancel_all_algos()
-            if cleaned:
-                logger.warning(f"시작 시 고아 알고 {len(cleaned)}개 정리")
-        except Exception:
-            pass
+        # 시작 직후: 포지션 없을 때만 고아 알고 정리 (포지션 복원 후 실행)
+        await asyncio.sleep(10)
+        if not self.scalp_manager.has_position():
+            try:
+                cleaned = await self.executor.cancel_all_algos()
+                if cleaned:
+                    logger.warning(f"시작 시 고아 알고 {len(cleaned)}개 정리")
+            except Exception:
+                pass
 
         while self._running:
             await asyncio.sleep(120)

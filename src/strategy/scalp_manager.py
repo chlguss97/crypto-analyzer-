@@ -75,6 +75,117 @@ class ScalpManager:
         return self.position is not None
 
     # ══════════════════════════════════════════
+    #  시작 시 포지션 복원
+    # ══════════════════════════════════════════
+
+    async def recover_position(self) -> bool:
+        """봇 재시작 시 거래소 포지션 + Redis 정보로 ScalpPosition 복원.
+        반환: True면 포지션 복원됨 (고아 알고 정리 스킵해야 함)"""
+        if self.position:
+            return True
+
+        # 1. 거래소에 실제 포지션 있는지 확인
+        try:
+            positions = await self.executor.get_positions()
+            active = [p for p in positions if abs(float(p.get("size") or 0)) > 0]
+            if not active:
+                return False
+        except Exception as e:
+            logger.warning(f"포지션 복원 조회 실패: {e}")
+            return False
+
+        ex_pos = active[0]
+        direction = ex_pos["direction"]
+        entry_price = float(ex_pos.get("entry_price") or 0)
+        size_contracts = abs(float(ex_pos.get("size") or 0))
+
+        # contracts → BTC 변환
+        try:
+            cs = float(self.executor.exchange.market(self.symbol).get("contractSize", 0.01))
+        except Exception:
+            cs = 0.01
+        size_btc = size_contracts * cs
+
+        # 2. Redis에서 SL/TP/entry_time 복원
+        redis_data = await self.redis.hgetall(f"pos:active:{self.symbol}")
+        sl_price = float(redis_data.get("sl_price", 0)) if redis_data else 0
+        tp_price = float(redis_data.get("tp_price", 0)) if redis_data else 0
+        entry_time = float(redis_data.get("entry_time", time.time())) if redis_data else time.time()
+        trade_id = int(redis_data.get("trade_id", 0)) if redis_data else 0
+
+        # SL/TP 없으면 기본값 계산
+        if sl_price <= 0:
+            sl_dist = entry_price * self.sl_pct if entry_price > 0 else 100
+            sl_price = entry_price + sl_dist if direction == "short" else entry_price - sl_dist
+        if tp_price <= 0:
+            tp_dist = entry_price * self.tp_pct if entry_price > 0 else 100
+            tp_price = entry_price - tp_dist if direction == "short" else entry_price + tp_dist
+
+        pos = ScalpPosition(
+            trade_id=trade_id,
+            signal_id=0,
+            direction=direction,
+            entry_price=entry_price,
+            size=size_btc,
+            leverage=int(float(ex_pos.get("leverage") or self.leverage)),
+            sl_price=sl_price,
+            tp_price=tp_price,
+            entry_time=entry_time,
+        )
+        pos.best_price = entry_price
+        pos.worst_price = entry_price
+        self.position = pos
+
+        # 3. SL/TP 알고가 거래소에 살아있는지 확인
+        try:
+            inst_id = self.executor.exchange.market(self.symbol)["id"]
+            resp = await self.executor.exchange.private_get_trade_orders_algo_pending(
+                {"instType": "SWAP", "instId": inst_id, "ordType": "trigger"}
+            )
+            pending = resp.get("data", []) if isinstance(resp, dict) else []
+            has_sl = any("sl" in (p.get("algoClOrdId") or "") for p in pending)
+            has_tp = any("tp" in (p.get("algoClOrdId") or "") for p in pending)
+
+            if has_sl:
+                # 기존 SL 알고 ID 복원
+                for p in pending:
+                    cid = p.get("algoClOrdId") or ""
+                    if "sl" in cid:
+                        pos.algo_ids["sl"] = p.get("algoId") or cid
+                        break
+
+            if has_tp:
+                for p in pending:
+                    cid = p.get("algoClOrdId") or ""
+                    if "tp" in cid:
+                        pos.algo_ids["tp"] = p.get("algoId") or cid
+                        break
+
+            # SL 없으면 재등록
+            if not has_sl:
+                sl_id = await self.executor.set_stop_loss(direction, size_btc, sl_price)
+                pos.algo_ids["sl"] = sl_id
+                logger.warning(f"포지션 복원: SL 재등록 @ ${sl_price:.1f}")
+
+            # TP 없으면 재등록
+            if not has_tp:
+                tp_id = await self.executor.set_take_profit(direction, size_btc, tp_price)
+                pos.algo_ids["tp"] = tp_id
+                logger.warning(f"포지션 복원: TP 재등록 @ ${tp_price:.1f}")
+
+        except Exception as e:
+            logger.error(f"포지션 복원 SL/TP 확인 실패: {e}")
+            # 최소한 SL은 등록
+            sl_id = await self.executor.set_stop_loss(direction, size_btc, sl_price)
+            pos.algo_ids["sl"] = sl_id
+
+        logger.info(
+            f"[SCALP] 포지션 복원: {direction.upper()} @ ${entry_price:.0f} | "
+            f"{size_btc} BTC | TP ${tp_price:.0f} SL ${sl_price:.0f}"
+        )
+        return True
+
+    # ══════════════════════════════════════════
     #  진입
     # ══════════════════════════════════════════
 
