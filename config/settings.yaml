@@ -22,7 +22,7 @@ grid:
   rebalance_sec: 3600               # 1시간마다 ATR 재계산
   drift_rebalance_pct: 150          # 가격이 범위 150% 벗어나면 리밸런스 (자주 안 하게)
   hurst_pause: 0.70                 # Hurst > 0.7 → 그리드 일시정지
-  monitor_sec: 3                    # 3초마다 주문 체크
+  monitor_sec: 1                    # 1초마다 주문 체크
   atr_period: 14                    # ATR 14기간
   atr_timeframe: "5m"               # 5분봉
 
