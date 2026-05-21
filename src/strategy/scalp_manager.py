@@ -62,9 +62,6 @@ class ScalpManager:
         self.sl_pct = cfg.get("sl_price_pct", 0.15) / 100  # fallback
         self.sl_k = cfg.get("sl_k_vol", 2.0)  # 동적 SL: k × Parkinson Vol
         self.tp_k = cfg.get("tp_k_vol", 2.0)  # 동적 TP: k × Parkinson Vol (SL과 대칭)
-        self.time_stop_sec = cfg.get("time_stop_sec", 180)
-        self.time_stop_max_sec = cfg.get("time_stop_max_sec", 300)
-        self.time_stop_loss_margin_pct = cfg.get("time_stop_loss_margin_pct", 1.5)
         self.leverage = cfg.get("leverage", 20)
         self.margin_pct = cfg.get("margin_pct", 0.80)
 
@@ -189,8 +186,7 @@ class ScalpManager:
     #  진입
     # ══════════════════════════════════════════
 
-    async def open_scalp(self, signal: dict, balance: float,
-                         streak_mult: float = 1.0) -> ScalpPosition | None:
+    async def open_scalp(self, signal: dict, balance: float) -> ScalpPosition | None:
         """시그널 → OKX 주문 → SL/TP 등록 → ScalpPosition 반환"""
         if self.position:
             return None
@@ -198,11 +194,11 @@ class ScalpManager:
         direction = signal["direction"]
         price = signal["price"]
 
-        # VPIN/Hurst 기반 사이즈 배수
+        # VPIN/Hurst 기반 사이즈 배수 (프로: VPIN×Hurst×micro_conf 캐스케이드)
         combined_size_mult = signal.get("combined_size_mult", 1.0)
 
-        # 사이즈 계산 (VPIN + Hurst + streak 반영)
-        margin = balance * self.margin_pct * streak_mult * combined_size_mult
+        # 사이즈 계산
+        margin = balance * self.margin_pct * combined_size_mult
         if margin <= 0:
             return None
         raw_size = margin * self.leverage / price
@@ -375,7 +371,7 @@ class ScalpManager:
     # ══════════════════════════════════════════
 
     async def check_position(self, current_price: float):
-        """시간정지 + SL failsafe + SL self-heal + 외부 청산 감지"""
+        """SL failsafe + SL self-heal + 외부 청산 감지 (시간정지 없음 — 프로 원문)"""
         pos = self.position
         if not pos:
             return
