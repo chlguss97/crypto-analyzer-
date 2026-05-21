@@ -1,416 +1,89 @@
 """
-ML DecisionEngine — Meta-Label Go/NoGo 분류기
+ModelManager — LSTM 모델 관리 (프로 원문 일치)
 
-역할: "이 후보를 실행하면 돈을 버는가?" → Yes(1) / No(0) 이진 분류
-근거: Lopez de Prado (2018) "Advances in Financial Machine Learning"
-      - Meta-Labeling: 방향은 시그널이 결정, ML은 품질만 판단
-      - Triple Barrier: TP/SL/Time 중 먼저 도달한 것으로 라벨링
+Phase 1: 모델 없음 (LSTMModel은 tanh fallback 사용)
+Phase 3: DeepLOB5 모델 로드 + 정확도 모니터링
 
-Phase A (< min_samples): 룰 기반 필터 (CVD + vol)
-Phase B (>= min_samples): GBM 분류기 P(Win) > threshold → Go
+프로 원문: "LSTM은 enhancement, not requirement"
+프로 원문: "accuracy < 52% → model adds noise, not signal"
 """
 
-import json
 import logging
 import time
-import pickle
-import numpy as np
-from collections import deque
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
 DATA_DIR = Path(__file__).parent.parent.parent / "data"
-MODEL_PATH = DATA_DIR / "ml_scalp_model.pkl"
-
-# 스캘핑 피처 — 마이크로스트럭처 + 레짐 + 플로우 (20종)
-CORE_FEATURES = [
-    # 마이크로스트럭처 (z-score 정규화됨)
-    "z_ofi",                # OFI z-score (1등 피처, 가격변동 65% 설명)
-    "z_book_imbalance",     # 호가 불균형
-    "z_trade_burst",        # 체결 빈도 급증
-    "z_bs_ratio_5s",        # 매수/매도 비율 5초
-    "z_bs_ratio_30s",       # 매수/매도 비율 30초
-    "z_momentum_quality",   # burst × imbalance × CVD 정렬
-    "z_delta_accel",        # CVD 가속도
-    "z_cvd_5m",             # CVD 5분
-    # 원시 피처
-    "spread",               # bid-ask 스프레드
-    "vwap_deviation",       # VWAP 이탈률
-    "delta_div",            # 가격/CVD 다이버전스
-    "absorption_score",     # 대량 흡수 감지
-    "whale_bias",           # 고래 편향
-    "price_impact",         # 가격 충격
-    # 레짐
-    "hurst",                # Hurst 지수 (추세/횡보/랜덤)
-    "vpin",                 # VPIN (정보 비대칭)
-    "parkinson_vol",        # Parkinson 변동성
-    "micro_confidence",     # 마이크로스트럭처 레짐 신뢰도
-    # 플로우
-    "cvd_5m_raw",           # CVD 5분 원시값
-    "funding_rate",         # 펀딩레이트
-]
-
-# 스캘핑에서는 확장 없이 20종 고정
-EXTENDED_FEATURES = list(CORE_FEATURES)
+MODEL_PATH = DATA_DIR / "deeplob5.pt"
 
 
-class MLDecisionEngine:
-    """
-    ML 기반 Go/NoGo 결정 엔진.
-    Phase A: 룰 필터 (데이터 부족)
-    Phase B: GBM 분류기
-    """
+class ModelManager:
+    """LSTM 모델 관리 — 로드/정확도 추적/비활성화"""
 
-    def __init__(self, config=None):
-        ml_cfg = (config or {}).get("ml", {})
-        self.min_samples = ml_cfg.get("phase_a_min_samples", 100)
-        self.retrain_interval = ml_cfg.get("retrain_interval", 100)
-        self.window_size = ml_cfg.get("window_size", 500)
-        self.min_oos_accuracy = ml_cfg.get("min_oos_accuracy", 0.52)
-        self.go_threshold = ml_cfg.get("go_threshold", 0.55)
-        self.expanded_features_at = ml_cfg.get("expanded_features_at", 500)
-
-        # 알림 콜백 (텔레그램 등 — main.py에서 설정)
-        self.on_phase_change = None  # async def(old_phase, new_phase, details_str)
-
+    def __init__(self, config: dict = None):
+        cfg = (config or {}).get("scalp", {})
+        self.lstm_enabled = cfg.get("lstm_enabled", False)
+        self.min_accuracy = cfg.get("lstm_min_accuracy", 0.52)
         self.model = None
-        self.scaler = None
-        self.trained = False
-        self.phase = "A"  # "A" = 룰, "B" = ML
-        self.oos_accuracy = 0.0
-        self.train_accuracy = 0.0
-        self.total_labeled = 0
-        self.last_train_count = 0
-        self.feature_names = list(CORE_FEATURES)
-        self.consecutive_bad_oos = 0
+        self.accuracy = 0.0
+        self.last_check = 0
 
-        # 최근 성과 추적
-        self.recent_decisions = deque(maxlen=50)  # (go, actual_label)
+        if self.lstm_enabled:
+            self._try_load()
 
-        self._load()
+    def has_valid_model(self) -> bool:
+        """학습된 LSTM 모델이 사용 가능한지"""
+        return self.model is not None and self.accuracy >= self.min_accuracy
 
-    # ════════════════════════════════════════
-    #  결정 (Go / NoGo)
-    # ════════════════════════════════════════
-
-    def decide(self, features_raw: dict) -> tuple[bool, float]:
-        """
-        진입 여부 결정.
-
-        Args:
-            features_raw: CandidateDetector._build_raw_features()의 출력
-
-        Returns:
-            (go: bool, probability: float)
-            go=True → 진입, go=False → NoGo (shadow 추적)
-            probability: P(Win) 또는 룰 기반 시 -1.0
-        """
-        if self.phase == "A":
-            return self._decide_rule_based(features_raw)
-        else:
-            return self._decide_ml(features_raw)
-
-    def _decide_rule_based(self, features: dict) -> tuple[bool, float]:
-        """Phase A: 무조건 Go (데이터 수집 우선, 마진 최소)"""
-        return True, -1.0
-
-    def _decide_ml(self, features_raw: dict) -> tuple[bool, float]:
-        """Phase B: ML Go/NoGo"""
-        if self.model is None:
-            return self._decide_rule_based(features_raw)
+    def _try_load(self):
+        """모델 파일이 있으면 로드"""
+        if not MODEL_PATH.exists():
+            logger.info("[ModelManager] 모델 파일 없음 → tanh fallback")
+            return
 
         try:
-            x = self._extract_feature_vector(features_raw)
-            if self.scaler:
-                x = self.scaler.transform([x])
-            else:
-                x = [x]
-
-            prob = float(self.model.predict_proba(x)[0][1])  # P(Win)
-            go = prob > self.go_threshold
-            return go, prob
-
+            import torch
+            self.model = torch.load(MODEL_PATH, map_location="cpu", weights_only=False)
+            self.model.eval()
+            self.accuracy = 0.55  # 초기값 (검증 전)
+            logger.info(f"[ModelManager] DeepLOB5 로드 완료: {MODEL_PATH.name}")
         except Exception as e:
-            logger.warning(f"ML predict 실패 → 룰 폴백: {e}")
-            return self._decide_rule_based(features_raw)
+            logger.warning(f"[ModelManager] 모델 로드 실패: {e}")
+            self.model = None
 
-    def _extract_feature_vector(self, features_raw: dict) -> list[float]:
-        """features_raw dict → 모델 입력 벡터"""
-        return [float(features_raw.get(name, 0)) for name in self.feature_names]
+    def check_for_update(self):
+        """5분마다 모델 파일 갱신 체크 (핫 리로드)"""
+        now = time.time()
+        if now - self.last_check < 300:
+            return
+        self.last_check = now
 
-    # ════════════════════════════════════════
-    #  학습
-    # ════════════════════════════════════════
-
-    def check_and_train(self, labeled_signals: list[dict]):
-        """
-        signals 테이블에서 라벨 확정된 데이터로 학습 여부 판단.
-
-        Args:
-            labeled_signals: DB에서 가져온 [{"features": json, "label": 0|1, "entry_executed": 0|1}, ...]
-        """
-        prev_labeled = self.total_labeled
-        self.total_labeled = len(labeled_signals)
-
-        # 마일스톤 알림 (100, 200, 500, 1000건)
-        for ms in [100, 200, 500, 1000]:
-            if prev_labeled < ms <= self.total_labeled:
-                self._notify_phase_change(
-                    self.phase, self.phase,
-                    f"마일스톤: {ms}건 라벨 도달! (총 {self.total_labeled}건)"
-                )
-
-        # Phase A → B 전환 체크
-        if self.total_labeled >= self.min_samples and self.phase == "A":
-            logger.info(f"[ML] {self.total_labeled}건 도달 → Phase B 학습 시도")
-            self._train(labeled_signals)
+        if not self.lstm_enabled:
             return
 
-        # Phase B: 재학습 주기 체크
-        if self.phase == "B" and (self.total_labeled - self.last_train_count) >= self.retrain_interval:
-            logger.info(f"[ML] 재학습 트리거: {self.total_labeled}건 (이전 {self.last_train_count})")
-            self._train(labeled_signals)
-
-        # Phase B+ 전환: 300건 도달 → 회귀 모델 전환 준비 알림
-        if self.total_labeled >= 300 and self.phase == "B" and not getattr(self, '_regression_notified', False):
-            self._regression_notified = True
-            logger.info(f"[ML] 300건 도달 → 회귀 모델 전환 가능 (reach_pct/mae_pct 데이터 축적 완료)")
-            self._notify_phase_change("B", "B+", "300건 라벨 도달 — 회귀 모델 전환 준비 완료")
-
-    def _train(self, labeled_signals: list[dict]):
-        """GBM 학습 + Walk-Forward 검증"""
-        from sklearn.ensemble import GradientBoostingClassifier
-        from sklearn.preprocessing import StandardScaler
-
-        # 데이터 준비
-        X, y, weights = [], [], []
-
-        # 피처 확장 시점 체크
-        if self.total_labeled >= self.expanded_features_at:
-            self.feature_names = list(EXTENDED_FEATURES)
-            logger.info(f"[ML] 피처 확장: {len(CORE_FEATURES)} → {len(EXTENDED_FEATURES)}")
-        else:
-            self.feature_names = list(CORE_FEATURES)
-
-        for sig in labeled_signals[-self.window_size:]:
+        if MODEL_PATH.exists():
             try:
-                features = json.loads(sig["features"]) if isinstance(sig["features"], str) else sig["features"]
-                vec = [float(features.get(name, 0)) for name in self.feature_names]
-                label = int(sig["label"])
-                X.append(vec)
-                y.append(label)
-                # 실 진입 데이터에 더 높은 가중치
-                w = 2.0 if sig.get("entry_executed", 0) == 1 else 1.0
-                weights.append(w)
-            except Exception as e:
-                logger.debug(f"[ML] 데이터 파싱 실패: {e}")
-                continue
+                mtime = MODEL_PATH.stat().st_mtime
+                if self.model is None or mtime > self.last_check - 300:
+                    self._try_load()
+            except Exception:
+                pass
 
-        if len(X) < self.min_samples:
-            logger.info(f"[ML] 학습 데이터 부족: {len(X)} < {self.min_samples}")
-            return
-
-        X = np.array(X, dtype=np.float64)
-        y = np.array(y)
-        weights = np.array(weights)
-
-        # NaN/Inf 처리
-        X = np.nan_to_num(X, nan=0.0, posinf=0.0, neginf=0.0)
-
-        # Walk-Forward: 80% 학습, 20% OOS 검증
-        split = int(len(X) * 0.8)
-        if split < 50 or (len(X) - split) < 20:
-            logger.info(f"[ML] 학습/검증 분할 불충분: {split}/{len(X)-split}")
-            return
-
-        X_train, X_test = X[:split], X[split:]
-        y_train, y_test = y[:split], y[split:]
-        w_train = weights[:split]
-
-        # 클래스 다양성 체크
-        if len(set(y_train)) < 2 or len(set(y_test)) < 2:
-            logger.warning("[ML] 클래스 다양성 부족 (전부 승 or 전부 패)")
-            return
-
-        # Scaler
-        scaler = StandardScaler()
-        X_train_scaled = scaler.fit_transform(X_train)
-        X_test_scaled = scaler.transform(X_test)
-
-        # 모델
-        model = GradientBoostingClassifier(
-            n_estimators=100,
-            max_depth=3,
-            learning_rate=0.1,
-            min_samples_leaf=20,
-            subsample=0.8,
-            max_features=min(0.7, len(self.feature_names)),
-            random_state=42,
-        )
-        model.fit(X_train_scaled, y_train, sample_weight=w_train)
-
-        # 검증
-        train_acc = float(model.score(X_train_scaled, y_train))
-        oos_acc = float(model.score(X_test_scaled, y_test))
-
-        logger.info(
-            f"[ML] 학습 완료: train={train_acc:.3f} OOS={oos_acc:.3f} "
-            f"(피처 {len(self.feature_names)}, 데이터 {len(X)}건)"
-        )
-
-        # OOS 정확도 검증
-        if oos_acc < self.min_oos_accuracy:
-            self.consecutive_bad_oos += 1
+    def update_accuracy(self, accuracy: float):
+        """정확도 업데이트 — 52% 미만 시 비활성화"""
+        self.accuracy = accuracy
+        if accuracy < self.min_accuracy and self.model is not None:
             logger.warning(
-                f"[ML] OOS {oos_acc:.3f} < {self.min_oos_accuracy} "
-                f"→ 모델 미교체 (연속 {self.consecutive_bad_oos}회)"
+                f"[ModelManager] 정확도 {accuracy:.1%} < {self.min_accuracy:.0%} "
+                f"→ LSTM 비활성화 (noise, not signal)"
             )
-            if self.consecutive_bad_oos >= 2:
-                logger.error("[ML] OOS 2연속 미달 → Phase A 복귀")
-                old_phase = self.phase
-                self.phase = "A"
-                self.trained = False
-                self.model = None
-                self.scaler = None
-                self._notify_phase_change(old_phase, "A",
-                    f"OOS {oos_acc:.1%} 2연속 미달 → 룰 기반 복귀")
-            return
-
-        # 모델 교체
-        self.consecutive_bad_oos = 0
-        old_phase = self.phase
-        self.model = model
-        self.scaler = scaler
-        self.trained = True
-        self.phase = "B"
-        self.train_accuracy = train_acc
-        self.oos_accuracy = oos_acc
-        self.last_train_count = self.total_labeled
-
-        # 피처 중요도 로깅
-        importances = model.feature_importances_
-        sorted_idx = np.argsort(importances)[::-1]
-        top5 = [(self.feature_names[i], round(importances[i], 3)) for i in sorted_idx[:5]]
-        logger.info(f"[ML] Top 5 피처: {top5}")
-
-        # Phase 전환 알림
-        if old_phase != "B":
-            self._notify_phase_change(old_phase, "B",
-                f"OOS {oos_acc:.1%} | {len(self.feature_names)}피처 | Top: {top5[0][0]}")
-
-        # 피처 확장 알림
-        if len(self.feature_names) > len(CORE_FEATURES) and old_phase == "B":
-            self._notify_phase_change("B", "B+",
-                f"피처 {len(CORE_FEATURES)}→{len(self.feature_names)} 확장 | OOS {oos_acc:.1%}")
-
-        self._save()
-
-    # ════════════════════════════════════════
-    #  성과 추적
-    # ════════════════════════════════════════
-
-    def record_decision_result(self, go: bool, actual_label: int):
-        """ML 결정 결과 기록 (성과 추적용)"""
-        self.recent_decisions.append((go, actual_label))
+            self.model = None
 
     def get_stats(self) -> dict:
-        """ML 상태 정보 (대시보드/텔레그램용)"""
-        # 최근 Go 결정의 정확도
-        go_decisions = [(g, l) for g, l in self.recent_decisions if g]
-        go_accuracy = 0.0
-        if len(go_decisions) >= 5:
-            go_accuracy = sum(1 for _, l in go_decisions if l == 1) / len(go_decisions) * 100
-
-        # NoGo 중 실제 Win 비율 (ML이 걸러낸 것 중 좋았던 비율 = 후회 비율)
-        nogo_decisions = [(g, l) for g, l in self.recent_decisions if not g]
-        nogo_miss_rate = 0.0
-        if len(nogo_decisions) >= 5:
-            nogo_miss_rate = sum(1 for _, l in nogo_decisions if l == 1) / len(nogo_decisions) * 100
-
+        """상태 정보 (대시보드/텔레그램용)"""
         return {
-            "phase": self.phase,
-            "trained": self.trained,
-            "total_labeled": self.total_labeled,
-            "oos_accuracy": round(self.oos_accuracy * 100, 1),
-            "train_accuracy": round(self.train_accuracy * 100, 1),
-            "go_threshold": self.go_threshold,
-            "feature_count": len(self.feature_names),
-            "recent_go_accuracy": round(go_accuracy, 1),
-            "recent_nogo_miss": round(nogo_miss_rate, 1),
-            "consecutive_bad_oos": self.consecutive_bad_oos,
+            "lstm_enabled": self.lstm_enabled,
+            "has_model": self.model is not None,
+            "accuracy": round(self.accuracy * 100, 1),
         }
-
-    def _notify_phase_change(self, old_phase: str, new_phase: str, details: str):
-        """Phase 전환 알림 (텔레그램 등)"""
-        logger.warning(f"[ML] Phase 전환: {old_phase} → {new_phase} | {details}")
-        if self.on_phase_change:
-            import asyncio
-            try:
-                loop = asyncio.get_running_loop()
-                loop.create_task(self.on_phase_change(old_phase, new_phase, details))
-            except RuntimeError:
-                # 이벤트 루프 없음 (테스트 등) → 무시
-                logger.debug("Phase 알림: 이벤트 루프 없음 → 스킵")
-            except Exception as e:
-                logger.debug(f"Phase 알림 전송 실패: {e}")
-
-    # ════════════════════════════════════════
-    #  저장 / 로드
-    # ════════════════════════════════════════
-
-    def _save(self):
-        """모델 + 상태 저장"""
-        DATA_DIR.mkdir(parents=True, exist_ok=True)
-        state = {
-            "model": self.model,
-            "scaler": self.scaler,
-            "trained": self.trained,
-            "phase": self.phase,
-            "oos_accuracy": self.oos_accuracy,
-            "train_accuracy": self.train_accuracy,
-            "total_labeled": self.total_labeled,
-            "last_train_count": self.last_train_count,
-            "feature_names": self.feature_names,
-            "consecutive_bad_oos": self.consecutive_bad_oos,
-        }
-        tmp = MODEL_PATH.with_suffix(".tmp")
-        try:
-            with open(tmp, "wb") as f:
-                pickle.dump(state, f)
-            tmp.replace(MODEL_PATH)
-            logger.info(f"[ML] 모델 저장: {MODEL_PATH.name} (OOS {self.oos_accuracy:.3f})")
-        except Exception as e:
-            logger.error(f"[ML] 모델 저장 실패: {e}")
-            tmp.unlink(missing_ok=True)
-
-    def _load(self):
-        """모델 + 상태 로드"""
-        if not MODEL_PATH.exists():
-            logger.info("[ML] 저장된 모델 없음 → Phase A 시작")
-            return
-
-        try:
-            with open(MODEL_PATH, "rb") as f:
-                state = pickle.load(f)
-
-            self.model = state.get("model")
-            self.scaler = state.get("scaler")
-            self.trained = state.get("trained", False)
-            self.phase = state.get("phase", "A")
-            self.oos_accuracy = state.get("oos_accuracy", 0.0)
-            self.train_accuracy = state.get("train_accuracy", 0.0)
-            self.total_labeled = state.get("total_labeled", 0)
-            self.last_train_count = state.get("last_train_count", 0)
-            self.feature_names = state.get("feature_names", list(CORE_FEATURES))
-            self.consecutive_bad_oos = state.get("consecutive_bad_oos", 0)
-
-            logger.info(
-                f"[ML] 모델 로드: Phase {self.phase}, "
-                f"OOS {self.oos_accuracy:.3f}, {self.total_labeled}건"
-            )
-        except Exception as e:
-            logger.warning(f"[ML] 모델 로드 실패: {e} → Phase A 시작")
-            self.model = None
-            self.trained = False
-            self.phase = "A"

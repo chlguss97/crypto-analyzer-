@@ -25,9 +25,9 @@ from src.data.storage import Database, RedisClient
 from src.data.candle_collector import CandleCollector
 from src.data.ws_stream import WebSocketStream
 from src.data.binance_stream import BinanceStream
-from src.strategy.scalp_detector import ScalpDetector
+from src.strategy.scalp_detector import EnsembleDetector
 from src.strategy.scalp_manager import ScalpManager
-from src.strategy.ml_engine import MLDecisionEngine
+from src.strategy.ml_engine import ModelManager
 from src.strategy.adaptive_params import AdaptiveParams
 from src.trading.risk_manager import RiskManager
 from src.trading.executor import OrderExecutor
@@ -74,9 +74,9 @@ class ScalpEngine:
         self.binance_stream = BinanceStream(self.redis)
 
         # 스캘핑 전략
-        self.scalp_detector = ScalpDetector(redis=self.redis, config=self.config)
+        self.ensemble_detector = EnsembleDetector(redis=self.redis, config=self.config)
         self.scalp_manager = None  # initialize()에서 생성
-        self.ml_engine = MLDecisionEngine(config=self.config)
+        self.model_manager = ModelManager(config=self.config)
         self.adaptive = AdaptiveParams(config=self.config, redis=self.redis)
 
         # 매매 엔진
@@ -109,9 +109,8 @@ class ScalpEngine:
         await self.telegram.initialize()
         await self.executor.initialize()
 
-        # ML
-        self.ml_engine.on_phase_change = self._on_ml_phase_change
-        logger.info(f"ML: Phase {self.ml_engine.phase}, labeled={self.ml_engine.total_labeled}")
+        # Model Manager (LSTM)
+        logger.info(f"LSTM: enabled={self.model_manager.lstm_enabled}, has_model={self.model_manager.has_valid_model()}")
 
         # AdaptiveParams
         await self.adaptive.load_state()
@@ -218,8 +217,8 @@ class ScalpEngine:
             except Exception:
                 pass
 
-        # ── 시그널 감지 ──
-        signal = await self.scalp_detector.evaluate()
+        # ── 앙상블 시그널 감지 (4모델 투표 + 신뢰도) ──
+        signal = await self.ensemble_detector.evaluate()
         if not signal:
             # 60초마다 상태 로그
             if now - getattr(self, "_last_eval_debug", 0) >= 60:
@@ -240,11 +239,12 @@ class ScalpEngine:
 
         direction = signal["direction"]
         sig_type = signal["type"]
-        strength = signal.get("strength", 1.0)
+        confidence = signal.get("confidence", 0)
+        votes = signal.get("votes", [0, 0, 0, 0])
         price = signal["price"]
         features = signal.get("features", {})
 
-        # ── DB 기록 (모든 시그널) ──
+        # ── DB 기록 ──
         sig_record = {
             "ts": int(now),
             "signal_type": sig_type,
@@ -254,39 +254,26 @@ class ScalpEngine:
             "regime": signal.get("regime", "unknown"),
             "hurst": signal.get("hurst", 0.5),
             "vpin": signal.get("vpin", 0.3),
-            "ml_prob": -1.0,
-            "ml_go": -1,
+            "ml_prob": round(confidence, 4),  # 앙상블 신뢰도를 ml_prob 필드에 저장
+            "ml_go": 1,  # 앙상블 통과 = Go
             "entry_executed": 0,
             "reject_reason": None,
         }
-
-        # ── ML Go/NoGo ──
-        go, prob = self.ml_engine.decide(features)
-        sig_record["ml_go"] = 1 if go else 0
-        sig_record["ml_prob"] = round(prob, 4) if prob >= 0 else -1.0
-
-        if not go:
-            sig_record["reject_reason"] = "ml_nogo"
 
         sig_id = await self.db.insert_scalp_signal(sig_record)
         signal["signal_id"] = sig_id
 
         # JSONL
         _append_jsonl({
-            "type": "candidate",
-            "signal_type": sig_type,
+            "type": "ensemble_signal",
             "direction": direction,
-            "strength": round(strength, 2),
+            "confidence": round(confidence, 4),
+            "votes": votes,
             "price": round(price, 1),
-            "ml_go": 1 if go else 0,
-            "ml_prob": round(prob, 4) if prob >= 0 else -1,
             "regime": signal.get("regime", "unknown"),
             "hurst": round(signal.get("hurst", 0.5), 4),
             "vpin": round(signal.get("vpin", 0.3), 4),
         })
-
-        if not go:
-            return
 
         # ── Shadow 모드: 진입 안 함 ──
         if self.shadow_mode:
@@ -338,7 +325,7 @@ class ScalpEngine:
                     # 시그널 반전 청산 — 반대 방향 시그널 발생 시 즉시 종료
                     if self.scalp_manager.has_position():
                         pos = self.scalp_manager.position
-                        reversal = await self.scalp_detector.evaluate()
+                        reversal = await self.ensemble_detector.evaluate()
                         if reversal and reversal["direction"] != pos.direction:
                             logger.info(
                                 f"[SCALP] 시그널 반전: {pos.direction}→{reversal['direction']} → 청산"
@@ -384,9 +371,8 @@ class ScalpEngine:
 
                 await self.risk_manager.record_trade_result(pnl_pct, pnl_usdt)
 
-                # ML 결과 기록
+                # 매매 결과 기록 (모니터링용)
                 label = 1 if pnl_pct > 0 else 0
-                self.ml_engine.record_decision_result(True, label)
 
                 logger.info(
                     f"[SCALP] 후처리: PnL {pnl_pct:+.1f}% ${pnl_usdt:+.2f} | "
@@ -516,13 +502,13 @@ class ScalpEngine:
     #  ML 재학습
     # ══════════════════════════════════════════════════
 
-    async def periodic_ml_retrain(self):
+    async def periodic_model_monitor(self):
+        """LSTM 모델 핫 리로드 + 정확도 모니터링"""
         while self._running:
             try:
-                labeled = await self.db.get_labeled_signals(self.ml_engine.window_size)
-                self.ml_engine.check_and_train(labeled)
+                self.model_manager.check_for_update()
             except Exception as e:
-                logger.error(f"ML retrain 에러: {e}")
+                logger.error(f"모델 모니터링 에러: {e}")
             await asyncio.sleep(300)
 
     # ══════════════════════════════════════════════════
@@ -555,14 +541,14 @@ class ScalpEngine:
 
                 try:
                     bal = await self.executor.get_balance()
-                    ml_stats = self.ml_engine.get_stats()
+                    model_stats = self.model_manager.get_stats()
                     sig_count = await self.db.get_signal_count(labeled_only=True)
                     shadow_wr, shadow_cnt = await self.db.get_recent_shadow_wr(hours=24)
 
                     report = (
                         f"\U0001f4ca <b>Daily Report | {now_dt.strftime('%Y-%m-%d')}</b>\n\n"
                         f"Balance: ${bal:,.2f}\n"
-                        f"ML: Phase {ml_stats['phase']} | OOS {ml_stats['oos_accuracy']}%\n"
+                        f"LSTM: {'ON' if model_stats['has_model'] else 'OFF (tanh fallback)'}\n"
                         f"Shadow: {sig_count}건 labeled | 24h WR {shadow_wr:.1f}% ({shadow_cnt}건)\n"
                         f"Mode: {'SHADOW' if self.shadow_mode else 'LIVE'}"
                     )
@@ -593,8 +579,7 @@ class ScalpEngine:
                         "balance": round(bal, 2),
                         "regime": "scalp",
                         "hurst": round(float(hurst), 4) if hurst else 0.5,
-                        "ml_phase": self.ml_engine.phase,
-                        "ml_labeled": self.ml_engine.total_labeled,
+                        "lstm_active": self.model_manager.has_valid_model(),
                         "streak": self.risk_manager.get_streak(),
                         "mode": "shadow" if self.shadow_mode else "live",
                         "trades_hour": self._trades_this_hour,
@@ -658,17 +643,6 @@ class ScalpEngine:
                 logger.error(f"[CMD] 에러: {e}")
                 await asyncio.sleep(2)
 
-    # ── ML Phase 전환 알림 ──
-
-    async def _on_ml_phase_change(self, old_phase: str, new_phase: str, details: str):
-        icons = {"A": "\U0001f7e1", "B": "\U0001f7e2", "B+": "\U0001f4a1"}
-        icon = icons.get(new_phase, "\u26a0\ufe0f")
-        msg = f"{icon} <b>ML Phase: {old_phase} → {new_phase}</b>\n{details}"
-        try:
-            await self.telegram._send(msg)
-        except Exception:
-            pass
-
     # ══════════════════════════════════════════════════
     #  메인
     # ══════════════════════════════════════════════════
@@ -692,7 +666,7 @@ class ScalpEngine:
             mode = "SHADOW" if self.shadow_mode else "LIVE"
             await self.telegram._send(
                 f"\U0001f7e2 <b>ScalpEngine v3 — Microstructure Scalping</b>\n"
-                f"Mode: {mode} | ML Phase {self.ml_engine.phase}\n"
+                f"Mode: {mode} | 4-Model Ensemble (conf≥0.6)\n"
                 f"Balance: ${bal:,.2f} | Leverage: {self.config.get('scalp', {}).get('leverage', 20)}x\n"
                 f"TP: +{self.config.get('scalp', {}).get('tp_price_pct', 0.20)}% | "
                 f"SL: -{self.config.get('scalp', {}).get('sl_price_pct', 0.15)}%"
@@ -710,7 +684,7 @@ class ScalpEngine:
             asyncio.create_task(self.periodic_scalp_position()),
             # Shadow + ML
             asyncio.create_task(self.periodic_shadow_check()),
-            asyncio.create_task(self.periodic_ml_retrain()),
+            asyncio.create_task(self.periodic_model_monitor()),
             # 지원
             asyncio.create_task(self.periodic_daily_reset()),
             asyncio.create_task(self.periodic_heartbeat()),
@@ -736,10 +710,7 @@ class ScalpEngine:
 
     async def cleanup(self):
         logger.info("=== Graceful Shutdown ===")
-        try:
-            self.ml_engine._save()
-        except Exception as e:
-            logger.error(f"종료 저장 실패: {e}")
+        # ModelManager에 저장할 상태 없음 (LSTM 모델은 외부 학습)
         await self.candle_collector.close()
         await self.executor.close()
         await self.redis.close()

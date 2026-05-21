@@ -505,13 +505,13 @@ async def get_setup_tracker():
 
 @app.get("/api/ml/flow-stats")
 async def get_ml_stats():
-    """MLDecisionEngine 모델 통계"""
+    """모델 통계 (4모델 앙상블)"""
     try:
-        from src.strategy.ml_engine import MLDecisionEngine
-        ml = MLDecisionEngine()
-        return ml.get_stats()
+        from src.strategy.ml_engine import ModelManager
+        mm = ModelManager()
+        return mm.get_stats()
     except Exception as e:
-        return {"trained": False, "total_labeled": 0, "error": str(e)}
+        return {"lstm_enabled": False, "has_model": False, "error": str(e)}
 
 
 @app.get("/api/risk/state")
@@ -623,8 +623,8 @@ async def get_engine_overview():
     # ML 상태
     ml_stats = {}
     try:
-        from src.strategy.ml_engine import MLDecisionEngine
-        ml_stats = MLDecisionEngine().get_stats()
+        from src.strategy.ml_engine import ModelManager
+        ml_stats = ModelManager().get_stats()
     except Exception:
         pass
 

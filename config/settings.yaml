@@ -1,4 +1,4 @@
-# ── ScalpEngine v3 — Microstructure Scalping ──
+# ── ScalpEngine v3 — 4-Model Ensemble (프로 원문 일치) ──
 
 strategy: "scalp"
 
@@ -14,35 +14,27 @@ timeframes:
 
 # ── 스캘핑 설정 ──
 scalp:
-  shadow_mode: false                # 실거래 활성 (2026-05-20 Shadow 307건 WR 57%)
+  shadow_mode: false
   leverage: 20
   margin_pct: 0.80
-  tp_price_pct: 0.20               # +0.20% = +4% 마진 (at 20x)
-  sl_price_pct: 0.15               # -0.15% = -3% 마진 (at 20x)
-  time_stop_sec: 180                # 3분 시간 정지
-  time_stop_max_sec: 300            # 5분 최대 보유
-  time_stop_loss_margin_pct: 1.5    # 시간정지 시 손실 한도
-  sl_k_vol: 2.0                     # 동적 SL: k × Parkinson Vol
-  tp_k_vol: 2.0                     # 동적 TP: k × Parkinson Vol (SL과 대칭)
-  ou_entry_z: 2.0                   # OU Z-Score 진입 임계값 (±2σ)
-  # max_trades_per_hour: 제한 없음 (소자본)
-  # Regime Gate
-  hurst_momentum: 0.6              # H > 0.6 → 모멘텀 스캘핑
-  hurst_mean_revert: 0.4           # H < 0.4 → 평균회귀 스캘핑
-  vpin_extreme: 0.85               # VPIN > 0.85 → 거래 금지 (0.7은 BTC에서 너무 타이트)
-  # Burst signal
-  burst_min_move_10s_pct: 0.06
-  burst_min_move_30s_pct: 0.10
-  burst_freshness: 0.4
-  burst_min_ofi_z: 1.0
-  burst_min_trade_burst: 1.8
-  burst_min_bs_5s: 0.60
-  burst_max_exhaustion_pct: 0.15
-  # VWAP snap signal
-  snap_min_vwap_dev: 0.12
-  snap_min_absorption: 1.0
-  snap_min_book_imbal: 0.15
-  # Common filters
+  # 동적 TP/SL (k × Parkinson Vol)
+  sl_k_vol: 2.0
+  tp_k_vol: 2.0
+  tp_price_pct: 0.20               # fallback (Parkinson 없을 때)
+  sl_price_pct: 0.15               # fallback
+  # OU Z-Score
+  ou_entry_z: 2.0                   # ±2σ 진입 (프로 원문)
+  # 앙상블 (프로: "가장 영향력 있는 파라미터")
+  ensemble_conf: 0.6                # 최소 신뢰도 (4모델 합의)
+  # VPIN (프로: >0.7 킬스위치, BTC 보정 0.85)
+  vpin_extreme: 0.85
+  # Hurst (프로: >0.6 모멘텀, <0.4 평균회귀, 0.45~0.55 데드존)
+  hurst_momentum: 0.6
+  hurst_mean_revert: 0.4
+  # LSTM (Phase 3에서 활성화)
+  lstm_enabled: false
+  lstm_min_accuracy: 0.52           # 프로: "< 52% → noise, not signal"
+  # 프리게이트
   max_spread: 2.0
   min_micro_confidence: 0.3
   stale_threshold_ms: 5000
@@ -51,15 +43,7 @@ risk:
   margin_pct: 0.80
   leverage_range: [20, 20]
   max_positions: 1
-  bot_kill_drawdown: 0.20
-  min_entry_interval_sec: 60
-  # streak_sizing: 제거 (소자본)
-
-cooldown:
-  after_loss_sec: 0
-  after_win_sec: 0
-  streak_3_min: 0
-  streak_5_min: 0
+  bot_kill_drawdown: 0.20           # -20% DD → 봇 정지 (유일한 게이트)
 
 polling:
   shadow_check_sec: 5
@@ -67,13 +51,6 @@ polling:
 fees:
   taker: 0.0005
   maker: 0.0002
-
-ml:
-  phase_a_min_samples: 300
-  retrain_interval: 100
-  window_size: 500
-  min_oos_accuracy: 0.52
-  go_threshold: 0.55
 
 telegram:
   enabled: true
