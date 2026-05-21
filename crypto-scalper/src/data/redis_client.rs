@@ -31,51 +31,51 @@ impl RedisClient {
     pub async fn set(&mut self, key: &str, value: &str, ttl_sec: Option<u64>) -> anyhow::Result<()> {
         let conn = self.get_conn().await?;
         if let Some(ttl) = ttl_sec {
-            conn.set_ex(key, value, ttl).await?;
+            let _: () = conn.set_ex(key, value, ttl).await?;
         } else {
-            conn.set(key, value).await?;
+            let _: () = conn.set(key, value).await?;
         }
         Ok(())
     }
 
     pub async fn get(&mut self, key: &str) -> anyhow::Result<Option<String>> {
         let conn = self.get_conn().await?;
-        let val: Option<String> = conn.get(key).await?;
+        let val: Option<String> = redis::AsyncCommands::get(conn, key).await?;
         Ok(val)
     }
 
     pub async fn hset(&mut self, key: &str, fields: &[(&str, &str)], ttl_sec: Option<u64>) -> anyhow::Result<()> {
         let conn = self.get_conn().await?;
         for (field, value) in fields {
-            conn.hset(key, *field, *value).await?;
+            let _: () = conn.hset(key, *field, *value).await?;
         }
         if let Some(ttl) = ttl_sec {
-            conn.expire(key, ttl as i64).await?;
+            let _: () = conn.expire(key, ttl as i64).await?;
         }
         Ok(())
     }
 
     pub async fn hgetall(&mut self, key: &str) -> anyhow::Result<std::collections::HashMap<String, String>> {
         let conn = self.get_conn().await?;
-        let map: std::collections::HashMap<String, String> = conn.hgetall(key).await?;
+        let map: std::collections::HashMap<String, String> = redis::AsyncCommands::hgetall(conn, key).await?;
         Ok(map)
     }
 
     pub async fn del(&mut self, key: &str) -> anyhow::Result<()> {
         let conn = self.get_conn().await?;
-        conn.del(key).await?;
+        let _: () = conn.del(key).await?;
         Ok(())
     }
 
     pub async fn keys(&mut self, pattern: &str) -> anyhow::Result<Vec<String>> {
         let conn = self.get_conn().await?;
-        let keys: Vec<String> = conn.keys(pattern).await?;
+        let keys: Vec<String> = redis::AsyncCommands::keys(conn, pattern).await?;
         Ok(keys)
     }
 
     pub async fn publish(&mut self, channel: &str, message: &str) -> anyhow::Result<()> {
         let conn = self.get_conn().await?;
-        conn.publish(channel, message).await?;
+        let _: () = conn.publish(channel, message).await?;
         Ok(())
     }
 }

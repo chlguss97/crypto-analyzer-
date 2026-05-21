@@ -1,12 +1,13 @@
 # Commit Log
 
 > 자동 생성 — `scripts/update_commit_log.sh` (매 커밋 후 실행)
-> Updated: 2026-05-21 08:27:39    
-> Total commits: 390 (2026-04-03 → 2026-05-21)
+> Updated: 2026-05-21 08:46:57    
+> Total commits: 391 (2026-04-03 → 2026-05-21)
 
 Claude 가 질문/변경 작업 시 이 파일을 참고해서 과거 변경 이력 컨텍스트를 확보합니다. 수동 편집 금지 — 다음 커밋 시 덮어써집니다.
 
 ## 2026-05-21
+- `347b3902` fix: UtcTime 제거 + abs() 타입 명시
 - `3e70222d` fix: anyhow 추가 + rusqlite 0.37 API 호환
 
 ## 2026-05-20
