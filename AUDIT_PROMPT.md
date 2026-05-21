@@ -1,7 +1,7 @@
-# ScalpEngine v3 전수검사 프롬프트
+# GridBot 전수검사 프롬프트
 
-> ScalpEngine v3 — 4계층 마이크로스트럭처 스캘핑
-> 마지막 갱신: 2026-05-20
+> GridBot — ATR-Adaptive Grid Trading
+> 마지막 갱신: 2026-05-21
 
 ---
 
@@ -9,55 +9,109 @@
 
 ```
 src/
-  main.py                        — ScalpEngine 오케스트레이션 (12 태스크)
+  main.py                        — GridBot 오케스트레이션
   strategy/
-    scalp_detector.py             — 실시간 시그널 감지 (Redis only, 500ms)
-    scalp_manager.py              — 스캘핑 포지션 관리 (TP/SL/TimeStop)
-    ml_engine.py                  — XGBoost Go/NoGo (Phase A→B, 20종 피처)
-    adaptive_params.py            — TP/SL 자동 보정
-    welford.py                    — Welford 온라인 z-score 정규화
+    grid_engine.py               — ATR-Adaptive Grid (build/monitor/rebalance/recover)
   data/
-    ws_stream.py                  — OKX WS (trades/tickers/books/candles + 마이크로15종 + OFI + Hurst + Parkinson)
-    binance_stream.py             — Binance aggTrade/REST (CVD/Whale/Liq/Funding)
-    candle_collector.py           — OKX REST 캔들 백필
-    storage.py                    — SQLite (scalp.db) + Redis 래퍼
+    ws_stream.py                 — OKX WS (trades/tickers/books/candles + Hurst)
+    candle_collector.py          — OKX REST 캔들 백필 (ATR용)
+    storage.py                   — SQLite (scalp.db) + Redis 래퍼
   trading/
-    executor.py                   — OKX CCXT 주문 실행
-    risk_manager.py               — BOT_KILL + 쿨다운 + 연패 관리
+    executor.py                  — OKX CCXT 주문 실행 + 그리드용 limit order
+    grid_state.py                — GridLevel/GridState 데이터클래스 + Redis 직렬화
+    risk_manager.py              — BOT_KILL -20% DD
   monitoring/
-    telegram_bot.py               — Telegram 알림/명령
-    trade_logger.py               — JSONL 로깅 (_append_jsonl)
-    dashboard.py                  — FastAPI 대시보드
-  utils/helpers.py                — 설정 로딩
-config/settings.yaml              — 모든 설정 (scalp 섹션 포함)
+    telegram_bot.py              — Telegram 알림/명령
+    trade_logger.py              — JSONL 로깅
+    dashboard.py                 — FastAPI 대시보드
+  utils/helpers.py               — 설정 로딩
+config/settings.yaml             — Grid + risk + exchange 설정
 ```
 
 ## DB 테이블 (scalp.db)
 - `candles`: OHLCV (symbol, timeframe, timestamp)
-- `scalp_signals`: Shadow + ML 라벨링 (signal_type, direction, features, regime, hurst, vpin, label, barrier_hit)
-- `scalp_trades`: 실거래 (signal_id, direction, entry/exit, pnl, hold_sec, regime)
+- `grid_trades`: 그리드 사이클 기록 (grid_id, level_id, entry/exit, pnl, spacing)
 
-## Redis 키
-- `rt:price:*`, `rt:ticker:*`, `rt:velocity:*` — 가격/속도
-- `rt:micro:*` (15종) — 마이크로스트럭처
-- `rt:micro:ofi` — OFI 멀티레벨
-- `rt:regime:hurst` — Hurst 지수
-- `rt:micro:parkinson_vol` — Parkinson 변동성
-- `flow:combined:*` — CVD/Whale
-- `flow:liq:*` — 청산
-- `rt:funding:*`, `rt:oi:*` — 펀딩/OI
+## Redis 키 (Grid 관련)
+- `rt:price:BTC-USDT-SWAP` — 현재가
+- `rt:regime:hurst` — Hurst 지수 (그리드 일시정지 게이트)
+- `grid:state:BTC/USDT:USDT` — 그리드 상태 (JSON, 크래시 복구용)
+- `sys:bot_status` — running/stopped
+- `sys:balance` — 잔고
+- `sys:last_heartbeat` — 헬스체크
 
 ## 검사 체크리스트
 
-1. **Import 정합성**: 삭제된 모듈 참조 없는지 (engine/, candidate_detector, paper_lab, sim_trader, signal_tracker, setup_tracker, position_manager, leverage)
-2. **DB 테이블명**: `scalp_signals`, `scalp_trades` 사용 (old: signals, trades)
-3. **DB 메서드명**: `insert_scalp_signal`, `insert_scalp_trade`, `update_scalp_trade_exit` 등
-4. **Redis 키**: 피처 키가 실제 ws_stream/binance_stream에서 생성되는지
-5. **ScalpDetector**: 모든 조건 임계값이 config/settings.yaml과 일치하는지
-6. **ScalpManager**: 동적 SL/TP (k × vol) + self-heal + failsafe + 시그널 반전 청산
-7. **ML 피처**: 20종 피처명이 scalp_detector → ml_engine 간 일치하는지
-8. **Telegram**: scalp_manager 주입, /close /clear 명령 동작
-9. **Dashboard**: 모든 SQL 쿼리가 scalp_signals/scalp_trades 참조
-10. **JSONL**: 이벤트 타입 (candidate, shadow_result, scalp_entry, scalp_exit, hourly_snapshot)
-11. **프로 레퍼런스 12항목**: VPIN 4단계, OFI 5레벨, Hurst 동적스케일, OU 감쇠0.93, Vol블렌딩50/50, 앙상블합의, 마이크로3축, Welford워밍업, BookResilience, 동적SL/TP, CVD오버라이드, 사이징캐스케이드
-12. **제거 확인**: 쿨다운/연패축소/시간당제한/진입간격/Shadow WR 게이트가 코드에 없는지
+### 1. 레거시 잔해 확인 (0건이어야 함)
+
+**삭제된 파일 참조:**
+- `scalp_detector` / `ScalpDetector` / `EnsembleDetector`
+- `scalp_manager` / `ScalpManager`
+- `ml_engine` / `MLDecisionEngine` / `ModelManager`
+- `adaptive_params` / `AdaptiveParams`
+- `welford` / `FeatureNormalizer`
+
+**삭제된 DB 테이블 참조:**
+- `scalp_signals` (코드에서 참조 0건)
+- `scalp_trades` (코드에서 참조 0건)
+
+**삭제된 설정 참조:**
+- `scalp:` 섹션 (settings.yaml에 없어야 함)
+- `cooldown:` 섹션
+- `ml:` 섹션
+- `shadow_mode`
+- `time_stop_sec` / `time_stop_max_sec`
+
+**삭제된 Redis 키 참조:**
+- `pos:active:*` (스캘핑 포지션)
+- `risk:cooldown_until`
+- `rt:micro:vpin` / `rt:micro:ofi` / `rt:micro:ou_zscore` (코드에서 set 안 함은 OK, 참조만 확인)
+
+### 2. 레거시 데이터 삭제 (서버에서 실행)
+
+```bash
+# SQLite 레거시 테이블 삭제
+ssh root@207.148.120.103 "docker exec crypto-bot-bot-1 python3 -c \"
+import sqlite3
+db = sqlite3.connect('/app/data/scalp.db')
+db.execute('DROP TABLE IF EXISTS scalp_signals')
+db.execute('DROP TABLE IF EXISTS scalp_trades')
+db.execute('VACUUM')
+db.close()
+print('scalp_signals + scalp_trades 삭제 완료')
+\""
+
+# Redis 레거시 키 삭제
+ssh root@207.148.120.103 "docker exec crypto-bot-redis-1 redis-cli KEYS 'rt:micro:*' | xargs -r docker exec -i crypto-bot-redis-1 redis-cli DEL"
+ssh root@207.148.120.103 "docker exec crypto-bot-redis-1 redis-cli KEYS 'flow:*' | xargs -r docker exec -i crypto-bot-redis-1 redis-cli DEL"
+ssh root@207.148.120.103 "docker exec crypto-bot-redis-1 redis-cli KEYS 'risk:*' | xargs -r docker exec -i crypto-bot-redis-1 redis-cli DEL"
+ssh root@207.148.120.103 "docker exec crypto-bot-redis-1 redis-cli DEL pos:active:BTC/USDT:USDT"
+
+# LOB 스냅샷 파일 삭제
+ssh root@207.148.120.103 "rm -f /root/crypto-bot/data/lob_snapshots.bin"
+
+# ML 모델 파일 삭제
+ssh root@207.148.120.103 "rm -f /root/crypto-bot/data/ml_scalp_model.pkl /root/crypto-bot/data/deeplob5.pt"
+
+# 리스크 백업 삭제
+ssh root@207.148.120.103 "rm -f /root/crypto-bot/data/risk_state.json"
+```
+
+### 3. Grid 정합성 확인
+
+- `grid_engine.py`: build_grid → 4레벨 주문 배치 확인
+- `grid_engine.py`: monitor_tick → 체결 감지 + counter-order 배치
+- `grid_engine.py`: rebalance → drift/ATR 기반 재구성
+- `grid_engine.py`: regime gate → Hurst > 0.7 일시정지
+- `grid_state.py`: Redis 저장/복원 정합성
+- `executor.py`: place_limit_order / cancel_order_by_id 존재
+- `storage.py`: grid_trades 테이블 + insert/query 메서드
+- `settings.yaml`: grid 섹션 완전성 (enabled, levels, spacing, atr, hurst_pause)
+- `risk_manager.py`: BOT_KILL -20% DD만 체크 (다른 게이트 없음)
+
+### 4. 문서 정합성
+
+- `CLAUDE.md`: Grid Trading 현재 활성, 스캘핑 비활성 표기
+- `SPEC_V2.md`: §8 Grid Trading Engine 존재
+- `CHANGELOG.md`: 2026-05-21 Grid 전환 기록
+- `MANUAL.md`: Grid 운영 가이드 추가 필요 (TODO)
