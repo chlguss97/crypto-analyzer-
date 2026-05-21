@@ -29,6 +29,7 @@ from src.strategy.scalp_detector import EnsembleDetector
 from src.strategy.scalp_manager import ScalpManager
 from src.strategy.ml_engine import ModelManager
 from src.strategy.adaptive_params import AdaptiveParams
+from src.strategy.grid_engine import GridEngine
 from src.trading.risk_manager import RiskManager
 from src.trading.executor import OrderExecutor
 from src.monitoring.telegram_bot import TelegramNotifier
@@ -74,10 +75,14 @@ class ScalpEngine:
         self.binance_stream = BinanceStream(self.redis)
 
         # 스캘핑 전략
+        self.scalp_enabled = self.config.get("scalp", {}).get("enabled", True)
         self.ensemble_detector = EnsembleDetector(redis=self.redis, config=self.config)
         self.scalp_manager = None  # initialize()에서 생성
         self.model_manager = ModelManager(config=self.config)
         self.adaptive = AdaptiveParams(config=self.config, redis=self.redis)
+
+        # 그리드 전략
+        self.grid_engine: GridEngine | None = None
 
         # 매매 엔진
         self.executor = OrderExecutor()
@@ -156,6 +161,16 @@ class ScalpEngine:
 
         mode = "SHADOW" if self.shadow_mode else "LIVE"
         logger.info(f"스캘핑 모드: {mode}")
+
+        # GridEngine 초기화
+        grid_cfg = self.config.get("grid", {})
+        if grid_cfg.get("enabled", False):
+            self.grid_engine = GridEngine(
+                executor=self.executor, db=self.db, redis=self.redis,
+                telegram=self.telegram, risk_manager=self.risk_manager,
+                config=self.config,
+            )
+            logger.info("[GRID] 그리드 엔진 활성화")
 
     # ══════════════════════════════════════════════════
     #  스캘핑 평가 루프 (500ms)
@@ -683,12 +698,14 @@ class ScalpEngine:
             asyncio.create_task(self.ws_stream.start()),
             asyncio.create_task(self.binance_stream.start()),
             asyncio.create_task(self.periodic_candle_update()),
-            # 스캘핑
-            asyncio.create_task(self.periodic_scalp_eval()),
-            asyncio.create_task(self.periodic_scalp_position()),
-            # Shadow + ML
-            asyncio.create_task(self.periodic_shadow_check()),
-            asyncio.create_task(self.periodic_model_monitor()),
+            # 스캘핑 (scalp.enabled=true일 때만)
+            *([ asyncio.create_task(self.periodic_scalp_eval()),
+                asyncio.create_task(self.periodic_scalp_position()),
+                asyncio.create_task(self.periodic_shadow_check()),
+                asyncio.create_task(self.periodic_model_monitor()),
+            ] if self.scalp_enabled else []),
+            # 그리드 (grid.enabled=true일 때만)
+            *([asyncio.create_task(self.grid_engine.run())] if self.grid_engine else []),
             # 지원
             asyncio.create_task(self.periodic_daily_reset()),
             asyncio.create_task(self.periodic_heartbeat()),

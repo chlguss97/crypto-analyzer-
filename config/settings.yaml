@@ -14,6 +14,7 @@ timeframes:
 
 # ── 스캘핑 설정 ──
 scalp:
+  enabled: false                     # 스캘핑 비활성화 (그리드로 전환)
   shadow_mode: false
   leverage: 20
   margin_pct: 0.80
@@ -40,6 +41,22 @@ scalp:
   max_spread: 2.0
   min_micro_confidence: 0.3
   stale_threshold_ms: 5000
+
+# ── 그리드 트레이딩 ──
+grid:
+  enabled: true
+  leverage: 20
+  levels: 4                         # 2 buy + 2 sell
+  size_btc: 0.01                    # 레벨당 1계약 (0.01 BTC)
+  atr_mult: 0.6                     # spacing = ATR% × 0.6
+  spacing_min_pct: 0.10             # 최소 0.10% (수수료 0.04% 커버)
+  spacing_max_pct: 0.50             # 최대 0.50%
+  rebalance_sec: 3600               # 1시간마다 ATR 재계산
+  drift_rebalance_pct: 50           # 가격이 범위 50% 벗어나면 리밸런스
+  hurst_pause: 0.70                 # Hurst > 0.7 → 그리드 일시정지
+  monitor_sec: 3                    # 3초마다 주문 체크
+  atr_period: 14                    # ATR 14기간
+  atr_timeframe: "5m"               # 5분봉
 
 risk:
   margin_pct: 0.80
