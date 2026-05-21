@@ -105,12 +105,16 @@ class GridEngine:
         rebalance_check = 0
         while self._running:
             try:
-                if not self.state or not self.state.is_active:
+                if not self.state:
                     await asyncio.sleep(5)
                     continue
 
-                # 레짐 게이트
+                # 레짐 게이트 (정지 중에도 항상 체크 → 복귀 판단)
                 await self._check_regime()
+
+                if not self.state.is_active:
+                    await asyncio.sleep(5)
+                    continue
 
                 # 리스크 게이트
                 if self.risk_manager:
