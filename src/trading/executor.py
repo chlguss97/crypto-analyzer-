@@ -13,8 +13,8 @@ LIMIT_TIMEOUT_SEC = 30  # 120→30초: 미체결 시 빠르게 시장가 전환 
 MAX_SLIPPAGE_PCT = 0.1
 
 # 04-16: 수수료 절감 — maker 0.02% vs taker 0.05% → 전 주문 limit post-only 우선
-POST_ONLY_TIMEOUT_SEC = 5        # post-only 체결 대기 (5초)
-POST_ONLY_MAX_RETRIES = 5        # 가격 추격 5회 (최대 25초 블록)
+POST_ONLY_TIMEOUT_SEC = 3        # post-only 체결 대기
+POST_ONLY_MAX_RETRIES = 2        # post-only 시도 2회 → 실패 시 market 폴백
 
 
 class OrderExecutor:
@@ -286,9 +286,9 @@ class OrderExecutor:
                 logger.error(f"post-only 주문 에러 ({attempt}): {e}")
                 await asyncio.sleep(0.5)
 
-        # post-only 전부 실패 → 진입 포기 (SPEC §6.1: 약한 시그널은 taker 불가)
-        logger.warning("post-only 3회 추격 실패 → 진입 포기 (maker 강제)")
-        return None
+        # post-only 실패 → market 폴백 (체결이 최우선)
+        logger.info("post-only 미체결 → market 폴백 (taker)")
+        return await self._market_order(side, size, pos_side)
 
     async def _wait_for_fill_fast(self, order_id: str, timeout: int) -> dict | None:
         """체결 대기 (500ms 폴링 — post-only 용)"""
@@ -645,13 +645,8 @@ class OrderExecutor:
             return await self._market_order(side, size, pos_side, reduce_only=True)
 
         # 일반 청산 (TP, trail 등): post-only 강제
-        order = await self._post_only_close(side, size, pos_side, reason)
-        if order:
-            return order
-
-        # post-only 실패해도 market 폴백 없음 — 다음 사이클에서 재시도
-        logger.warning(f"post-only 청산 실패 → 다음 사이클 재시도 ({reason})")
-        return None
+        # post-only 시도 → 실패 시 내부에서 market 폴백
+        return await self._post_only_close(side, size, pos_side, reason)
 
     async def _post_only_close(self, side: str, size: float, pos_side: str,
                                reason: str) -> dict | None:
@@ -725,7 +720,9 @@ class OrderExecutor:
                 logger.debug(f"post-only 청산 에러 ({attempt}): {e}")
                 await asyncio.sleep(0.3)
 
-        return None  # 모든 시도 실패
+        # post-only 청산 실패 → market 폴백 (포지션 방치 방지)
+        logger.info(f"post-only 청산 실패 → market 폴백 ({reason})")
+        return await self._market_order(side, size, pos_side, reduce_only=True)
 
     async def close_partial(self, direction: str, size: float,
                             close_pct: float, reason: str) -> dict | None:
