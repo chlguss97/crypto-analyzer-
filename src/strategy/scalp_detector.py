@@ -191,6 +191,12 @@ class EnsembleDetector:
         self.min_micro_confidence = cfg.get("min_micro_confidence", 0.3)
         self.stale_threshold_ms = cfg.get("stale_threshold_ms", 5000)
 
+        # 반전 시 더 높은 conf 요구 (포지션 보유 중 반전 = 더 확실해야 함)
+        self.conf_reversal = cfg.get("ensemble_conf_reversal", 0.9)
+
+        # 시그널 지속성: 같은 방향 N회 연속 투표해야 진입
+        self.persistence_required = cfg.get("signal_persistence", 3)
+
         # 4개 독립 모델
         self.ofi_model = OFIModel()
         self.ou_model = OUModel(entry_z=cfg.get("ou_entry_z", 2.0))
@@ -202,11 +208,15 @@ class EnsembleDetector:
         self._warmup_count = 0
         self._warmup_threshold = 100
 
+        # 시그널 지속성 추적
+        self._prev_direction = 0  # 이전 앙상블 방향
+        self._direction_streak = 0  # 연속 동일 방향 횟수
+
         # 디버그 로깅
         self._last_debug_ts = 0
         self._gate_stats = {
             "total": 0, "warmup": 0, "spread": 0, "vpin": 0,
-            "micro": 0, "low_conf": 0, "passed": 0,
+            "micro": 0, "low_conf": 0, "persistence": 0, "passed": 0,
             "ofi": 0, "ou": 0, "cvd": 0, "lstm": 0,
         }
 
@@ -299,9 +309,23 @@ class EnsembleDetector:
 
         if conf < self.conf_threshold:
             self._gate_stats["low_conf"] += 1
+            self._direction_streak = 0
+            self._prev_direction = 0
             return None
 
+        direction_int = 1 if d_bar > 0 else -1
         direction = "long" if d_bar > 0 else "short"
+
+        # ── 10.5. 시그널 지속성 (같은 방향 N회 연속 필요) ──
+        if direction_int == self._prev_direction:
+            self._direction_streak += 1
+        else:
+            self._direction_streak = 1
+            self._prev_direction = direction_int
+
+        if self._direction_streak < self.persistence_required:
+            self._gate_stats["persistence"] += 1
+            return None
 
         # ── 11. 사이징 배수 (VPIN + Hurst + micro_conf) ──
         hurst = features.get("hurst", 0.5)
@@ -392,7 +416,8 @@ class EnsembleDetector:
         if s["total"] > 0:
             logger.info(
                 f"[ENSEMBLE] {s['total']}회 | warmup:{s['warmup']} spread:{s['spread']} "
-                f"vpin:{s['vpin']} micro:{s['micro']} low_conf:{s['low_conf']} | "
+                f"vpin:{s['vpin']} micro:{s['micro']} low_conf:{s['low_conf']} "
+                f"persist:{s['persistence']} | "
                 f"votes(ofi:{s['ofi']} ou:{s['ou']} cvd:{s['cvd']} lstm:{s['lstm']}) "
                 f"→ passed:{s['passed']}"
             )

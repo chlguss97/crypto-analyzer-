@@ -25,7 +25,9 @@ scalp:
   # OU Z-Score
   ou_entry_z: 2.0                   # ±2σ 진입 (프로 원문)
   # 앙상블 (프로: "가장 영향력 있는 파라미터")
-  ensemble_conf: 0.6                # 최소 신뢰도 (4모델 합의)
+  ensemble_conf: 0.8                # 진입 최소 신뢰도
+  ensemble_conf_reversal: 0.9       # 반전 최소 신뢰도 (보유 중 뒤집기는 더 확실해야)
+  signal_persistence: 3             # 같은 방향 3회 연속 투표 필요
   # VPIN (프로: >0.7 킬스위치, BTC 보정 0.85)
   vpin_extreme: 0.85
   # Hurst (프로: >0.6 모멘텀, <0.4 평균회귀, 0.45~0.55 데드존)

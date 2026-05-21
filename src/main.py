@@ -322,18 +322,22 @@ class ScalpEngine:
                         if prev_pos and not self.scalp_manager.has_position():
                             await self._on_scalp_closed(prev_pos)
 
-                    # 시그널 반전 청산 — 반대 방향 시그널 발생 시 즉시 종료
+                    # 시그널 반전 청산 — conf_reversal(0.9) 이상만 반전 허용
                     if self.scalp_manager.has_position():
                         pos = self.scalp_manager.position
                         reversal = await self.ensemble_detector.evaluate()
                         if reversal and reversal["direction"] != pos.direction:
-                            logger.info(
-                                f"[SCALP] 시그널 반전: {pos.direction}→{reversal['direction']} → 청산"
-                            )
-                            hold_sec = _time.time() - pos.entry_time
-                            await self.scalp_manager._close_and_finalize(pos, "signal_reversal", hold_sec)
-                            if not self.scalp_manager.has_position():
-                                await self._on_scalp_closed(pos)
+                            rev_conf = reversal.get("confidence", 0)
+                            conf_reversal = self.ensemble_detector.conf_reversal
+                            if rev_conf >= conf_reversal:
+                                logger.info(
+                                    f"[SCALP] 시그널 반전: {pos.direction}→{reversal['direction']} "
+                                    f"(conf={rev_conf:.2f}≥{conf_reversal}) → 청산"
+                                )
+                                hold_sec = _time.time() - pos.entry_time
+                                await self.scalp_manager._close_and_finalize(pos, "signal_reversal", hold_sec)
+                                if not self.scalp_manager.has_position():
+                                    await self._on_scalp_closed(pos)
 
                     # 킬스위치
                     bot_status = await self.redis.get("sys:bot_status")
