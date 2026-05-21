@@ -597,6 +597,15 @@ class ScalpEngine:
             await asyncio.sleep(60)
 
     async def periodic_orphan_algo_sweeper(self):
+        # 시작 직후 즉시 1회 정리 (재시작 시 고아 알고 즉시 제거)
+        await asyncio.sleep(5)
+        try:
+            cleaned = await self.executor.cancel_all_algos()
+            if cleaned:
+                logger.warning(f"시작 시 고아 알고 {len(cleaned)}개 정리")
+        except Exception:
+            pass
+
         while self._running:
             await asyncio.sleep(120)
             try:

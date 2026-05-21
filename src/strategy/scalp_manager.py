@@ -360,7 +360,7 @@ class ScalpManager:
         try:
             order = await self.executor.close_position(pos.direction, pos.size, reason)
             if order and isinstance(order, dict):
-                exit_price = float(order.get("price", 0) or 0)
+                exit_price = float(order.get("average") or order.get("price", 0) or 0)
                 fee_info = order.get("fee") or {}
                 if isinstance(fee_info, dict):
                     pos.total_fee += abs(float(fee_info.get("cost", 0) or 0))
