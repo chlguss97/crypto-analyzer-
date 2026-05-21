@@ -215,7 +215,7 @@ class GridEngine:
 
         # 30초마다 상태 로그
         now = time.time()
-        if now - getattr(self, "_last_status_log", 0) >= 30:
+        if now - getattr(self, "_last_status_log", 0) >= 15:
             self._last_status_log = now
             price_str = await self.redis.get("rt:price:BTC-USDT-SWAP")
             price = float(price_str) if price_str else 0
