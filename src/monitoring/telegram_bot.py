@@ -118,40 +118,28 @@ class TelegramNotifier:
 
     async def _cmd_status(self):
         try:
-            autotrading = "ON" if self.redis and (await self.redis.get("sys:autotrading")) == "on" else "OFF"
-            regime = (await self.redis.get("sys:regime")) if self.redis else "?"
             balance = (await self.redis.get("sys:balance")) if self.redis else "?"
-            positions = 1 if (self.grid_engine and self.grid_engine.has_position()) else 0
+            hurst = (await self.redis.get("rt:regime:hurst")) if self.redis else "?"
 
-            # ML 상태
-            ml_phase = "?"
-            ml_labeled = 0
-            if self.redis:
-                ts = await self.redis.get_json("sys:trade_state")
-                if ts:
-                    ml_phase = ts.get("ml_phase", "?")
-                    ml_labeled = ts.get("ml_labeled", 0)
+            grid_info = ""
+            if self.grid_engine:
+                gs = self.grid_engine.get_status()
+                grid_info = (
+                    f"Grid: {'ACTIVE' if gs.get('active') else 'PAUSED'}"
+                    f" | center: ${gs.get('center', 0):.0f}"
+                    f" | spacing: {gs.get('spacing_pct', 0):.2f}%"
+                    f"\n사이클: {gs.get('total_cycles', 0)}회"
+                    f" | PnL: ${gs.get('total_pnl', 0):+.2f}"
+                )
+                if gs.get("pause_reason"):
+                    grid_info += f"\n⚠️ 일시정지: {gs['pause_reason']}"
 
             text = (
-                "\U0001f4ca <b>봇 상태</b>\n\n"
-                f"자동매매: {autotrading}\n"
+                "\U0001f4ca <b>GridBot 상태</b>\n\n"
                 f"잔고: ${balance}\n"
-                f"포지션: {positions}개\n"
-                f"레짐: {regime}\n"
-                f"ML: Phase {ml_phase} ({ml_labeled}건 labeled)"
+                f"Hurst: {hurst or 'N/A'}\n"
+                f"{grid_info}"
             )
-
-            # 스캘핑 상태
-            if self.redis:
-                ts = await self.redis.get_json("sys:trade_state")
-                if ts and isinstance(ts, dict):
-                    text += (
-                        f"\n\nMode: {ts.get('mode', '?')}"
-                        f" | Hurst: {ts.get('hurst', 'N/A')}"
-                        f" | VPIN: {ts.get('vpin', 'N/A')}"
-                        f" | Trades/h: {ts.get('trades_hour', 0)}"
-                    )
-
             await self._send(text)
         except Exception as e:
             await self._send(f"\u26a0\ufe0f 상태 조회 실패: {e}")
@@ -169,43 +157,23 @@ class TelegramNotifier:
 
     async def _cmd_close(self):
         if not self.grid_engine:
-            return await self._send("\u26a0\ufe0f scalp_manager 미주입")
-        if not self.grid_engine.has_position():
-            return await self._send("\u2705 활성 포지션 없음")
-        await self._send(f"\U0001f6d1 <b>스캘핑 포지션 청산 시작</b>")
+            return await self._send("\u26a0\ufe0f GridEngine 미초기화")
         try:
-            import time
-            pos = self.grid_engine.position
-            hold_sec = time.time() - pos.entry_time
-            await self.grid_engine._close_and_finalize(pos, "telegram_cmd", hold_sec)
-            await self._send(f"\u2705 <b>청산 완료</b>")
+            await self.grid_engine.stop()
+            await self._send("\u2705 <b>그리드 정지 + 전 주문 취소 완료</b>")
         except Exception as e:
-            await self._send(f"\u26a0\ufe0f 청산 에러: {e}")
+            await self._send(f"\u26a0\ufe0f 정지 에러: {e}")
 
     async def _cmd_clear(self):
         if not self.grid_engine:
-            return await self._send("\u26a0\ufe0f scalp_manager 미주입")
-        if not self.grid_engine.has_position():
-            return await self._send("\u2705 정리할 포지션 없음")
-
+            return await self._send("\u26a0\ufe0f GridEngine 미초기화")
         try:
-            import time
-            pos = self.grid_engine.position
-            hold_sec = time.time() - pos.entry_time
-            await self.grid_engine._close_and_finalize(pos, "force_clear_telegram", hold_sec)
-        except Exception as e:
-            logger.error(f"/clear 실패: {e}")
-
-        # 잔여 Redis 키 정리
-        if self.redis:
-            try:
-                keys = await self.redis._client.keys("pos:active:*")
-                for k in (keys or []):
-                    await self.redis._client.delete(k)
-            except Exception:
-                pass
-
-        await self._send(f"\U0001f9f9 <b>/clear 완료</b>\nOKX 직접 확인 권장")
+            await self.grid_engine.stop()
+            # 거래소 미체결 전부 취소
+            if self.executor:
+                await self.executor.cancel_all_orders()
+                await self.executor.cancel_all_algos()
+            await self._send("\U0001f9f9 <b>/clear 완료</b> — 전 주문 취소")
 
     async def _cmd_market(self):
         try:

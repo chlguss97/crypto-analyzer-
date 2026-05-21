@@ -65,6 +65,7 @@ class GridEngine:
         self.symbol = (config or {}).get("exchange", {}).get("symbol", "BTC/USDT:USDT")
         self.state: GridState | None = None
         self._running = True
+        self._lock = asyncio.Lock()  # 상태 변경 동시성 보호
 
     # ══════════════════════════════════════════
     #  메인 루프
@@ -120,13 +121,15 @@ class GridEngine:
                         continue
 
                 if self.state.is_active:
-                    await self._monitor_tick()
+                    async with self._lock:
+                        await self._monitor_tick()
 
                     # 리밸런스 (60초마다)
                     now = time.time()
                     if now - rebalance_check >= 60:
                         rebalance_check = now
-                        await self._check_rebalance()
+                        async with self._lock:
+                            await self._check_rebalance()
 
             except asyncio.CancelledError:
                 raise
@@ -523,6 +526,8 @@ class GridEngine:
                 trs.append(tr)
 
             atr = sum(trs) / len(trs) if trs else 0
+            if atr <= 0 or current_price <= 0:
+                return 0.0
             return (atr / current_price) * 100
 
         except Exception as e:
