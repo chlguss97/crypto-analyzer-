@@ -382,6 +382,14 @@ class GridEngine:
         if not self.state:
             return
 
+        # 열린 포지션(counter-order 대기 중)이 있으면 리밸런스 스킵
+        has_open = any(
+            lv.status == "filled" and lv.counter_status in ("placed", "none")
+            for lv in self.state.levels.values()
+        )
+        if has_open:
+            return
+
         price_str = await self.redis.get("rt:price:BTC-USDT-SWAP")
         if not price_str:
             return
@@ -392,9 +400,9 @@ class GridEngine:
         range_pct = self.state.spacing_pct * self.half_levels
         drift_ratio = drift / range_pct * 100 if range_pct > 0 else 0
 
-        # 가격이 그리드 범위의 50% 이상 벗어남
+        # 가격이 그리드 범위를 크게 벗어남
         if drift_ratio > self.drift_pct:
-            logger.info(f"[GRID] 리밸런스 (drift {drift:.2f}% > range {range_pct:.2f}%의 {self.drift_pct}%)")
+            logger.info(f"[GRID] 리밸런스 (drift {drift:.2f}%)")
             await self._rebuild()
             return
 
