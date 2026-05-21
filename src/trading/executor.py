@@ -13,8 +13,8 @@ LIMIT_TIMEOUT_SEC = 30  # 120→30초: 미체결 시 빠르게 시장가 전환 
 MAX_SLIPPAGE_PCT = 0.1
 
 # 04-16: 수수료 절감 — maker 0.02% vs taker 0.05% → 전 주문 limit post-only 우선
-POST_ONLY_TIMEOUT_SEC = 2        # post-only 체결 대기 (2초 — BTC 스프레드 내 체결 충분)
-POST_ONLY_MAX_RETRIES = 3        # 가격 추격 3회 (최대 6초 블록)
+POST_ONLY_TIMEOUT_SEC = 5        # post-only 체결 대기 (5초)
+POST_ONLY_MAX_RETRIES = 5        # 가격 추격 5회 (최대 25초 블록)
 
 
 class OrderExecutor:
@@ -228,18 +228,19 @@ class OrderExecutor:
                 logger.warning("best bid/ask 0 → 진입 포기")
                 return None
 
-            # 상대호가 바로 안쪽에 배치 → post-only 통과 + 즉시 체결 가능
-            # buy: best_ask - 0.1 (ask 바로 아래 = 최우선 bid 갱신)
-            # sell: best_bid + 0.1 (bid 바로 위 = 최우선 ask 갱신)
-            # 재시도마다 자기 호가쪽으로 1$ 양보 (체결 확률 유지)
+            # best bid/ask 사이에 배치 → post-only 통과 + 체결 유도
+            # buy: best_bid에 가깝게 (재시도마다 best_ask 쪽으로 접근)
+            # sell: best_ask에 가깝게 (재시도마다 best_bid 쪽으로 접근)
             tick = 0.1  # OKX BTC tick size
-            offset = 1.0 * (attempt - 1)  # 시도2+: 양보폭 증가
+            spread = best_ask - best_bid
+            # 재시도마다 스프레드의 20%씩 상대호가로 접근
+            progress = min(0.8, 0.2 * attempt)  # 최대 80%까지 접근
             if side == "buy":
-                price = round(best_ask - tick - offset, 1)
-                price = min(price, best_ask - tick)  # ask 이상 불가 (post-only 거부)
+                price = round(best_bid + spread * progress, 1)
+                price = min(price, best_ask - tick)  # ask 미만 유지 (post-only)
             else:
-                price = round(best_bid + tick + offset, 1)
-                price = max(price, best_bid + tick)  # bid 이하 불가 (post-only 거부)
+                price = round(best_ask - spread * progress, 1)
+                price = max(price, best_bid + tick)  # bid 초과 유지 (post-only)
 
             try:
                 order = await self.exchange.create_order(
@@ -668,12 +669,16 @@ class OrderExecutor:
             if best_bid <= 0 or best_ask <= 0:
                 return None
 
-            # maker: 첫 시도 공격적, 이후 보수적
-            offset = 1.0 * (attempt - 1)
+            # 청산: 상대호가 쪽에 배치 (체결 우선)
+            spread = best_ask - best_bid
+            tick = 0.1
+            progress = min(0.8, 0.2 * attempt)
             if side == "sell":
-                price = round(best_ask + offset, 1)
+                price = round(best_ask - spread * progress, 1)
+                price = max(price, best_bid + tick)
             else:
-                price = round(best_bid - offset, 1)
+                price = round(best_bid + spread * progress, 1)
+                price = min(price, best_ask - tick)
 
             try:
                 order = await self.exchange.create_order(
