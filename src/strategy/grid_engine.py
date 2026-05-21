@@ -213,6 +213,21 @@ class GridEngine:
         if not self.state:
             return
 
+        # 30초마다 상태 로그
+        now = time.time()
+        if now - getattr(self, "_last_status_log", 0) >= 30:
+            self._last_status_log = now
+            price_str = await self.redis.get("rt:price:BTC-USDT-SWAP")
+            price = float(price_str) if price_str else 0
+            levels_summary = " ".join(
+                f"Lv{lid}:{lv.status[0]}" + (f"→{lv.counter_status[0]}" if lv.counter_status != "none" else "")
+                for lid, lv in sorted(self.state.levels.items())
+            )
+            logger.info(
+                f"[GRID] 모니터 | ${price:.0f} | center=${self.state.center_price:.0f} | "
+                f"{levels_summary} | cycles={self.state.total_cycles} pnl=${self.state.total_pnl:+.2f}"
+            )
+
         try:
             open_orders = await self.executor.exchange.fetch_open_orders(self.symbol)
         except Exception as e:
@@ -307,7 +322,7 @@ class GridEngine:
         if order:
             lv.counter_order_id = order.get("id")
             lv.counter_status = "placed"
-            logger.debug(f"[GRID] counter-order Lv{lv.level_id}: TP @ ${tp_price:.1f}")
+            logger.info(f"[GRID] counter-order Lv{lv.level_id}: TP @ ${tp_price:.1f}")
         else:
             logger.warning(f"[GRID] counter-order 실패 Lv{lv.level_id}")
 
