@@ -5,7 +5,38 @@
 
 ---
 
-## 2026-05-20 — ScalpEngine v3 전면 재설계
+## 2026-05-21 — Grid Trading 전환 + 스캘핑 비활성화
+
+### 전략 전환: 스캘핑 → ATR-Adaptive Grid Trading
+
+스캘핑 50건 매매 결과 PnL -$0.35, 수수료 -$12.79 = 순손실 -$13.14.
+방향 예측에 엣지 없어 수수료만 소진 → 그리드로 전환.
+
+**Grid Trading:**
+- 4레벨 (2 buy + 2 sell), 각 0.01 BTC, 20x 레버리지
+- ATR-adaptive spacing: clamp(ATR% × 0.6, 0.10%~0.50%)
+- 체결 → counter-order(TP) → 사이클 수익 → 재배치
+- 전부 limit post-only (maker 0.02%)
+- Hurst > 0.7 일시정지, BOT_KILL -20% DD
+
+**스캘핑 비활성화 (archived):**
+- 4모델 앙상블 (OFI+OU+CVD+LSTM tanh) 코드 유지, config에서 off
+- XGBoost 메타라벨 → ModelManager stub (LSTM Phase 3 대기)
+- 쿨다운/시간정지/연패축소 제거 완료
+
+**신규 파일:**
+- `src/strategy/grid_engine.py` — 핵심 그리드 로직
+- `src/trading/grid_state.py` — 데이터 구조 + Redis 직렬화
+
+**수정 파일:**
+- `executor.py` — `place_limit_order()`, `cancel_order_by_id()` 추가
+- `storage.py` — `grid_trades` 테이블 추가
+- `main.py` — grid/scalp 선택 실행
+- `settings.yaml` — `grid:` 섹션 추가, `scalp.enabled: false`
+
+---
+
+## 2026-05-20 — ScalpEngine v3 전면 재설계 (archived)
 
 ### 전략 교체: 모멘텀 → 마이크로스트럭처 스캘핑
 

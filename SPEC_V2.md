@@ -1,6 +1,6 @@
-# SPEC v3 — BTC 마이크로스트럭처 스캘핑 엔진
+# SPEC v3 — BTC 자동매매 엔진 (Grid + Scalp)
 
-> 작성: 2026-05-20 (v2 → v3 전면 재설계)  
+> 작성: 2026-05-20 (v3 스캘핑), 2026-05-21 (Grid 전환)  
 > 목표: 횡보장에서도 수익, 레버리지 변동성 활용, 3%+ 마진 스캘핑  
 > 원칙: 4계층 파이프라인 (Raw → Feature → Regime → ML) + 빠른 진출입  
 > 참조: Vadim.blog ML Features for Crypto Scalping, Cont et al. (2014) OFI
@@ -228,24 +228,59 @@ CREATE TABLE scalp_trades (
 
 ---
 
-## 8. 파일 구조
+## 8. Grid Trading Engine (2026-05-21 — 현재 활성 전략)
+
+스캘핑의 수수료 문제(50건 매매 PnL -$0.35, 수수료 -$12.79)로 그리드로 전환.
+방향 예측 불필요 — 가격 진동에서 구조적 수익.
+
+### 메커닉
+```
+SELL +2 @ center + 2×spacing  (open short)
+SELL +1 @ center + 1×spacing  (open short)
+────── center (현재가) ──────
+BUY  -1 @ center - 1×spacing  (open long)
+BUY  -2 @ center - 2×spacing  (open long)
+
+체결 → counter-order(TP, reduceOnly) → 사이클 완성 → 재배치
+```
+
+### 설정
+| 항목 | 값 | 근거 |
+|---|---|---|
+| 레벨 | 4 (2buy+2sell) | 잔고 $170 × 20x = $3,400, 최소 0.01BTC |
+| Spacing | ATR% × 0.6, clamp(0.10~0.50%) | 수수료(0.04%) 대비 2.5x+ |
+| 리밸런스 | 1시간 or drift > 50% | ATR 변동 적응 |
+| Hurst gate | > 0.7 → 일시정지 | 추세장에서 그리드 손실 방지 |
+| BOT_KILL | -20% DD | 유일한 하드 게이트 |
+
+### 파일
+| 파일 | 역할 |
+|---|---|
+| `src/strategy/grid_engine.py` | **핵심**: build/monitor/rebalance/recover |
+| `src/trading/grid_state.py` | GridLevel/GridState + Redis 직렬화 |
+
+---
+
+## 9. 파일 구조 (전체)
 
 ```
 src/
   data/
     binance_stream.py    — Binance aggTrade/REST (CVD/Whale/Liq/Funding)
-    ws_stream.py         — OKX WS (trades/tickers/books/candles) + 마이크로스트럭처
+    ws_stream.py         — OKX WS (trades/tickers/books/candles) + LOB 스냅샷 수집
     candle_collector.py  — OKX REST 캔들 백필
     storage.py           — SQLite (scalp.db) + Redis 래퍼
   strategy/
-    scalp_detector.py    — 실시간 시그널 감지 (Redis only, 500ms)
-    scalp_manager.py     — 스캘핑 포지션 관리 (TP/SL/TimeStop)
-    ml_engine.py         — XGBoost Go/NoGo (Phase A→B)
-    adaptive_params.py   — TP/SL 자동 보정
+    grid_engine.py       — [활성] ATR-Adaptive Grid Trading
+    scalp_detector.py    — [비활성] 4모델 앙상블 시그널 감지
+    scalp_manager.py     — [비활성] 스캘핑 포지션 관리
+    ml_engine.py         — ModelManager (LSTM stub, Phase 3 대기)
+    adaptive_params.py   — TP/SL 자동 보정 (스캘핑용)
     welford.py           — Welford 온라인 z-score 정규화
   trading/
-    executor.py          — OKX CCXT 주문 실행
-    risk_manager.py      — BOT_KILL + 쿨다운
+    executor.py          — OKX CCXT 주문 실행 + 그리드용 limit order
+    grid_state.py        — GridLevel/GridState 데이터클래스
+    risk_manager.py      — BOT_KILL -20% DD
   monitoring/
     telegram_bot.py      — Telegram 알림/명령
     trade_logger.py      — JSONL 로깅
