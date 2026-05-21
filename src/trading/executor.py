@@ -172,7 +172,17 @@ class OrderExecutor:
                 )
                 fill_price = order.get("average") or order.get("price")
                 if not fill_price:
-                    # OKX 시장가 응답에 fill price 없음 → 포지션에서 조회
+                    # OKX 시장가 응답에 fill price 없음 → fetch_order로 재조회
+                    try:
+                        await asyncio.sleep(0.3)
+                        fetched = await self.exchange.fetch_order(order["id"], self.symbol)
+                        fill_price = fetched.get("average") or fetched.get("price")
+                        if fill_price:
+                            order["average"] = fill_price
+                    except Exception:
+                        pass
+                if not fill_price and not reduce_only:
+                    # 진입 주문이면 포지션에서 조회 가능
                     try:
                         entry, _ = await self.get_position_entry()
                         if entry > 0:
