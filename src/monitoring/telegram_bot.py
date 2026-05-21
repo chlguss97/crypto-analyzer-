@@ -169,11 +169,12 @@ class TelegramNotifier:
             return await self._send("\u26a0\ufe0f GridEngine 미초기화")
         try:
             await self.grid_engine.stop()
-            # 거래소 미체결 전부 취소
             if self.executor:
                 await self.executor.cancel_all_orders()
                 await self.executor.cancel_all_algos()
             await self._send("\U0001f9f9 <b>/clear 완료</b> — 전 주문 취소")
+        except Exception as e:
+            await self._send(f"\u26a0\ufe0f clear 에러: {e}")
 
     async def _cmd_market(self):
         try:
