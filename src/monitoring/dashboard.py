@@ -507,9 +507,8 @@ async def get_setup_tracker():
 async def get_ml_stats():
     """모델 통계 (4모델 앙상블)"""
     try:
-        from src.strategy.ml_engine import ModelManager
-        mm = ModelManager()
-        return mm.get_stats()
+        # from src.strategy.ml_engine import ModelManager  # removed
+        return {"status": "grid_only", "ml": "removed"}
     except Exception as e:
         return {"lstm_enabled": False, "has_model": False, "error": str(e)}
 
@@ -623,7 +622,7 @@ async def get_engine_overview():
     # ML 상태
     ml_stats = {}
     try:
-        from src.strategy.ml_engine import ModelManager
+        # from src.strategy.ml_engine import ModelManager  # removed
         ml_stats = ModelManager().get_stats()
     except Exception:
         pass

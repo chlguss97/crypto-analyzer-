@@ -1,46 +1,14 @@
-# ── ScalpEngine v3 — 4-Model Ensemble (프로 원문 일치) ──
+# ── GridBot — ATR-Adaptive Grid Trading ──
 
-strategy: "scalp"
+strategy: "grid"
 
 exchange:
   name: "okx"
   symbol: "BTC/USDT:USDT"
   margin_mode: "isolated"
 
-data_source: "binance"
-
 timeframes:
   candles: ["1m", "5m", "15m", "1h", "4h", "1d"]
-
-# ── 스캘핑 설정 ──
-scalp:
-  enabled: false                     # 스캘핑 비활성화 (그리드로 전환)
-  shadow_mode: false
-  leverage: 20
-  margin_pct: 0.80
-  # 동적 TP/SL (k × Parkinson Vol)
-  sl_k_vol: 2.0
-  tp_k_vol: 2.0
-  tp_price_pct: 0.20               # fallback (Parkinson 없을 때)
-  sl_price_pct: 0.15               # fallback
-  # OU Z-Score
-  ou_entry_z: 2.0                   # ±2σ 진입 (프로 원문)
-  # 앙상블 (프로: "가장 영향력 있는 파라미터")
-  ensemble_conf: 0.8                # 진입 최소 신뢰도
-  ensemble_conf_reversal: 0.9       # 반전 최소 신뢰도 (보유 중 뒤집기는 더 확실해야)
-  signal_persistence: 3             # 같은 방향 3회 연속 투표 필요
-  # VPIN (프로: >0.7 킬스위치, BTC 보정 0.85)
-  vpin_extreme: 0.85
-  # Hurst (프로: >0.6 모멘텀, <0.4 평균회귀, 0.45~0.55 데드존)
-  hurst_momentum: 0.6
-  hurst_mean_revert: 0.4
-  # LSTM (Phase 3에서 활성화)
-  lstm_enabled: false
-  lstm_min_accuracy: 0.52           # 프로: "< 52% → noise, not signal"
-  # 프리게이트
-  max_spread: 2.0
-  min_micro_confidence: 0.3
-  stale_threshold_ms: 5000
 
 # ── 그리드 트레이딩 ──
 grid:
@@ -59,13 +27,7 @@ grid:
   atr_timeframe: "5m"               # 5분봉
 
 risk:
-  margin_pct: 0.80
-  leverage_range: [20, 20]
-  max_positions: 1
-  bot_kill_drawdown: 0.20           # -20% DD → 봇 정지 (유일한 게이트)
-
-polling:
-  shadow_check_sec: 5
+  bot_kill_drawdown: 0.20           # -20% DD → 봇 정지
 
 fees:
   taker: 0.0005

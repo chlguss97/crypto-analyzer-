@@ -1,12 +1,27 @@
 # Commit Log
 
 > 자동 생성 — `scripts/update_commit_log.sh` (매 커밋 후 실행)
-> Updated: 2026-05-21 08:46:57    
-> Total commits: 391 (2026-04-03 → 2026-05-21)
+> Updated: 2026-05-21 14:40:53    
+> Total commits: 406 (2026-04-03 → 2026-05-21)
 
 Claude 가 질문/변경 작업 시 이 파일을 참고해서 과거 변경 이력 컨텍스트를 확보합니다. 수동 편집 금지 — 다음 커밋 시 덮어써집니다.
 
 ## 2026-05-21
+- `eecdcb20` docs: SPEC/CLAUDE/CHANGELOG 그리드 전환 반영
+- `9425f531` feat: ATR-Adaptive Grid Trading Engine
+- `c8e37bcf` fix: 과매매 방지 — 시그널 지속성 + 반전 conf 상향
+- `a53a396a` fix: post-only 실패 시 market 폴백 — 체결 최우선
+- `21be151e` fix: post-only 체결률 개선 — 타임아웃 5초 + 스프레드 접근 방식
+- `bb7302f9` feat: Phase 2 — LOB 스냅샷 수집 + PyTorch CPU 추가
+- `3368b838` feat: 4모델 앙상블 전환 — 프로 원문(Vadim.blog) 완전 일치
+- `9f63d185` fix: 쿨다운/시간정지 제거 — SPEC 프로 원문 정렬
+- `ba668c6c` docs: SPEC/CLAUDE 프로 원문 기준으로 수정
+- `399f9941` fix: SPEC 준수 — 전 주문 post-only maker 강제
+- `cf7cada2` fix: 재시작 시 거래소 포지션 복원 + SL/TP 보존
+- `73d1e0b9` fix: 청산 시 체결가 None → fetch_order 재조회
+- `07712737` fix: 시작 시 고아 알고 즉시 정리 + exit_price average 우선
+- `b23f1f6a` fix: VPIN extreme 0.85 + 체결가 None 수정 + TP/SL 동적vol 버그
+- `0d3a7b1d` fix: Redis never type fallback — 명시적 타입 어노테이션
 - `347b3902` fix: UtcTime 제거 + abs() 타입 명시
 - `3e70222d` fix: anyhow 추가 + rusqlite 0.37 API 호환
 

@@ -22,7 +22,7 @@ class TelegramNotifier:
         # main.py에서 주입
         self.redis = None
         self.executor = None
-        self.scalp_manager = None  # ScalpManager (v3)
+        self.grid_engine = None  # GridEngine
         self.risk_manager = None
 
     async def initialize(self):
@@ -121,7 +121,7 @@ class TelegramNotifier:
             autotrading = "ON" if self.redis and (await self.redis.get("sys:autotrading")) == "on" else "OFF"
             regime = (await self.redis.get("sys:regime")) if self.redis else "?"
             balance = (await self.redis.get("sys:balance")) if self.redis else "?"
-            positions = 1 if (self.scalp_manager and self.scalp_manager.has_position()) else 0
+            positions = 1 if (self.grid_engine and self.grid_engine.has_position()) else 0
 
             # ML 상태
             ml_phase = "?"
@@ -168,31 +168,31 @@ class TelegramNotifier:
             await self._send(f"\u26a0\ufe0f 잔고 조회 실패: {e}")
 
     async def _cmd_close(self):
-        if not self.scalp_manager:
+        if not self.grid_engine:
             return await self._send("\u26a0\ufe0f scalp_manager 미주입")
-        if not self.scalp_manager.has_position():
+        if not self.grid_engine.has_position():
             return await self._send("\u2705 활성 포지션 없음")
         await self._send(f"\U0001f6d1 <b>스캘핑 포지션 청산 시작</b>")
         try:
             import time
-            pos = self.scalp_manager.position
+            pos = self.grid_engine.position
             hold_sec = time.time() - pos.entry_time
-            await self.scalp_manager._close_and_finalize(pos, "telegram_cmd", hold_sec)
+            await self.grid_engine._close_and_finalize(pos, "telegram_cmd", hold_sec)
             await self._send(f"\u2705 <b>청산 완료</b>")
         except Exception as e:
             await self._send(f"\u26a0\ufe0f 청산 에러: {e}")
 
     async def _cmd_clear(self):
-        if not self.scalp_manager:
+        if not self.grid_engine:
             return await self._send("\u26a0\ufe0f scalp_manager 미주입")
-        if not self.scalp_manager.has_position():
+        if not self.grid_engine.has_position():
             return await self._send("\u2705 정리할 포지션 없음")
 
         try:
             import time
-            pos = self.scalp_manager.position
+            pos = self.grid_engine.position
             hold_sec = time.time() - pos.entry_time
-            await self.scalp_manager._close_and_finalize(pos, "force_clear_telegram", hold_sec)
+            await self.grid_engine._close_and_finalize(pos, "force_clear_telegram", hold_sec)
         except Exception as e:
             logger.error(f"/clear 실패: {e}")
 
@@ -317,7 +317,7 @@ class TelegramNotifier:
     async def _cmd_risk(self):
         try:
             balance = await self.executor.get_balance() if self.executor else 0
-            positions = 1 if (self.scalp_manager and self.scalp_manager.has_position()) else 0
+            positions = 1 if (self.grid_engine and self.grid_engine.has_position()) else 0
 
             # risk_manager에서 상태
             streak = 0

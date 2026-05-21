@@ -1,12 +1,8 @@
 """
-ScalpEngine v3 — BTC 마이크로스트럭처 스캘핑 엔진
+GridEngine — BTC ATR-Adaptive Grid Trading
 
-4계층 파이프라인:
-  [1] Raw Data (Binance aggTrade + OKX trades/books/tickers)
-  [2] Feature Engine (OFI, CVD, VPIN, Hurst, Welford Z-Score)
-  [3] Regime Gate (Hurst → momentum/mean_revert/random_walk)
-  [4] ML Scorer (XGBoost → 신뢰도 ≥ 0.55 게이팅)
-  → Scalp Execute (TP 0.20% / SL 0.15% / Time 3~5분)
+4레벨 양방향 그리드 (2 buy + 2 sell).
+방향 예측 불필요 — 가격 진동에서 구조적 수익.
 """
 
 import asyncio
@@ -24,11 +20,6 @@ from src.utils.helpers import load_config, load_env
 from src.data.storage import Database, RedisClient
 from src.data.candle_collector import CandleCollector
 from src.data.ws_stream import WebSocketStream
-from src.data.binance_stream import BinanceStream
-from src.strategy.scalp_detector import EnsembleDetector
-from src.strategy.scalp_manager import ScalpManager
-from src.strategy.ml_engine import ModelManager
-from src.strategy.adaptive_params import AdaptiveParams
 from src.strategy.grid_engine import GridEngine
 from src.trading.risk_manager import RiskManager
 from src.trading.executor import OrderExecutor
@@ -55,38 +46,29 @@ _fh.setLevel(logging.WARNING)
 _fh.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s", datefmt="%Y-%m-%d %H:%M:%S"))
 logging.getLogger().addHandler(_fh)
 
-logger = logging.getLogger("ScalpEngine")
+logger = logging.getLogger("GridBot")
 
 
-class ScalpEngine:
-    """BTC 마이크로스트럭처 스캘핑 엔진"""
+class GridBot:
+    """BTC ATR-Adaptive Grid Trading Bot"""
 
     def __init__(self):
         load_env()
         self.config = load_config()
         self.symbol = self.config["exchange"]["symbol"]
-        scalp_cfg = self.config.get("scalp", {})
 
         # 인프라
         self.db = Database()
         self.redis = RedisClient()
         self.candle_collector = CandleCollector(self.db)
         self.ws_stream = WebSocketStream(self.redis, db=self.db)
-        self.binance_stream = BinanceStream(self.redis)
-
-        # 스캘핑 전략
-        self.scalp_enabled = self.config.get("scalp", {}).get("enabled", True)
-        self.ensemble_detector = EnsembleDetector(redis=self.redis, config=self.config)
-        self.scalp_manager = None  # initialize()에서 생성
-        self.model_manager = ModelManager(config=self.config)
-        self.adaptive = AdaptiveParams(config=self.config, redis=self.redis)
-
-        # 그리드 전략
-        self.grid_engine: GridEngine | None = None
 
         # 매매 엔진
         self.executor = OrderExecutor()
         self.risk_manager = RiskManager(self.redis, executor=self.executor)
+
+        # 그리드
+        self.grid_engine: GridEngine | None = None
 
         # 모니터링
         self.telegram = TelegramNotifier()
@@ -94,18 +76,10 @@ class ScalpEngine:
 
         # 상태
         self._running = False
-        self._last_trade_time = 0
-        self._trades_this_hour = 0
-        self._hour_reset_ts = 0
-
-        pass  # 리스크: VPIN/Hurst/BookShock/BOT_KILL만 사용
-
-        # Shadow phase
-        self.shadow_mode = scalp_cfg.get("shadow_mode", True)  # 초기: Shadow only
 
     async def initialize(self):
         logger.info("=" * 50)
-        logger.info("ScalpEngine v3 — Microstructure Scalping")
+        logger.info("GridBot — ATR-Adaptive Grid Trading")
         logger.info("=" * 50)
 
         await self.db.connect()
@@ -114,428 +88,42 @@ class ScalpEngine:
         await self.telegram.initialize()
         await self.executor.initialize()
 
-        # Model Manager (LSTM)
-        logger.info(f"LSTM: enabled={self.model_manager.lstm_enabled}, has_model={self.model_manager.has_valid_model()}")
-
-        # AdaptiveParams
-        await self.adaptive.load_state()
-
         # 잔고 + 리스크
         balance = await self.executor.get_balance()
         await self.risk_manager.initialize(balance)
         logger.info(f"잔고: ${balance:.2f}")
 
-        # ScalpManager
-        self.scalp_manager = ScalpManager(
-            executor=self.executor,
-            db=self.db,
-            redis=self.redis,
-            telegram=self.telegram,
-            config=self.config,
-        )
-
-        # 캔들 백필 (Hurst 계산용)
+        # 캔들 백필 (ATR + Hurst 계산용)
         logger.info("캔들 백필 시작...")
         await self.candle_collector.backfill_all()
         logger.info("캔들 백필 완료")
 
-        # ws_stream 5분봉 캐시 초기화 (DB 백필 → Hurst/Parkinson 즉시 계산)
+        # ws_stream 5분봉 캐시 (Hurst 즉시 계산)
         try:
             candles_5m = await self.db.get_candles(self.symbol, "5m", limit=60)
             if candles_5m:
                 for c in candles_5m:
                     self.ws_stream._candle_5m_cache.append(c)
-                logger.info(f"5분봉 캐시 초기화: {len(candles_5m)}개 → Hurst/Parkinson 즉시 계산")
+                logger.info(f"5분봉 캐시: {len(candles_5m)}개 → Hurst 즉시 계산")
                 if len(self.ws_stream._candle_5m_cache) >= 20:
                     await self.ws_stream._compute_regime_features()
         except Exception as e:
-            logger.warning(f"5분봉 캐시 초기화 실패: {e}")
-
-        # 재시작 시 거래소 포지션 복원 (나체 포지션 방지)
-        try:
-            recovered = await self.scalp_manager.recover_position()
-            if recovered:
-                logger.info("[STARTUP] 기존 포지션 복원 완료 — SL/TP 유지")
-        except Exception as e:
-            logger.error(f"[STARTUP] 포지션 복원 실패: {e}")
-
-        mode = "SHADOW" if self.shadow_mode else "LIVE"
-        logger.info(f"스캘핑 모드: {mode}")
+            logger.warning(f"5분봉 캐시 실패: {e}")
 
         # GridEngine 초기화
-        grid_cfg = self.config.get("grid", {})
-        if grid_cfg.get("enabled", False):
-            self.grid_engine = GridEngine(
-                executor=self.executor, db=self.db, redis=self.redis,
-                telegram=self.telegram, risk_manager=self.risk_manager,
-                config=self.config,
-            )
-            logger.info("[GRID] 그리드 엔진 활성화")
-
-    # ══════════════════════════════════════════════════
-    #  스캘핑 평가 루프 (500ms)
-    # ══════════════════════════════════════════════════
-
-    async def periodic_scalp_eval(self):
-        """500ms — 시그널 감지 + ML + 실행"""
-        await asyncio.sleep(10)  # WS 안정화 대기
-        logger.info("[SCALP] 평가 루프 시작 (500ms)")
-
-        while self._running:
-            try:
-                await self._scalp_evaluate()
-            except asyncio.CancelledError:
-                raise
-            except Exception as e:
-                logger.error(f"[SCALP] eval 에러: {e}", exc_info=True)
-            await asyncio.sleep(0.5)
-
-    async def _scalp_evaluate(self):
-        now = _time.time()
-
-        # 포지션 있으면 스킵
-        if self.scalp_manager.has_position():
-            return
-
-        # autotrading 체크
-        autotrading = (await self.redis.get("sys:autotrading") or "off") == "on"
-
-        # 리스크 게이트
-        allowed, reason = self.risk_manager.is_trading_allowed()
-        if not allowed:
-            return
-
-        pass  # 진입 간격 제한 없음 (VPIN/Hurst가 필터)
-
-        # ── Redis 상태 갱신 (텔레그램/대시보드용, 30초마다) ──
-        if now - getattr(self, "_last_state_flush", 0) >= 30:
-            self._last_state_flush = now
-            try:
-                hurst_val = await self.redis.get("rt:regime:hurst")
-                vpin_val = await self.redis.get("rt:micro:vpin")
-                regime = "scalp"
-                if hurst_val:
-                    h = float(hurst_val)
-                    if h > 0.6: regime = "momentum"
-                    elif h < 0.4: regime = "mean_revert"
-                    elif 0.45 <= h <= 0.55: regime = "dead_zone"
-                    else: regime = "neutral"
-                await self.redis.set("sys:regime", regime, ttl=60)
-                await self.redis.set("sys:trade_state", json.dumps({
-                    "mode": "shadow" if self.shadow_mode else "live",
-                    "regime": regime,
-                    "hurst": hurst_val or "N/A",
-                    "vpin": vpin_val or "N/A",
-                    "streak": self.risk_manager.get_streak(),
-                    "trades_hour": self._trades_this_hour,
-                }), ttl=60)
-            except Exception:
-                pass
-
-        # ── 앙상블 시그널 감지 (4모델 투표 + 신뢰도) ──
-        signal = await self.ensemble_detector.evaluate()
-        if not signal:
-            # 60초마다 상태 로그
-            if now - getattr(self, "_last_eval_debug", 0) >= 60:
-                self._last_eval_debug = now
-                try:
-                    burst = await self.redis.get("rt:micro:trade_burst")
-                    hurst = await self.redis.get("rt:regime:hurst")
-                    vel = await self.redis.hgetall("rt:velocity:BTC-USDT-SWAP")
-                    move10 = vel.get("move_10s", "0")
-                    price = await self.redis.get("rt:price:BTC-USDT-SWAP")
-                    logger.info(
-                        f"[EVAL] 시그널 없음 | price=${price} move10s=${move10} "
-                        f"burst={burst} hurst={hurst or 'N/A'}"
-                    )
-                except Exception:
-                    pass
-            return
-
-        direction = signal["direction"]
-        sig_type = signal["type"]
-        confidence = signal.get("confidence", 0)
-        votes = signal.get("votes", [0, 0, 0, 0])
-        price = signal["price"]
-        features = signal.get("features", {})
-
-        # ── DB 기록 ──
-        sig_record = {
-            "ts": int(now),
-            "signal_type": sig_type,
-            "direction": direction,
-            "price": price,
-            "features": json.dumps(features),
-            "regime": signal.get("regime", "unknown"),
-            "hurst": signal.get("hurst", 0.5),
-            "vpin": signal.get("vpin", 0.3),
-            "ml_prob": round(confidence, 4),  # 앙상블 신뢰도를 ml_prob 필드에 저장
-            "ml_go": 1,  # 앙상블 통과 = Go
-            "entry_executed": 0,
-            "reject_reason": None,
-        }
-
-        sig_id = await self.db.insert_scalp_signal(sig_record)
-        signal["signal_id"] = sig_id
-
-        # JSONL
-        _append_jsonl({
-            "type": "ensemble_signal",
-            "direction": direction,
-            "confidence": round(confidence, 4),
-            "votes": votes,
-            "price": round(price, 1),
-            "regime": signal.get("regime", "unknown"),
-            "hurst": round(signal.get("hurst", 0.5), 4),
-            "vpin": round(signal.get("vpin", 0.3), 4),
-        })
-
-        # ── Shadow 모드: 진입 안 함 ──
-        if self.shadow_mode:
-            return
-
-        # ── 실거래 실행 (VPIN/Hurst Regime Gate가 선행 필터) ──
-        if not autotrading:
-            return
-
-        balance = await self.executor.get_balance()
-        if balance <= 0:
-            return
-
-        pos = await self.scalp_manager.open_scalp(signal, balance)
-        if pos:
-            self._last_trade_time = now
-            self._trades_this_hour += 1
-            await self.db.update_signal_entry(sig_id)
-
-            # 텔레그램
-            try:
-                await self.telegram._send(
-                    f"⚡ <b>SCALP {pos.direction.upper()}</b>\n"
-                    f"${pos.entry_price:,.0f} | TP ${pos.tp_price:,.0f} SL ${pos.sl_price:,.0f}\n"
-                    f"Size: {pos.size} BTC | {pos.leverage}x"
-                )
-            except Exception:
-                pass
-
-    # ══════════════════════════════════════════════════
-    #  스캘핑 포지션 관리 루프 (500ms)
-    # ══════════════════════════════════════════════════
-
-    async def periodic_scalp_position(self):
-        """500ms — 포지션 관리 (시간정지 + failsafe + self-heal)"""
-        while self._running:
-            try:
-                if self.scalp_manager.has_position():
-                    price_str = await self.redis.get("rt:price:BTC-USDT-SWAP")
-                    if price_str:
-                        price = float(price_str)
-                        prev_pos = self.scalp_manager.position
-                        await self.scalp_manager.check_position(price)
-
-                        # 포지션이 청산됐으면 후처리
-                        if prev_pos and not self.scalp_manager.has_position():
-                            await self._on_scalp_closed(prev_pos)
-
-                    # 시그널 반전 청산 — conf_reversal(0.9) 이상만 반전 허용
-                    if self.scalp_manager.has_position():
-                        pos = self.scalp_manager.position
-                        reversal = await self.ensemble_detector.evaluate()
-                        if reversal and reversal["direction"] != pos.direction:
-                            rev_conf = reversal.get("confidence", 0)
-                            conf_reversal = self.ensemble_detector.conf_reversal
-                            if rev_conf >= conf_reversal:
-                                logger.info(
-                                    f"[SCALP] 시그널 반전: {pos.direction}→{reversal['direction']} "
-                                    f"(conf={rev_conf:.2f}≥{conf_reversal}) → 청산"
-                                )
-                                hold_sec = _time.time() - pos.entry_time
-                                await self.scalp_manager._close_and_finalize(pos, "signal_reversal", hold_sec)
-                                if not self.scalp_manager.has_position():
-                                    await self._on_scalp_closed(pos)
-
-                    # 킬스위치
-                    bot_status = await self.redis.get("sys:bot_status")
-                    if bot_status == "stopped" and self.scalp_manager.has_position():
-                        logger.warning("킬스위치 → 스캘핑 포지션 청산")
-                        pos = self.scalp_manager.position
-                        hold_sec = _time.time() - pos.entry_time
-                        await self.scalp_manager._close_and_finalize(pos, "kill_switch", hold_sec)
-
-            except asyncio.CancelledError:
-                raise
-            except Exception as e:
-                logger.error(f"[SCALP] position 에러: {e}", exc_info=True)
-
-            interval = 0.5 if self.scalp_manager.has_position() else 2.0
-            await asyncio.sleep(interval)
-
-    async def _on_scalp_closed(self, pos):
-        """스캘핑 청산 후처리 — 리스크 + ML + 쿨다운"""
-        # PnL은 ScalpManager._finalize에서 이미 DB/JSONL 기록됨
-        # 여기서는 리스크 매니저 + ML + 쿨다운만 처리
-
-        # 쿨다운
-        pnl = 0  # 추정 (pos는 이미 None이므로 DB에서 조회)
-        try:
-            # 마지막 거래 조회
-            cursor = await self.db._db.execute(
-                "SELECT pnl_pct, pnl_usdt, exit_reason FROM scalp_trades ORDER BY id DESC LIMIT 1"
-            )
-            row = await cursor.fetchone()
-            if row:
-                pnl_pct = row["pnl_pct"] or 0
-                pnl_usdt = row["pnl_usdt"] or 0
-                exit_reason = row["exit_reason"] or ""
-
-                await self.risk_manager.record_trade_result(pnl_pct, pnl_usdt)
-
-                # 매매 결과 기록 (모니터링용)
-                label = 1 if pnl_pct > 0 else 0
-
-                logger.info(
-                    f"[SCALP] 후처리: PnL {pnl_pct:+.1f}% ${pnl_usdt:+.2f} | "
-                    f"연패:{self.risk_manager.get_streak()}"
-                )
-        except Exception as e:
-            logger.error(f"청산 후처리 실패: {e}")
-
-    # ══════════════════════════════════════════════════
-    #  Shadow 추적
-    # ══════════════════════════════════════════════════
-
-    async def periodic_shadow_check(self):
-        """모든 시그널의 Triple Barrier 라벨링 (스캘핑 배리어)"""
-        shadow_tracking: dict[int, dict] = {}
-        scalp_cfg = self.config.get("scalp", {})
-        tp_pct = scalp_cfg.get("tp_price_pct", 0.20) / 100
-        sl_pct = scalp_cfg.get("sl_price_pct", 0.15) / 100
-        max_hold = scalp_cfg.get("time_stop_max_sec", 300)
-        leverage = scalp_cfg.get("leverage", 20)
-
-        while self._running:
-            try:
-                price_str = await self.redis.get("rt:price:BTC-USDT-SWAP")
-                if not price_str:
-                    await asyncio.sleep(5)
-                    continue
-                price = float(price_str)
-                now = _time.time()
-
-                pending = await self.db.get_pending_shadows()
-
-                for sig in pending:
-                    sig_id = sig["id"]
-                    sig_ts = sig["ts"]
-                    sig_price = sig["price"]
-                    sig_dir = sig["direction"]
-
-                    if sig_id not in shadow_tracking:
-                        shadow_tracking[sig_id] = {"best": sig_price, "worst": sig_price}
-                    track = shadow_tracking[sig_id]
-
-                    if sig_dir == "long":
-                        track["best"] = max(track["best"], price)
-                        track["worst"] = min(track["worst"], price)
-                    else:
-                        track["best"] = min(track["best"], price)
-                        track["worst"] = max(track["worst"], price)
-
-                    # 스캘핑 배리어
-                    tp_dist = sig_price * tp_pct
-                    sl_dist = sig_price * sl_pct
-
-                    if sig_dir == "long":
-                        hit_tp = price >= sig_price + tp_dist
-                        hit_sl = price <= sig_price - sl_dist
-                    else:
-                        hit_tp = price <= sig_price - tp_dist
-                        hit_sl = price >= sig_price + sl_dist
-
-                    elapsed = now - sig_ts
-                    label = -1
-                    barrier = None
-                    pnl = 0.0
-
-                    if hit_tp:
-                        label = 1
-                        barrier = "tp"
-                        pnl = tp_pct * leverage * 100
-                    elif hit_sl:
-                        label = 0
-                        barrier = "sl"
-                        pnl = -(sl_pct * leverage * 100)
-                    elif elapsed >= max_hold:
-                        barrier = "time"
-                        if sig_dir == "long":
-                            pnl = (price - sig_price) / sig_price * leverage * 100
-                        else:
-                            pnl = (sig_price - price) / sig_price * leverage * 100
-                        label = 1 if pnl > 0 else 0
-
-                    if label >= 0:
-                        if sig_dir == "long":
-                            best_move = (track["best"] - sig_price) / sig_price * 100
-                            mae = (sig_price - track["worst"]) / sig_price * 100
-                        else:
-                            best_move = (sig_price - track["best"]) / sig_price * 100
-                            mae = (track["worst"] - sig_price) / sig_price * 100
-                        reach = best_move / (tp_pct * 100) * 100 if tp_pct > 0 else 0
-
-                        await self.db.update_signal_label(
-                            sig_id, label, barrier, round(pnl, 2), int(now),
-                            reach_pct=round(reach, 1), mae_pct=round(mae, 4),
-                        )
-
-                        _append_jsonl({
-                            "type": "shadow_result",
-                            "signal_id": sig_id,
-                            "signal_type": sig.get("signal_type", "unknown"),
-                            "direction": sig_dir,
-                            "label": label,
-                            "barrier": barrier,
-                            "pnl_pct": round(pnl, 2),
-                            "entry_price": round(sig_price, 1),
-                            "exit_price": round(price, 1),
-                            "elapsed_sec": round(elapsed, 0),
-                            "reach_pct": round(reach, 1),
-                            "mae_pct": round(mae, 4),
-                        })
-
-                        shadow_tracking.pop(sig_id, None)
-
-                # 오래된 추적 정리
-                active_ids = {s["id"] for s in pending}
-                for sid in list(shadow_tracking):
-                    if sid not in active_ids:
-                        shadow_tracking.pop(sid, None)
-
-            except asyncio.CancelledError:
-                raise
-            except Exception as e:
-                logger.error(f"shadow check 에러: {e}", exc_info=True)
-
-            await asyncio.sleep(self.config.get("polling", {}).get("shadow_check_sec", 5))
-
-    # ══════════════════════════════════════════════════
-    #  ML 재학습
-    # ══════════════════════════════════════════════════
-
-    async def periodic_model_monitor(self):
-        """LSTM 모델 핫 리로드 + 정확도 모니터링"""
-        while self._running:
-            try:
-                self.model_manager.check_for_update()
-            except Exception as e:
-                logger.error(f"모델 모니터링 에러: {e}")
-            await asyncio.sleep(300)
+        self.grid_engine = GridEngine(
+            executor=self.executor, db=self.db, redis=self.redis,
+            telegram=self.telegram, risk_manager=self.risk_manager,
+            config=self.config,
+        )
+        logger.info("[GRID] 그리드 엔진 초기화 완료")
 
     # ══════════════════════════════════════════════════
     #  지원 루프들
     # ══════════════════════════════════════════════════
 
     async def periodic_candle_update(self):
-        """캔들 REST 백업 (30초, Hurst/Parkinson용)"""
+        """캔들 REST 백업 (30초, ATR/Hurst용)"""
         while self._running:
             try:
                 for tf in ["1m", "5m", "15m", "1h", "4h", "1d", "1w"]:
@@ -560,16 +148,14 @@ class ScalpEngine:
 
                 try:
                     bal = await self.executor.get_balance()
-                    model_stats = self.model_manager.get_stats()
-                    sig_count = await self.db.get_signal_count(labeled_only=True)
-                    shadow_wr, shadow_cnt = await self.db.get_recent_shadow_wr(hours=24)
+                    grid_status = self.grid_engine.get_status() if self.grid_engine else {}
+                    grid_pnl = await self.db.get_grid_pnl_summary(hours=24)
 
                     report = (
                         f"\U0001f4ca <b>Daily Report | {now_dt.strftime('%Y-%m-%d')}</b>\n\n"
                         f"Balance: ${bal:,.2f}\n"
-                        f"LSTM: {'ON' if model_stats['has_model'] else 'OFF (tanh fallback)'}\n"
-                        f"Shadow: {sig_count}건 labeled | 24h WR {shadow_wr:.1f}% ({shadow_cnt}건)\n"
-                        f"Mode: {'SHADOW' if self.shadow_mode else 'LIVE'}"
+                        f"Grid: {'ACTIVE' if grid_status.get('active') else 'PAUSED'}\n"
+                        f"24h: {grid_pnl['cycles']}사이클 ${grid_pnl['pnl']:+.2f}"
                     )
                     await self.telegram._send(report)
                 except Exception:
@@ -593,48 +179,19 @@ class ScalpEngine:
                 try:
                     bal = float(await self.redis.get("sys:balance") or 0)
                     hurst = await self.redis.get("rt:regime:hurst")
+                    grid_status = self.grid_engine.get_status() if self.grid_engine else {}
                     _append_jsonl({
                         "type": "hourly_snapshot",
                         "balance": round(bal, 2),
-                        "regime": "scalp",
                         "hurst": round(float(hurst), 4) if hurst else 0.5,
-                        "lstm_active": self.model_manager.has_valid_model(),
-                        "streak": self.risk_manager.get_streak(),
-                        "mode": "shadow" if self.shadow_mode else "live",
-                        "trades_hour": self._trades_this_hour,
+                        "grid_active": grid_status.get("active", False),
+                        "grid_cycles": grid_status.get("total_cycles", 0),
+                        "grid_pnl": grid_status.get("total_pnl", 0),
                     })
                 except Exception:
                     pass
 
             await asyncio.sleep(60)
-
-    async def periodic_orphan_algo_sweeper(self):
-        # 시작 직후: 포지션 없을 때만 고아 알고 정리 (포지션 복원 후 실행)
-        await asyncio.sleep(10)
-        if not self.scalp_manager.has_position():
-            try:
-                cleaned = await self.executor.cancel_all_algos()
-                if cleaned:
-                    logger.warning(f"시작 시 고아 알고 {len(cleaned)}개 정리")
-            except Exception:
-                pass
-
-        while self._running:
-            await asyncio.sleep(120)
-            try:
-                if self.scalp_manager.has_position():
-                    continue
-                ex_positions = await asyncio.wait_for(self.executor.get_positions(), timeout=5.0)
-                has_pos = any(abs(float(p.get("size") or 0)) > 0 for p in ex_positions)
-                if has_pos:
-                    continue
-                cleaned = await self.executor.cancel_all_algos()
-                if cleaned:
-                    logger.warning(f"고아 알고 {len(cleaned)}개 정리")
-            except asyncio.CancelledError:
-                raise
-            except Exception:
-                pass
 
     async def periodic_dashboard_commands(self):
         while self._running:
@@ -650,10 +207,9 @@ class ScalpEngine:
                 action = cmd.get("action")
                 logger.info(f"[CMD] {action}: {cmd}")
 
-                if action == "close_all" and self.scalp_manager.has_position():
-                    pos = self.scalp_manager.position
-                    hold_sec = _time.time() - pos.entry_time
-                    await self.scalp_manager._close_and_finalize(pos, "dashboard", hold_sec)
+                if action == "close_all" and self.grid_engine:
+                    await self.grid_engine.stop()
+                    logger.info("[CMD] 그리드 정지")
                 elif action == "notify":
                     await self.telegram._send(cmd.get("msg", ""))
             except asyncio.CancelledError:
@@ -670,25 +226,22 @@ class ScalpEngine:
         await self.initialize()
         self._running = True
 
-        logger.info("봇 시작 — ScalpEngine v3")
+        logger.info("봇 시작 — GridBot")
         await self.redis.set("sys:bot_status", "running")
         await self.redis.set("sys:autotrading", "on")
 
         self.telegram.redis = self.redis
         self.telegram.executor = self.executor
-        self.telegram.scalp_manager = self.scalp_manager
         self.telegram.risk_manager = self.risk_manager
 
         await self.telegram.notify_bot_status("running")
         try:
             bal = await self.executor.get_balance()
-            mode = "SHADOW" if self.shadow_mode else "LIVE"
+            grid_cfg = self.config.get("grid", {})
             await self.telegram._send(
-                f"\U0001f7e2 <b>ScalpEngine v3 — Microstructure Scalping</b>\n"
-                f"Mode: {mode} | 4-Model Ensemble (conf≥0.6)\n"
-                f"Balance: ${bal:,.2f} | Leverage: {self.config.get('scalp', {}).get('leverage', 20)}x\n"
-                f"TP: +{self.config.get('scalp', {}).get('tp_price_pct', 0.20)}% | "
-                f"SL: -{self.config.get('scalp', {}).get('sl_price_pct', 0.15)}%"
+                f"\U0001f7e2 <b>GridBot — ATR-Adaptive Grid Trading</b>\n"
+                f"Balance: ${bal:,.2f} | Leverage: {grid_cfg.get('leverage', 20)}x\n"
+                f"Levels: {grid_cfg.get('levels', 4)} | Size: {grid_cfg.get('size_btc', 0.01)} BTC/level"
             )
         except Exception:
             pass
@@ -696,20 +249,12 @@ class ScalpEngine:
         tasks = [
             # 데이터
             asyncio.create_task(self.ws_stream.start()),
-            asyncio.create_task(self.binance_stream.start()),
             asyncio.create_task(self.periodic_candle_update()),
-            # 스캘핑 (scalp.enabled=true일 때만)
-            *([ asyncio.create_task(self.periodic_scalp_eval()),
-                asyncio.create_task(self.periodic_scalp_position()),
-                asyncio.create_task(self.periodic_shadow_check()),
-                asyncio.create_task(self.periodic_model_monitor()),
-            ] if self.scalp_enabled else []),
-            # 그리드 (grid.enabled=true일 때만)
-            *([asyncio.create_task(self.grid_engine.run())] if self.grid_engine else []),
+            # 그리드
+            asyncio.create_task(self.grid_engine.run()),
             # 지원
             asyncio.create_task(self.periodic_daily_reset()),
             asyncio.create_task(self.periodic_heartbeat()),
-            asyncio.create_task(self.periodic_orphan_algo_sweeper()),
             asyncio.create_task(self.periodic_dashboard_commands()),
             asyncio.create_task(self.telegram.poll_commands()),
         ]
@@ -724,14 +269,14 @@ class ScalpEngine:
         finally:
             self._running = False
             self.ws_stream.stop()
-            self.binance_stream.stop()
             await self.redis.set("sys:bot_status", "stopped")
             await self.telegram.notify_bot_status("stopped")
             await self.cleanup()
 
     async def cleanup(self):
         logger.info("=== Graceful Shutdown ===")
-        # ModelManager에 저장할 상태 없음 (LSTM 모델은 외부 학습)
+        if self.grid_engine:
+            await self.grid_engine.stop()
         await self.candle_collector.close()
         await self.executor.close()
         await self.redis.close()
@@ -741,7 +286,7 @@ class ScalpEngine:
 # ── 엔트리포인트 ──
 
 async def main():
-    engine = ScalpEngine()
+    engine = GridBot()
 
     loop = asyncio.get_event_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):

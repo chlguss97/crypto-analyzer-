@@ -80,9 +80,7 @@ class WebSocketStream:
         self._depth_ewma_alpha = 0.15
         self._depth_initialized = False
 
-        # LOB 스냅샷 (LSTM 학습용 — Phase 2)
-        self._lob_snapshots: deque = deque(maxlen=10000)  # ~2.7시간 (1/sec)
-        self._last_lob_flush = 0
+        # LOB 스냅샷 — 제거됨 (LSTM 미사용)
 
         # OU Z-Score (Uhlenbeck & Ornstein 1930, Elliott et al. 2005)
         self._ou_prices: deque = deque(maxlen=200)  # 5초 간격 가격
@@ -431,29 +429,6 @@ class WebSocketStream:
             await self.redis.set("rt:micro:book_imbalance", str(round(imbalance, 4)), ttl=15)
             await self.redis.set("rt:micro:spread", str(round(spread, 2)), ttl=15)
 
-            # ── LOB 스냅샷 저장 (LSTM 학습용) ──
-            # 20 float: [bid1_dp, bid1_sz, ..., bid5_dp, bid5_sz, ask1_dp, ask1_sz, ..., ask5_dp, ask5_sz]
-            # 가격: mid-price 기준 bps, 사이즈: 원시값
-            mid = (float(bids[0][0]) + float(asks[0][0])) / 2
-            if mid > 0:
-                snapshot = []
-                for i in range(min(5, len(bids))):
-                    dp = (float(bids[i][0]) - mid) / mid * 10000  # bps
-                    snapshot.extend([dp, bid_sizes[i] if i < len(bid_sizes) else 0])
-                for i in range(min(5, len(asks))):
-                    dp = (float(asks[i][0]) - mid) / mid * 10000  # bps
-                    snapshot.extend([dp, ask_sizes[i] if i < len(ask_sizes) else 0])
-                # 패딩 (5레벨 미달 시)
-                while len(snapshot) < 20:
-                    snapshot.append(0.0)
-                self._lob_snapshots.append((time.time(), mid, snapshot[:20]))
-
-                # 5분마다 디스크 flush
-                now = time.time()
-                if now - self._last_lob_flush >= 300 and len(self._lob_snapshots) > 0:
-                    self._last_lob_flush = now
-                    self._flush_lob_to_disk()
-
             # ── OFI (Multi-Level Order Flow Imbalance) ──
             # Cont, Kukanov, & Stoikov (2014): OFI = Σ(ΔBid_k - ΔAsk_k)
             if self._prev_bids and self._prev_asks:
@@ -496,25 +471,6 @@ class WebSocketStream:
 
         except Exception:
             pass
-
-    def _flush_lob_to_disk(self):
-        """LOB 스냅샷을 디스크에 저장 (LSTM 학습 데이터)"""
-        try:
-            import struct
-            from pathlib import Path
-            lob_path = Path(__file__).parent.parent.parent / "data" / "lob_snapshots.bin"
-            lob_path.parent.mkdir(parents=True, exist_ok=True)
-            with open(lob_path, "ab") as f:
-                for ts, mid, snap in self._lob_snapshots:
-                    # 각 레코드: ts(8B double) + mid(8B double) + 20 floats(80B) = 96B
-                    f.write(struct.pack("d", ts))
-                    f.write(struct.pack("d", mid))
-                    f.write(struct.pack("20f", *snap))
-            count = len(self._lob_snapshots)
-            self._lob_snapshots.clear()
-            logger.debug(f"LOB flush: {count}건 → {lob_path.name}")
-        except Exception as e:
-            logger.debug(f"LOB flush 실패: {e}")
 
     # ══════════════════════════════════════════
     #  마이크로스트럭처 집계 (2초마다)
