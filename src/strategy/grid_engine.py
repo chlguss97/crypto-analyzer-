@@ -215,7 +215,7 @@ class GridEngine:
 
         # 30초마다 상태 로그
         now = time.time()
-        if now - getattr(self, "_last_status_log", 0) >= 5:
+        if now - getattr(self, "_last_status_log", 0) >= 10:
             self._last_status_log = now
             price_str = await self.redis.get("rt:price:BTC-USDT-SWAP")
             price = float(price_str) if price_str else 0
@@ -496,30 +496,106 @@ class GridEngine:
     # ══════════════════════════════════════════
 
     async def _recover(self):
-        """시작 시 Redis에서 그리드 상태 복원"""
+        """시작 시 복구 — Redis state + OKX 포지션/주문 대조"""
+
+        # 1. Redis에서 state 복원
         self.state = await load_grid_state(self.redis)
-        if not self.state or not self.state.is_active:
-            return
 
-        logger.info(
-            f"[GRID] 복구: center=${self.state.center_price:.0f} "
-            f"cycles={self.state.total_cycles} pnl=${self.state.total_pnl:+.2f}"
-        )
+        # 2. OKX 포지션 확인 (나체 포지션 감지)
+        try:
+            positions = await self.executor.get_positions()
+            has_long = any(p.get("direction") == "long" and abs(float(p.get("size", 0))) > 0 for p in positions)
+            has_short = any(p.get("direction") == "short" and abs(float(p.get("size", 0))) > 0 for p in positions)
+        except Exception as e:
+            logger.error(f"[GRID] 복구 포지션 조회 실패: {e}")
+            has_long = has_short = False
 
-        # OKX 오픈 주문과 대조
+        # 3. OKX 오픈 주문 확인
         try:
             open_orders = await self.executor.exchange.fetch_open_orders(self.symbol)
             open_ids = {o["id"] for o in open_orders}
+        except Exception as e:
+            logger.error(f"[GRID] 복구 주문 조회 실패: {e}")
+            open_ids = set()
+
+        # 4-A. State 있으면 → 주문 대조 + 나체 포지션 처리
+        if self.state and self.state.is_active:
+            logger.info(
+                f"[GRID] 복구 시작: center=${self.state.center_price:.0f} "
+                f"cycles={self.state.total_cycles} pnl=${self.state.total_pnl:+.2f}"
+            )
 
             for lid, lv in self.state.levels.items():
-                if lv.status == "placed" and lv.order_id not in open_ids:
-                    # 주문 사라짐 → 체결됐거나 취소됨
-                    lv.status = "cancelled"  # monitor_tick에서 재처리
-                if lv.counter_status == "placed" and lv.counter_order_id not in open_ids:
-                    lv.counter_status = "none"
+                # 그리드 주문이 사라졌는지 확인
+                if lv.status == "placed" and lv.order_id and lv.order_id not in open_ids:
+                    # 체결됐을 가능성 → fetch_order로 확인
+                    try:
+                        order = await self.executor.exchange.fetch_order(lv.order_id, self.symbol)
+                        if order.get("status") == "closed":
+                            fill_price = float(order.get("average") or order.get("price") or lv.price)
+                            lv.status = "filled"
+                            lv.fill_price = fill_price
+                            lv.fill_time = time.time()
+                            logger.info(f"[GRID] 복구: Lv{lid} 다운타임 중 체결 @ ${fill_price:.1f}")
+                            # counter-order 즉시 배치
+                            await self._place_counter_order(lv)
+                        else:
+                            lv.status = "cancelled"
+                            logger.info(f"[GRID] 복구: Lv{lid} 주문 사라짐 → 재배치 예정")
+                    except Exception:
+                        lv.status = "cancelled"
 
-        except Exception as e:
-            logger.error(f"[GRID] 복구 주문 대조 실패: {e}")
+                # counter-order가 사라졌는지 확인
+                if lv.counter_status == "placed" and lv.counter_order_id and lv.counter_order_id not in open_ids:
+                    try:
+                        order = await self.executor.exchange.fetch_order(lv.counter_order_id, self.symbol)
+                        if order.get("status") == "closed":
+                            lv.counter_status = "filled"
+                            logger.info(f"[GRID] 복구: Lv{lid} counter 다운타임 중 체결")
+                        else:
+                            # counter 사라짐 → 재배치
+                            lv.counter_status = "none"
+                            if lv.status == "filled":
+                                logger.warning(f"[GRID] 복구: Lv{lid} counter 소실 → 재배치")
+                                await self._place_counter_order(lv)
+                    except Exception:
+                        lv.counter_status = "none"
+
+            # 취소된 레벨 재배치
+            for lid, lv in self.state.levels.items():
+                if lv.status == "cancelled":
+                    if lv.side == "buy":
+                        order = await self.executor.place_limit_order("buy", GRID_SIZE_BTC, lv.price, "long")
+                    else:
+                        order = await self.executor.place_limit_order("sell", GRID_SIZE_BTC, lv.price, "short")
+                    if order:
+                        lv.order_id = order.get("id")
+                        lv.status = "placed"
+                        logger.info(f"[GRID] 복구: Lv{lid} 재배치 @ ${lv.price:.1f}")
+
+            await save_grid_state(self.redis, self.state)
+            logger.info("[GRID] 복구 완료")
+            return
+
+        # 4-B. State 없는데 포지션 있음 → 나체 포지션 정리
+        if has_long or has_short:
+            logger.warning(f"[GRID] State 없는데 포지션 발견 (long={has_long} short={has_short}) → 정리")
+            for p in positions:
+                contracts = abs(float(p.get("size", 0)))
+                if contracts <= 0:
+                    continue
+                side = "sell" if p.get("direction") == "long" else "buy"
+                pos_side = p.get("direction", "long")
+                try:
+                    await self.executor._market_order(side, contracts * 0.01, pos_side, reduce_only=True)
+                    logger.info(f"[GRID] 나체 포지션 청산: {pos_side} {contracts}ct")
+                except Exception as e:
+                    logger.error(f"[GRID] 나체 포지션 청산 실패: {e}")
+
+        # 미체결 주문도 정리
+        if open_orders:
+            await self.executor.cancel_all_orders()
+            logger.info(f"[GRID] 미체결 {len(open_orders)}개 정리")
 
     # ══════════════════════════════════════════
     #  ATR 계산
