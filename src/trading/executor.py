@@ -633,8 +633,9 @@ class OrderExecutor:
         pos_side = "long" if direction == "long" else "short"
 
         # 긴급 사유 → market (SL은 체결이 최우선, 수수료 < 미체결 손실)
+        # SL/긴급만 market — 시그널 반전은 post-only (SPEC: maker 강제)
         URGENT_REASONS = (
-            "sl_failsafe", "sl_hit", "sl_repeated_loss", "signal_reversal",
+            "sl_failsafe", "sl_hit", "sl_repeated_loss",
             "kill_switch", "kill_switch_dashboard", "manual_sl_failed", "emergency",
         )
         is_urgent = any(u in reason for u in URGENT_REASONS)
