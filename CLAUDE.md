@@ -14,11 +14,11 @@
 - **시그널 2종**: Micro-Momentum Burst + OU Z-Score Reversion (0.93 감쇠)
 - **앙상블**: Burst + OU 방향 합의, CVD divergence >0.3 오버라이드
 - **TP/SL**: 동적 k(2.0) × Parkinson/Realized Vol 블렌딩 (고정% 없음)
-- **청산**: 시그널 반전 즉시 청산 + 시간정지 3~5분
+- **청산**: 시그널 반전 post-only 청산 (시간정지 없음 — 프로 원문에 없음)
 - **사이징**: VPIN배수 × Hurst배수 × micro_conf 캐스케이드
 - **주문**: post-only maker 강제, 실패→포기
 - **보호**: SL market-on-trigger + 5초 self-heal + 3회 소실 강제청산
-- **제거**: 쿨다운/연패축소/시간당제한/진입간격/Shadow WR 게이트 (프로 미사용)
+- **제거**: 쿨다운/연패축소/시간당제한/시간정지/진입간격/Shadow WR 게이트 (프로 원문에 없음)
 
 ## 기술스택
 - Python 3.11 / ccxt / scikit-learn / FastAPI
@@ -26,7 +26,7 @@
 - 알림: Telegram
 
 ## 현재 상태 (2026-05-20)
-- **Shadow 모드** (실거래 없음, 데이터 수집 중)
+- **LIVE 모드** (실거래 활성)
 - 마이크로스트럭처 15종 + OFI + VPIN + OU Z-Score + Book Resilience 활성
 - Hurst/Parkinson: 봇 시작 시 DB 백필로 즉시 계산
 - 임계값: 전부 z-score/상대값 (절대 달러 임계값 0건)

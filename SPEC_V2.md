@@ -36,18 +36,18 @@
         ↓
 [3층] Regime Gate
   Hurst > 0.6 → 모멘텀 스캘핑 (Burst 시그널)
-  Hurst < 0.4 → 평균회귀 스캘핑 (VWAP Snap)
-  Hurst 0.4~0.6 → 랜덤워크 → 거래 금지
-  VPIN > 0.7 → 극단 독성 → 거래 금지
+  Hurst < 0.4 → 평균회귀 스캘핑 (OU Z-Score)
+  Hurst 0.45~0.55 → 데드존 → 사이즈 축소 (0.25x) 또는 거래 중단
+  VPIN > 0.85 → 극단 독성 → 거래 금지 (BTC 보정)
         ↓
 [4층] ML Scorer (Phase A: 규칙, Phase B: XGBoost)
   20종 피처 → P(Win) ≥ 0.55 → Go
         ↓
 [실행] ScalpManager
-  진입: post-only (maker 0.02%)
-  TP: +0.20% (서버 limit-on-trigger)
-  SL: -0.15% (서버 market-on-trigger)
-  시간 정지: 3분(수익시) / 5분(최대)
+  진입: post-only maker 강제, 실패→포기
+  TP: k×vol 동적 (서버 limit-on-trigger, maker)
+  SL: k×vol 동적 (서버 market-on-trigger, taker)
+  시그널 반전: post-only 청산 (maker)
 ```
 
 ---
@@ -173,13 +173,13 @@ cvd_5m_raw, funding_rate
 |------|------|------|
 | **TP** | k(2.0) × Parkinson/Realized Vol (동적) | 서버 limit-on-trigger (maker) |
 | **SL** | k(2.0) × Parkinson/Realized Vol (동적) | 서버 market-on-trigger (taker) |
-| **시그널 반전** | 반대 방향 시그널 발생 시 | 즉시 market 청산 |
-| **시간 정지** | 180초(수익시) / 300초(최대) | market 청산 |
+| **시그널 반전** | 반대 방향 시그널 발생 시 | post-only 청산 (maker) |
 
 - TP/SL 범위: 0.1%~0.5% (변동성 적응)
 - RR 최소 1.0 보장 (TP ≥ SL)
 - **러너 없음, 부분청산 없음, 고정 % 없음**
-- 프로 레퍼런스: SL은 k×vol, TP도 k×vol 또는 시그널 반전
+- 프로 원문: SL은 k×vol만 명시. TP/시그널반전/시간정지는 원문에 없음 (자체 설계)
+- ~~시간 정지 180초/300초~~ → 제거 (프로 원문에 없음, 불필요한 인위적 제한)
 
 ---
 
@@ -191,15 +191,15 @@ cvd_5m_raw, funding_rate
 |------|------|
 | 레버리지 | 20x 고정 |
 | 마진 | balance × 80% × VPIN배수 × Hurst배수 × micro_conf |
-| **VPIN 4단계** | Low 1.0x / Med 0.5x / High 0.25x / Extreme 0x (킬스위치) |
-| **Hurst Regime** | momentum 1.0x / neutral 0.5x / dead_zone 0.25x |
+| **VPIN 4단계** | Low(<0.3) 1.0x / Med(0.3~0.5) 0.5x / High(0.5~0.85) 0.25x / Extreme(>0.85) 0x |
+| **Hurst Regime** | momentum(>0.6) 1.0x / neutral 0.5x / dead_zone(0.45~0.55) 0.25x |
 | **Micro Regime** | spread × depth × activity (floor 0.2) |
 | **Book Shock** | 깊이 30% 급감 → 진입 차단 |
 | **앙상블 불일치** | Burst + OU 방향 불일치 → 차단 |
 | **BOT_KILL** | -20% DD |
 | **시그널 반전** | 반대 시그널 → 즉시 청산 |
 
-~~쿨다운, 연패 축소, 시간당 제한, Shadow WR 게이트~~ → 제거 (VPIN/Hurst가 선행 필터)
+~~쿨다운, 연패 축소, 시간당 제한, 시간 정지, Shadow WR 게이트~~ → 제거 (프로 원문에 없음)
 
 ---
 
