@@ -36,7 +36,7 @@ class ScalpDetector:
         # Regime thresholds
         self.hurst_momentum = cfg.get("hurst_momentum", 0.6)
         self.hurst_mean_revert = cfg.get("hurst_mean_revert", 0.4)
-        self.vpin_extreme = cfg.get("vpin_extreme", 0.7)
+        self.vpin_extreme = cfg.get("vpin_extreme", 0.85)
 
         # Burst signal thresholds
         self.burst_min_move_10s_pct = cfg.get("burst_min_move_10s_pct", 0.06)

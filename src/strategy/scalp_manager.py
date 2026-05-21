@@ -148,13 +148,13 @@ class ScalpManager:
             logger.warning(f"[SCALP] 체결 사이즈 부족: {filled_size}")
             return None
 
-        # fill price 기준으로 TP/SL 재계산
+        # fill price 기준으로 TP/SL 재계산 (동적 vol 거리 유지)
         if direction == "long":
-            tp_price = round(fill_price * (1 + self.tp_pct), 1)
-            sl_price = round(fill_price * (1 - self.sl_pct), 1)
+            tp_price = round(fill_price * (1 + tp_dist_pct), 1)
+            sl_price = round(fill_price * (1 - sl_dist_pct), 1)
         else:
-            tp_price = round(fill_price * (1 - self.tp_pct), 1)
-            sl_price = round(fill_price * (1 + self.sl_pct), 1)
+            tp_price = round(fill_price * (1 - tp_dist_pct), 1)
+            sl_price = round(fill_price * (1 + sl_dist_pct), 1)
 
         # SL/TP 알고 등록
         algo_ids = await self.executor.set_protection(

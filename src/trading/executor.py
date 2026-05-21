@@ -170,7 +170,16 @@ class OrderExecutor:
                     amount=contracts,
                     params=params,
                 )
-                fill_price = order.get("average", order.get("price", 0))
+                fill_price = order.get("average") or order.get("price")
+                if not fill_price:
+                    # OKX 시장가 응답에 fill price 없음 → 포지션에서 조회
+                    try:
+                        entry, _ = await self.get_position_entry()
+                        if entry > 0:
+                            fill_price = entry
+                            order["average"] = entry
+                    except Exception:
+                        pass
                 logger.info(
                     f"시장가 체결: {side.upper()} {size} BTC ({contracts} ct) @ ${fill_price} "
                     f"(주문ID: {order.get('id')})"
