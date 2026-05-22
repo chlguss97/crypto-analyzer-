@@ -64,6 +64,7 @@ class GridEngine:
         self._peak_balance = 0.0
         self._cb_frozen_until = 0.0  # 서킷브레이커 동결 해제 시각
         self._price_history: list[tuple[float, float]] = []  # (timestamp, price)
+        self._last_rebuild = 0.0  # DGT 리빌드 쿨다운
 
         # 잔고 비례 레벨 수 (시작 시 1회 계산)
         self.num_levels = 2
@@ -135,15 +136,17 @@ class GridEngine:
 
                 # 서킷브레이커 체크
                 if self._check_circuit_breaker(price, now):
-                    await self._on_circuit_breaker(price)
+                    async with self._lock:
+                        await self._on_circuit_breaker(price)
                     await asyncio.sleep(1)
                     continue
 
-                # DGT 경계 돌파 체크
-                if self._is_outside_grid(price):
+                # DGT 경계 돌파 체크 (60초 쿨다운)
+                if self._is_outside_grid(price) and now - self._last_rebuild >= 60:
                     logger.info(f"[GRID] DGT 경계 돌파 ${price:.0f} → 리빌드")
                     async with self._lock:
                         await self._rebuild()
+                    self._last_rebuild = now
 
                 # REST fallback (30초마다)
                 if now - self._last_rest_check >= 30:
@@ -434,17 +437,32 @@ class GridEngine:
         old_cycles = self.state.total_cycles if self.state else 0
         old_pnl = self.state.total_pnl if self.state else 0.0
 
-        # counter-order가 아닌 그리드 주문만 취소
+        # counter-order가 활성인 레벨 보존
+        preserved_counters = {}
         if self.state:
             for lid, lv in self.state.levels.items():
                 if lv.status == "placed" and lv.order_id:
                     await self.executor.cancel_order_by_id(lv.order_id)
-                # counter-order는 유지 (TP 대기 중)
+                if lv.counter_status == "placed" and lv.counter_order_id:
+                    preserved_counters[lid] = lv  # 고아 방지
 
-        await self._build_grid(cancel_all=False)  # cancel_all 스킵 (이미 개별 취소)
+        await self._build_grid(cancel_all=False)
         if self.state:
             self.state.total_cycles = old_cycles
             self.state.total_pnl = old_pnl
+            # 보존된 counter-order를 새 state에 복원
+            for lid, lv in preserved_counters.items():
+                if lid not in self.state.levels:
+                    self.state.levels[lid] = lv
+                else:
+                    # 새 레벨이 같은 ID면 counter 정보 이관
+                    new_lv = self.state.levels[lid]
+                    new_lv.status = "filled"
+                    new_lv.fill_price = lv.fill_price
+                    new_lv.fill_time = lv.fill_time
+                    new_lv.counter_order_id = lv.counter_order_id
+                    new_lv.counter_status = lv.counter_status
+            await save_grid_state(self.redis, self.state)
 
     # ══════════════════════════════════════════
     #  서킷브레이커 (2% in 10s → 60s freeze)
@@ -463,6 +481,7 @@ class GridEngine:
     async def _on_circuit_breaker(self, price: float):
         logger.warning(f"[CB] 서킷브레이커! ${price:.0f} → {self.cb_freeze}초 동결")
         self._cb_frozen_until = time.time() + self.cb_freeze
+        self._price_history.clear()  # 재트리거 방지
 
         # 그리드 주문만 취소 (counter-order는 유지 — TP 대기)
         if self.state:

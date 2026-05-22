@@ -57,7 +57,7 @@ async def verify_auth(
 
 
 app = FastAPI(
-    title="GridBot v3",
+    title="GridBot v4",
     version="3.0.0",
     dependencies=[Depends(verify_auth)],
 )

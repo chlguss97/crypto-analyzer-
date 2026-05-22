@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 class TelegramNotifier:
-    """텔레그램 알림 + 명령어 — v3 (Grid-only)"""
+    """텔레그램 알림 + 명령어 — v4 (Minimal Grid)"""
 
     def __init__(self):
         self.config = load_config()
@@ -279,12 +279,12 @@ class TelegramNotifier:
 
     async def _cmd_help(self):
         await self._send(
-            "<b>GridBot v3</b>\n\n"
+            "<b>GridBot v4</b>\n\n"
             "\U0001f7e2 /on \u2014 Autotrading ON\n"
             "\U0001f534 /off \u2014 Autotrading OFF\n"
-            "\U0001f4ca /status \u2014 Grid + Regime 상태\n"
+            "\U0001f4ca /status \u2014 Grid 상태\n"
             "\U0001f4b0 /balance \u2014 Balance\n"
-            "\U0001f310 /market \u2014 Price/Regime\n"
+            "\U0001f310 /market \u2014 BTC 가격\n"
             "\U0001f4c8 /stats \u2014 Today Grid Stats\n"
             "\U0001f4cb /trades \u2014 Recent 10 Cycles\n"
             "\U0001f6e1 /risk \u2014 Risk/DD\n"
