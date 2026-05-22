@@ -82,13 +82,13 @@ CRS = obi_norm × 0.25
 
 | 현재 → 목표 | 조건 | 동작 |
 |-------------|------|------|
-| ACTIVE → PAUSED | \|CRS\| ≥ 0.35, **5초 연속** | 미체결 주문 취소, counter-order 유지 |
-| PAUSED → ACTIVE | \|CRS\| < 0.15, **30초 연속** + vol_ratio < 2.0 | 그리드 리빌드 |
-| ANY → FROZEN | 10초 내 가격 2% 이동 | 전 주문 취소, 60초 대기 |
+| ACTIVE → PAUSED | \|CRS\| ≥ 0.35, **2초 연속** | 미체결 주문 취소, counter-order 유지 |
+| PAUSED → ACTIVE | \|CRS\| < 0.15, **15초 연속** + vol_ratio < 2.0 | 그리드 리빌드 |
+| ANY → FROZEN | 10초 내 가격 2% 이동 | 전 주문 취소 (counter 포함), 60초 대기 |
 | FROZEN → PAUSED | 60초 경과 | CRS 재평가 후 결정 |
 
 **히스테리시스**: 진입 0.35 / 이탈 0.15 → 빈번한 전환 방지  
-**쿨다운**: 모드 전환 후 최소 30초간 재전환 불가
+**쿨다운**: 모드 전환 후 최소 15초간 재전환 불가
 
 ---
 
@@ -163,13 +163,13 @@ def calc_grid_params(balance: float, btc_price: float, atr_pct: float):
 
 ---
 
-## 4. 안전장치 (3개만)
+## 4. 안전장치 (3개)
 
 ### 4.1 선행 레짐 정지 (전략 핵심)
 
-- CRS ≥ 0.35 (5초 지속) → 미체결 주문 취소
+- CRS ≥ 0.35 (2초 지속) → 미체결 주문 취소
 - Counter-order는 유지 (TP 기다림)
-- PAUSED 중에도 CRS 계속 계산 → 복귀 판단
+- PAUSED 중에도 CRS 계속 계산 → 복귀 판단 (15초 + vol_ratio < 2.0)
 
 ### 4.2 서킷브레이커
 
@@ -184,14 +184,12 @@ if change_pct >= 2.0:
     → 60초 대기 후 재평가
 ```
 
-### 4.3 거래소 백스탑 SL
+### 4.3 OKX 자체 청산 (거래소 담당)
 
-- OKX에 직접 걸어놓는 conditional order
-- 봇 내부가 아닌 **거래소 서버**에서 실행
-- 트리거: 계좌 equity가 시작 잔고의 -20% 도달
-- 동작: 전 포지션 시장가 청산
-- **봇 크래시, API 장애, 서버 다운 시에도 작동**
-- 봇 시작 시 1회 설정, 잔고 변경 시 갱신
+- OKX 강제 청산이 최종 안전장치 역할
+- 8x 레버리지 기준 ~12% 역행 시 자동 청산
+- 별도 conditional order 미구현 (레짐 감지 + 서킷브레이커가 그 전에 방어)
+- 봇 내부 DD 스탑 없음 (수익 방해 방지)
 
 ---
 
@@ -217,10 +215,7 @@ rt:price:BTC-USDT-SWAP          → float
 # 레짐 감지
 regime:crs                      → float (-1~+1)
 regime:mode                     → "ACTIVE" | "PAUSED" | "FROZEN"
-regime:obi                      → float
-regime:cvd_z                    → float  
-regime:vol_ratio                → float
-regime:cusum                    → "up" | "down" | "none"
+regime:signals                  → hash {obi, cvd, vol, cusum, crs, mode}
 
 # 그리드 상태
 grid:state:BTC/USDT:USDT        → JSON (GridState)
@@ -232,6 +227,7 @@ sys:bot_status                  → "running" | "stopped"
 # 리스크 (모니터링용)
 risk:streak                     → int
 risk:daily_pnl                  → float
+risk:weekly_pnl                 → float
 ```
 
 ### 5.3 SQLite 테이블
@@ -273,7 +269,7 @@ CREATE INDEX idx_grid_trades_time ON grid_trades(exit_time DESC);
 | 규칙 | 상세 |
 |------|------|
 | **전 주문 post-only** | OKX `orderType: post_only` — 체결 불가 시 취소됨 (taker 방지) |
-| **post-only 실패 시** | 재시도 1회 (가격 1틱 조정), 실패 시 포기 (market fallback 없음) |
+| **post-only 실패 시** | 포기 (market fallback 없음, 재시도 없음) |
 | **Hedge Mode** | OKX `tdMode: isolated`, `posSide: long/short` 분리 |
 | **Counter-order** | 체결가 ± spacing으로 post-only limit (reduce_only) |
 
@@ -284,9 +280,9 @@ CREATE INDEX idx_grid_trades_time ON grid_trades(exit_time DESC);
   place_limit_order("buy", 0.01, price, "long")
   place_limit_order("sell", 0.01, price, "short")
        ↓
-[체결 감지] (1초 폴링 fetch_open_orders)
-  order 사라짐 → fetch_order로 status 확인
-  status == "closed" → 체결 확정
+[체결 감지] (OKX Private WS orders 채널, 10~50ms push)
+  주문 상태 변경 즉시 콜백 → grid_engine.on_order_update()
+  REST fallback: 10초마다 fetch_open_orders (WS 누락 대비)
        ↓
 [Counter-order 배치]
   buy 체결 → sell TP (entry + spacing) reduce_only
@@ -334,8 +330,9 @@ src/
 ├── main.py                    # GridBot 엔트리포인트
 ├── data/
 │   ├── storage.py             # SQLite + Redis
-│   ├── ws_stream.py           # OKX WebSocket
-│   ├── binance_stream.py      # Binance CVD/whale
+│   ├── ws_stream.py           # OKX Public WS (trades/books/candles)
+│   ├── order_stream.py        # ★ OKX Private WS (체결 10~50ms push)
+│   ├── binance_stream.py      # Binance funding/OI
 │   └── candle_collector.py    # 캔들 백필
 ├── strategy/
 │   ├── grid_engine.py         # 그리드 코어 (모드 전환 포함)
@@ -391,9 +388,9 @@ regime:
   # CRS 임계값
   pause_threshold: 0.35        # ACTIVE → PAUSED
   resume_threshold: 0.15       # PAUSED → ACTIVE
-  pause_confirm_sec: 5         # 정지 확인 시간
-  resume_confirm_sec: 30       # 복귀 확인 시간
-  mode_switch_cooldown_sec: 30 # 모드 전환 최소 간격
+  pause_confirm_sec: 2         # 정지 확인 (2초 — 빠르게 멈춤)
+  resume_confirm_sec: 15       # 복귀 확인 (15초 — 안정 확인)
+  mode_switch_cooldown_sec: 15 # 모드 전환 최소 간격
   # 서킷브레이커
   circuit_breaker_pct: 2.0     # X% 이동
   circuit_breaker_window_sec: 10  # Y초 내
@@ -408,8 +405,8 @@ regime:
   cusum_drift: 0.4
 
 risk:
-  # 거래소 백스탑 (OKX 서버측)
-  backstop_drawdown_pct: 20    # 계좌 -20% → 전포지션 시장가 청산
+  # 거래소 백스탑 (미구현 — OKX 자체 청산이 담당)
+  backstop_drawdown_pct: 20    # 참조용
 
 fees:
   maker: 0.0002

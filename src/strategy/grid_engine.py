@@ -65,7 +65,7 @@ class GridEngine:
         self.state: GridState | None = None
         self._running = True
         self._lock = asyncio.Lock()
-        self._regime_mode = "ACTIVE"  # 마지막으로 확인한 레�� 모드
+        self._regime_mode = "ACTIVE"  # 마지막으로 확인한 레짐 모드
         self._last_rest_check = 0  # REST fallback 타이머
         self._pending_ws_events: list = []  # WS에서 온 체결 이벤트 큐
 

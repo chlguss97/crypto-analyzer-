@@ -16,7 +16,8 @@
 - **레벨**: 자본에 따라 자동 (2~10개), 목표 레버리지 8x
 - **spacing**: ATR% × 0.6, clamp [0.15%~0.50%]
 - **주문**: 전부 post-only limit (maker 0.02%)
-- **안전장치**: 선행레짐정지 + 서킷브레이커(2%/10초) + 거래소백스탑(-20%)
+- **안전장치**: 선행레짐정지(2초) + 서킷브레이커(2%/10초) + OKX자체청산
+- **체결 감지**: OKX Private WS push (10~50ms) + REST 10초 fallback
 
 ## 기술스택
 - Python 3.11 / ccxt / FastAPI
@@ -24,9 +25,8 @@
 - 알림: Telegram
 
 ## 현재 상태 (2026-05-22)
-- **Phase 0**: 레거시 삭제 진행 중
-- **Phase 1**: regime_detector.py 작성 예정
-- **Phase 2**: grid_engine.py 리팩터 예정
+- **전 Phase 완료**: 레거시 삭제 + regime_detector + grid_engine ��팩터 + WS 체결감지
+- **LIVE**: 서버 배포 완료, 정상 가동 중
 - 잔고: ~$180
 - 서버: Vultr Singapore, Docker Compose
 

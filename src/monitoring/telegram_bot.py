@@ -176,13 +176,12 @@ class TelegramNotifier:
     async def _cmd_market(self):
         try:
             price = (await self.redis.get("rt:price:BTC-USDT-SWAP")) if self.redis else "?"
-            regime = (await self.redis.get("sys:regime")) if self.redis else "?"
+            mode = (await self.redis.get("regime:mode")) if self.redis else "?"
 
-            icons = {"trending_up": "\U0001f4c8", "trending_down": "\U0001f4c9",
-                     "ranging": "\u2194\ufe0f", "volatile": "\U0001f30a"}
-            icon = icons.get(regime, "\U0001f4ca")
+            icons = {"ACTIVE": "\u2705", "PAUSED": "\u26a0\ufe0f", "FROZEN": "\U0001f6a8"}
+            icon = icons.get(mode, "\U0001f4ca")
 
-            text = f"\U0001f310 <b>Market</b>\n\nBTC: ${float(price):,.1f}\nRegime: {icon} {regime}"
+            text = f"\U0001f310 <b>Market</b>\n\nBTC: ${float(price):,.1f}\nMode: {icon} {mode}"
 
             # CRS
             if self.redis:
@@ -333,12 +332,3 @@ class TelegramNotifier:
         icons = {"running": "\u26a1", "paused": "\u23f8\ufe0f", "stopped": "\u26d4"}
         await self._send(f"{icons.get(status, '?')} <b>Bot: {status.upper()}</b>")
 
-    async def notify_regime_change(self, old_regime: str, new_regime: str,
-                                   confidence: float = 0):
-        icons = {"trending_up": "\U0001f4c8", "trending_down": "\U0001f4c9",
-                 "ranging": "\u2194\ufe0f", "volatile": "\U0001f30a"}
-        icon = icons.get(new_regime, "\U0001f4ca")
-        await self._send(
-            f"{icon} <b>Regime: {old_regime} \u2192 {new_regime}</b>\n"
-            f"Confidence: {confidence*100:.0f}%"
-        )

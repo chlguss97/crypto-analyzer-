@@ -137,8 +137,8 @@ class OrderStream:
 
         for order in data["data"]:
             state = order.get("state", "")
-            # filled(완전체결) 또는 canceled만 관심
-            if state in ("filled", "canceled", "partially_filled"):
+            # filled(완전체결) 또는 canceled만 관심 (partially_filled 무시 — 완전 체결 시 별도 push)
+            if state in ("filled", "canceled"):
                 order_info = {
                     "id": order.get("ordId", ""),
                     "status": "closed" if state == "filled" else state,
