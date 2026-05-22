@@ -290,7 +290,7 @@ class RegimeDetector:
         return spike * direction
 
     def _calc_cusum(self, now: float, price: float) -> float:
-        """CUSUM 변화점 감지 → -1 / 0 / +1"""
+        """CUSUM 연속형 — 누적 상태를 비율로 출력 [-1, +1]"""
         if len(self._price_buf) < 3:
             return 0.0
 
@@ -313,13 +313,18 @@ class RegimeDetector:
             return 0.0
 
         z = (ret - mean) / std
-        result = self.cusum.update(z)
 
-        if result == "up":
-            return 1.0
-        elif result == "down":
-            return -1.0
-        return 0.0
+        # 누적 (리셋 없이 연속 출력)
+        self.cusum.pos = max(0.0, self.cusum.pos + z - self.cusum.drift)
+        self.cusum.neg = max(0.0, self.cusum.neg - z - self.cusum.drift)
+
+        # 감쇄 (무한 누적 방지)
+        self.cusum.pos *= 0.95
+        self.cusum.neg *= 0.95
+
+        # 연속 출력: (pos - neg) / threshold → [-1, +1]
+        signal = (self.cusum.pos - self.cusum.neg) / self.cusum.threshold
+        return max(-1.0, min(1.0, signal))
 
     # ══════════════════════════════════════════
     #  서킷브레이커
