@@ -1,7 +1,7 @@
 """
-Storage layer — SQLite (candles, scalp_signals, scalp_trades) + Redis async wrapper
+Storage layer — SQLite (candles, grid_trades) + Redis async wrapper
 
-v3: 스캘핑 엔진용 클린 스키마 (기존 signals/trades 테이블 폐기)
+Grid-only: 캔들 + 그리드 사이클 기록
 """
 
 import aiosqlite
@@ -54,7 +54,7 @@ CREATE INDEX IF NOT EXISTS idx_grid_trades_ts ON grid_trades(exit_time DESC);
 
 
 class Database:
-    """SQLite 비동기 래퍼 — v3 스캘핑 스키마"""
+    """SQLite 비동기 래퍼 — Grid Trading 스키마"""
 
     def __init__(self):
         self.db_path = DATA_DIR / "scalp.db"

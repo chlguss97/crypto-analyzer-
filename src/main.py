@@ -98,17 +98,13 @@ class GridBot:
         await self.candle_collector.backfill_all()
         logger.info("캔들 백필 완료")
 
-        # ws_stream 5분봉 캐시 (Hurst 즉시 계산)
+        # ATR 계산용 캔들 캐시 확인
         try:
             candles_5m = await self.db.get_candles(self.symbol, "5m", limit=60)
             if candles_5m:
-                for c in candles_5m:
-                    self.ws_stream._candle_5m_cache.append(c)
-                logger.info(f"5분봉 캐시: {len(candles_5m)}개 → Hurst 즉시 계산")
-                if len(self.ws_stream._candle_5m_cache) >= 20:
-                    await self.ws_stream._compute_regime_features()
+                logger.info(f"5분봉 캐시: {len(candles_5m)}개 (ATR 계산 준비)")
         except Exception as e:
-            logger.warning(f"5분봉 캐시 실패: {e}")
+            logger.warning(f"5분봉 캐시 확인 실패: {e}")
 
         # GridEngine 초기화
         self.grid_engine = GridEngine(
@@ -178,12 +174,12 @@ class GridBot:
                 self._last_snap = _time.time()
                 try:
                     bal = float(await self.redis.get("sys:balance") or 0)
-                    hurst = await self.redis.get("rt:regime:hurst")
+                    mode = await self.redis.get("regime:mode") or "ACTIVE"
                     grid_status = self.grid_engine.get_status() if self.grid_engine else {}
                     _append_jsonl({
                         "type": "hourly_snapshot",
                         "balance": round(bal, 2),
-                        "hurst": round(float(hurst), 4) if hurst else 0.5,
+                        "regime_mode": mode,
                         "grid_active": grid_status.get("active", False),
                         "grid_cycles": grid_status.get("total_cycles", 0),
                         "grid_pnl": grid_status.get("total_pnl", 0),
@@ -239,9 +235,9 @@ class GridBot:
             bal = await self.executor.get_balance()
             grid_cfg = self.config.get("grid", {})
             await self.telegram._send(
-                f"\U0001f7e2 <b>GridBot — ATR-Adaptive Grid Trading</b>\n"
-                f"Balance: ${bal:,.2f} | Leverage: {grid_cfg.get('leverage', 20)}x\n"
-                f"Levels: {grid_cfg.get('levels', 4)} | Size: {grid_cfg.get('size_btc', 0.01)} BTC/level"
+                f"\U0001f7e2 <b>GridBot v3 — Leading Regime Detection</b>\n"
+                f"Balance: ${bal:,.2f} | Target Lev: {grid_cfg.get('target_leverage', 8)}x\n"
+                f"Size: {grid_cfg.get('size_btc', 0.01)} BTC/level | Spacing: {grid_cfg.get('spacing_min_pct', 0.15)}%~{grid_cfg.get('spacing_max_pct', 0.50)}%"
             )
         except Exception:
             pass

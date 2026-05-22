@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 class TelegramNotifier:
-    """텔레그램 알림 + 명령어 — v2 (3경로 시스템 대응)"""
+    """텔레그램 알림 + 명령어 — v3 (Grid-only)"""
 
     def __init__(self):
         self.config = load_config()
@@ -90,9 +90,6 @@ class TelegramNotifier:
             "/stats": self._cmd_stats,
             "/trades": self._cmd_trades,
             "/risk": self._cmd_risk,
-            "/adaptive": self._cmd_adaptive,
-            "/lab": self._cmd_lab,
-            "/shadow": self._cmd_shadow,
             "/sim": self._cmd_sim,
             "/help": self._cmd_help,
         }
@@ -312,88 +309,6 @@ class TelegramNotifier:
         except Exception as e:
             await self._send(f"\u26a0\ufe0f Risk 조회 실패: {e}")
 
-    async def _cmd_adaptive(self):
-        """AdaptiveParams 보정 상태"""
-        try:
-            if not self.redis:
-                return await self._send("\u26a0\ufe0f Redis 미연결")
-
-            state_raw = await self.redis.get("adaptive:state")
-            if not state_raw:
-                return await self._send("\U0001f4ca <b>Adaptive</b>\n\n데이터 없음 (수집 중)")
-
-            state = json.loads(state_raw)
-            total = state.get("total_trades", 0)
-            tp = state.get("tp_mult", 1.5)
-            sl = state.get("sl_pct", 5.0)
-
-            phase = "collect" if total < 10 else ("phase1" if total < 30 else ("phase2" if total < 300 else "full"))
-
-            text = (
-                f"\U0001f4ca <b>AdaptiveParams</b>\n\n"
-                f"Phase: {phase} ({total}건)\n"
-                f"TP mult: {tp:.3f} (기본 1.500)\n"
-                f"SL pct: {sl:.1f}% (기본 5.0%)\n"
-            )
-
-            # Direction EV
-            dir_results = state.get("direction_results", {})
-            if dir_results:
-                text += "\n<b>Direction EV:</b>\n"
-                for key, vals in sorted(dir_results.items())[:6]:
-                    if len(vals) >= 5:
-                        ev = sum(vals[-20:]) / len(vals[-20:])
-                        text += f"  {key}: {ev:+.1f}% ({len(vals)}건)\n"
-
-            await self._send(text)
-        except Exception as e:
-            await self._send(f"\u26a0\ufe0f Adaptive 조회 실패: {e}")
-
-    async def _cmd_lab(self):
-        """PaperLab 3 Variant 비교"""
-        try:
-            if not self.redis:
-                return await self._send("\u26a0\ufe0f Redis 미연결")
-
-            await self._send("\U0001f9ea <b>PaperLab</b>\n\nv3에서 제거됨. Shadow 모드로 대체.")
-        except Exception as e:
-            await self._send(f"\u26a0\ufe0f Lab 조회 실패: {e}")
-
-    async def _cmd_shadow(self):
-        """Shadow 라벨링 현황"""
-        try:
-            log_dir = Path(__file__).parent.parent.parent / "data" / "logs"
-            shadows = []
-            for f in sorted(log_dir.glob("trades_*.jsonl"), reverse=True)[:2]:
-                for line in open(f, encoding="utf-8"):
-                    try:
-                        r = json.loads(line)
-                        if r["type"] == "shadow_result":
-                            shadows.append(r)
-                    except Exception:
-                        continue
-
-            if not shadows:
-                return await self._send("\U0001f441 <b>Shadow</b>\n\n결과 없음")
-
-            wins = sum(1 for s in shadows if s.get("label") == 1)
-            losses = sum(1 for s in shadows if s.get("label") == 0)
-            total = wins + losses
-
-            # reach% 평균 (있는 것만)
-            reaches = [s.get("reach_pct", 0) for s in shadows if s.get("reach_pct") is not None and s.get("reach_pct") != 0]
-            avg_reach = sum(reaches) / len(reaches) if reaches else 0
-
-            text = (
-                f"\U0001f441 <b>Shadow Tracking</b>\n\n"
-                f"Total: {total}건 (W:{wins} L:{losses})\n"
-                f"Win Rate: {wins/total*100:.0f}%\n" if total > 0 else ""
-                f"Avg Reach: {avg_reach:.1f}%\n"
-                f"With reach data: {len(reaches)}/{total}건"
-            )
-            await self._send(text)
-        except Exception as e:
-            await self._send(f"\u26a0\ufe0f Shadow 조회 실패: {e}")
 
     async def _cmd_sim(self):
         """SimTrader 실전 시뮬 현황"""
@@ -438,18 +353,15 @@ class TelegramNotifier:
 
     async def _cmd_help(self):
         await self._send(
-            "<b>CryptoAnalyzer v2</b>\n\n"
+            "<b>GridBot v3</b>\n\n"
             "\U0001f7e2 /on \u2014 Autotrading ON\n"
             "\U0001f534 /off \u2014 Autotrading OFF\n"
-            "\U0001f4ca /status \u2014 Bot + ML + Lab\n"
+            "\U0001f4ca /status \u2014 Bot Status\n"
             "\U0001f4b0 /balance \u2014 Balance\n"
             "\U0001f310 /market \u2014 Price/Regime\n"
             "\U0001f4c8 /stats \u2014 Today Stats\n"
             "\U0001f4cb /trades \u2014 Recent 5\n"
             "\U0001f6e1 /risk \u2014 Risk/DD/Streak\n"
-            "\U0001f4ca /adaptive \u2014 TP/SL Tuning\n"
-            "\U0001f9ea /lab \u2014 A/B Variants\n"
-            "\U0001f441 /shadow \u2014 Label Stats\n"
             "\U0001f3ae /sim \u2014 SimTrader\n"
             "\U0001f6d1 /close \u2014 Close All\n"
             "\U0001f9f9 /clear \u2014 Clear Zombie\n"

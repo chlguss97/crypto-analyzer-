@@ -1,39 +1,33 @@
-# ScalpEngine v3 + Grid Trading
+# GridBot v3 — Leading Regime Detection
 
 ## 프로젝트 개요
 - BTC 무기한 선물(OKX) 자동매매 시스템
-- **현재 전략: ATR-Adaptive Grid Trading** (2026-05-21~)
-- 이전 전략: 마이크로스트럭처 스캘핑 (비활성화)
-- 설계서: `SPEC_V2.md`
-- 변경 인덱스: `COMMIT_LOG.md` (자동 갱신, 매 커밋 후)
+- **현재 전략: ATR-Adaptive Grid + 선행 레짐 감지** (2026-05-22~)
+- 설계서: `SPEC_V3.md`
+- 전수검사: `AUDIT_V3.md`
+- 변경 인덱스: `COMMIT_LOG.md`
 - 사람용 변경 큐레이션: `CHANGELOG.md`
 - 운영 매뉴얼: `MANUAL.md`
 
-## 현재 활성 전략: Grid Trading (2026-05-21)
-- **ATR-Adaptive Grid**: 4레벨 (2 buy + 2 sell), 각 0.01 BTC
-- **Spacing**: ATR% × 0.6, clamp(0.10%~0.50%)
-- **주문**: 전부 limit post-only (maker 0.02%)
-- **사이클**: 체결 → counter-order(TP) → 완성 → 재배치
-- **리밸런스**: 1시간마다 ATR 재계산, drift > 50% → 재구성
-- **안전장치**: Hurst > 0.7 → 일시정지, BOT_KILL -20% DD
-- **수익**: 건당 ~$0.47 (spacing $78 - 수수료 $0.31)
-
-## 비활성 전략: 4모델 앙상블 스캘핑 (archived)
-- scalp.enabled: false
-- OFI + OU + CVD + LSTM(tanh fallback) 4모델 앙상블
-- conf = max(0, 1 - σ/|d̄|), threshold 0.8
-- 스캘핑 수수료 문제로 그리드로 전환 (2026-05-21)
+## 현재 활성 전략: Grid + Leading Regime (2026-05-22)
+- **2모드**: ACTIVE (그리드 가동) / PAUSED (추세 감지 → 정지)
+- **선행 감지**: OBI + CVD가속 + Volume스파이크 + CUSUM → CRS
+- **그리드**: ATR-adaptive, 기하식 spacing, 잔고 비례 사이징
+- **레벨**: 자본에 따라 자동 (2~10개), 목표 레버리지 8x
+- **spacing**: ATR% × 0.6, clamp [0.15%~0.50%]
+- **주문**: 전부 post-only limit (maker 0.02%)
+- **안전장치**: 선행레짐정지 + 서킷브레이커(2%/10초) + 거래소백스탑(-20%)
 
 ## 기술스택
-- Python 3.11 / ccxt / PyTorch / FastAPI
-- DB: SQLite(scalp.db: candles + scalp_signals + scalp_trades + grid_trades) + Redis
+- Python 3.11 / ccxt / FastAPI
+- DB: SQLite(scalp.db: candles + grid_trades) + Redis
 - 알림: Telegram
 
-## 현재 상태 (2026-05-21)
-- **Grid LIVE**: 4레벨 배치 중, spacing ~0.10%
-- 스캘핑: 비활성화
-- LSTM: 미학습 (LOB 데이터 수집 중, Phase 3 대기)
-- 잔고: ~$170
+## 현재 상태 (2026-05-22)
+- **Phase 0**: 레거시 삭제 진행 중
+- **Phase 1**: regime_detector.py 작성 예정
+- **Phase 2**: grid_engine.py 리팩터 예정
+- 잔고: ~$180
 - 서버: Vultr Singapore, Docker Compose
 
 ## 메모리 자동 저장

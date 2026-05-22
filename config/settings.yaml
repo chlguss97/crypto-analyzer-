@@ -1,4 +1,4 @@
-# ── GridBot — ATR-Adaptive Grid Trading ──
+# ── GridBot v3 — ATR-Adaptive Grid + Leading Regime Detection ──
 
 strategy: "grid"
 
@@ -13,21 +13,41 @@ timeframes:
 # ── 그리드 트레이딩 ──
 grid:
   enabled: true
-  leverage: 20
-  levels: 2                          # 1 buy + 1 sell (잔고 $177 적응)
-  size_btc: 0.01                    # 레벨당 1계약 (0.01 BTC)
-  atr_mult: 0.6                     # spacing = ATR% × 0.6
-  spacing_min_pct: 0.10             # 최소 0.10% (수수료 0.04% 커버)
-  spacing_max_pct: 0.50             # 최대 0.50%
-  rebalance_sec: 3600               # 1시간마다 ATR 재계산
-  drift_rebalance_pct: 150          # 가격이 범위 150% 벗어나면 리밸런스 (자주 안 하게)
-  hurst_pause: 0.70                 # Hurst > 0.7 → 그리드 일시정지
-  monitor_sec: 1                    # 1초마다 주문 체크
-  atr_period: 14                    # ATR 14기간
-  atr_timeframe: "5m"               # 5분봉
+  target_leverage: 8              # 평시 (ATR 따라 6~10 자동)
+  size_btc: 0.01                  # 레벨당 1계약 (0.01 BTC)
+  atr_mult: 0.6                   # spacing = ATR% × 0.6
+  spacing_min_pct: 0.15           # 최소 0.15% (수수료+펀딩 커버)
+  spacing_max_pct: 0.50           # 최대 0.50%
+  spacing_type: "geometric"       # arithmetic | geometric
+  rebalance_sec: 3600             # 1시간 ATR 재계산
+  drift_rebalance_pct: 50         # drift > 50% → 리빌드
+  monitor_sec: 1                  # 1초 체결 확인
+  atr_period: 14
+  atr_timeframe: "5m"
 
+# ── 선행 레짐 감지 ──
+regime:
+  pause_threshold: 0.35           # |CRS| ≥ 0.35 → PAUSED
+  resume_threshold: 0.15          # |CRS| < 0.15 → ACTIVE
+  pause_confirm_sec: 5            # 정지 확인 시간
+  resume_confirm_sec: 30          # 복귀 확인 시간
+  mode_switch_cooldown_sec: 30    # 모드 전환 최소 간격
+  # 서킷브레이커
+  circuit_breaker_pct: 2.0        # X% 이동
+  circuit_breaker_window_sec: 10  # Y초 내
+  circuit_breaker_freeze_sec: 60  # 동결 시간
+  # 시그널 가중치
+  weight_obi: 0.25
+  weight_cvd: 0.30
+  weight_volume: 0.20
+  weight_cusum: 0.25
+  # CUSUM 파라미터
+  cusum_threshold: 4.0
+  cusum_drift: 0.4
+
+# ── 리스크 ──
 risk:
-  bot_kill_drawdown: 0.20           # -20% DD → 봇 정지
+  backstop_drawdown_pct: 0.20     # 거래소 백스탑 -20%
 
 fees:
   taker: 0.0005

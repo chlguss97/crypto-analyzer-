@@ -1,12 +1,22 @@
 # Commit Log
 
 > 자동 생성 — `scripts/update_commit_log.sh` (매 커밋 후 실행)
-> Updated: 2026-05-21 14:40:53    
-> Total commits: 406 (2026-04-03 → 2026-05-21)
+> Updated: 2026-05-21 15:52:50    
+> Total commits: 416 (2026-04-03 → 2026-05-21)
 
 Claude 가 질문/변경 작업 시 이 파일을 참고해서 과거 변경 이력 컨텍스트를 확보합니다. 수동 편집 금지 — 다음 커밋 시 덮어써집니다.
 
 ## 2026-05-21
+- `d970a516` fix: 복구 로직 강화 + 로그 최적화
+- `f9cd2fbf` fix: 그리드 모니터 3초→1초 (counter-order 배치 딜레이 감소)
+- `4d0831ec` fix: 그리드 상태 로그 15초→5초
+- `b008118e` fix: 그리드 상태 로그 30초→15초
+- `260295d5` feat: 그리드 30초 상태 로그 추가
+- `77630dca` fix: telegram _cmd_clear except 블록 누락 SyntaxError
+- `ef69c509` fix: AUDIT 보완 — telegram 크래시 수정 + ATR 방어 + Lock
+- `d180331b` fix: 그리드 레벨 4→2 + 리밸런스 안정화
+- `6a06a3e5` docs: AUDIT_PROMPT 그리드 전환 + 레거시 데이터 삭제 명세
+- `2be9ed0d` refactor: 레거시 스캘핑 코드 전면 삭제 — Grid only
 - `eecdcb20` docs: SPEC/CLAUDE/CHANGELOG 그리드 전환 반영
 - `9425f531` feat: ATR-Adaptive Grid Trading Engine
 - `c8e37bcf` fix: 과매매 방지 — 시그널 지속성 + 반전 conf 상향

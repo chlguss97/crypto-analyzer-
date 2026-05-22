@@ -201,11 +201,5 @@ class RiskManager:
         return self._state["trade_count_today"]
 
     def is_trading_allowed(self) -> tuple[bool, str]:
-        """매매 가능 여부 판단 — 봇킬 DD만 체크 (나머지는 확신도 사이즈가 관리)"""
-        # 봇 킬: DD -20% → 완전 정지
-        peak = self._state["peak_balance"]
-        current = self._state["current_balance"]
-        if peak > 0 and (peak - current) / peak >= BOT_KILL_DRAWDOWN_PCT / 100:
-            return False, f"봇 킬 DD (-{BOT_KILL_DRAWDOWN_PCT}%)"
-
+        """매매 가능 여부 — 항상 허용 (안전장치는 RegimeDetector + 거래소 백스탑이 담당)"""
         return True, "OK"

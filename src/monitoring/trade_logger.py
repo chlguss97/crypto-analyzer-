@@ -1,17 +1,12 @@
 """
-TradeLogger v3 — 스캘핑 JSONL 로거
+TradeLogger — Grid Trading JSONL 로거
 
 주간 JSONL 파일 + 텍스트 로그 파일.
-모든 이벤트는 _append_jsonl()로 기록.
 
 이벤트 타입:
-  - scalp_entry: 스캘핑 진입
-  - scalp_exit: 스캘핑 청산
-  - candidate: 시그널 감지 (Shadow 포함)
-  - shadow_result: Shadow 라벨 확정
-  - gate_block: 게이트 차단
+  - grid_cycle: 그리드 사이클 완성
   - hourly_snapshot: 시간별 스냅샷
-  - adaptive_update: AdaptiveParams 갱신
+  - regime_change: 모드 전환 (ACTIVE/PAUSED/FROZEN)
 """
 
 import json
@@ -74,24 +69,13 @@ class TradeLogger:
             handler.suffix = "%Y-W%W"
             self.logger.addHandler(handler)
 
-    def log_scalp_entry(self, direction: str, entry_price: float,
-                        sl_price: float, tp_price: float,
-                        size: float, leverage: int, regime: str = "?"):
-        self.logger.info(
-            f"SCALP ENTRY | {direction.upper()} | "
-            f"${entry_price:,.1f} | SL ${sl_price:,.1f} TP ${tp_price:,.1f} | "
-            f"{size} BTC {leverage}x | regime={regime}"
-        )
-
-    def log_scalp_exit(self, direction: str, exit_reason: str,
+    def log_grid_cycle(self, level_id: int, side: str,
                        entry_price: float, exit_price: float,
-                       pnl_pct: float, pnl_usdt: float,
-                       hold_sec: int, fee: float):
+                       pnl: float, total_cycles: int):
         self.logger.info(
-            f"SCALP EXIT  | {direction.upper()} {exit_reason} | "
+            f"GRID CYCLE | Lv{level_id} {side.upper()} | "
             f"${entry_price:,.1f} → ${exit_price:,.1f} | "
-            f"{pnl_pct:+.2f}% (${pnl_usdt:+.2f}) | "
-            f"{hold_sec}s | fee ${fee:.2f}"
+            f"PnL ${pnl:+.3f} | 총 {total_cycles}사이클"
         )
 
     def log_risk_event(self, event: str, detail: str = ""):

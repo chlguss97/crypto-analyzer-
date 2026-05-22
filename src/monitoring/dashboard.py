@@ -57,8 +57,8 @@ async def verify_auth(
 
 
 app = FastAPI(
-    title="ScalpEngine v3",
-    version="2.0.0",
+    title="GridBot v3",
+    version="3.0.0",
     dependencies=[Depends(verify_auth)],
 )
 
@@ -230,31 +230,6 @@ async def get_signals():
     return trade_state
 
 
-@app.get("/api/trades")
-async def get_trades(days: int = 7):
-    await _ensure_initialized()
-    """스캘핑 매매 내역"""
-    import time
-    since = int((time.time() - days * 86400) * 1000)
-
-    cursor = await db._db.execute(
-        """SELECT * FROM scalp_trades
-           WHERE entry_time >= ?
-           ORDER BY entry_time DESC""",
-        (since,),
-    )
-    rows = await cursor.fetchall()
-
-    trades = []
-    for row in rows:
-        trade = dict(row)
-        if trade.get("features_snapshot"):
-            trade["features_snapshot"] = "(생략)"
-        trades.append(trade)
-
-    return {"trades": trades, "count": len(trades)}
-
-
 @app.get("/api/candles")
 async def get_candles(timeframe: str = "15m", limit: int = 200):
     await _ensure_initialized()
@@ -275,68 +250,6 @@ async def get_candles(timeframe: str = "15m", limit: int = 200):
         c["time"] = c["timestamp"] // 1000
 
     return {"candles": candles, "count": len(candles), "timeframe": timeframe}
-
-
-@app.get("/api/shadow/stats")
-async def get_shadow_stats():
-    await _ensure_initialized()
-    """Shadow 시그널 통계"""
-    cursor = await db._db.execute(
-        """SELECT
-            COUNT(*) as total,
-            SUM(CASE WHEN label = 1 THEN 1 ELSE 0 END) as wins,
-            SUM(CASE WHEN label = 0 THEN 1 ELSE 0 END) as losses,
-            COALESCE(AVG(pnl_pct), 0) as avg_pnl_pct
-        FROM scalp_signals
-        WHERE label != -1"""
-    )
-    row = dict(await cursor.fetchone())
-
-    cursor2 = await db._db.execute(
-        """SELECT id, signal_type, direction, price, regime, hurst, label,
-                  barrier_hit, pnl_pct, reach_pct, mae_pct, ts
-           FROM scalp_signals
-           WHERE label != -1
-           ORDER BY ts DESC LIMIT 20"""
-    )
-    recent = [dict(r) for r in await cursor2.fetchall()]
-
-    cursor3 = await db._db.execute(
-        "SELECT COUNT(*) FROM scalp_signals WHERE label = -1"
-    )
-    pending = (await cursor3.fetchone())[0]
-
-    return {
-        "total": row["total"],
-        "wins": row["wins"] or 0,
-        "losses": row["losses"] or 0,
-        "win_rate": (row["wins"] or 0) / max(row["total"], 1) * 100,
-        "avg_pnl_pct": round(row["avg_pnl_pct"] or 0, 4),
-        "pending": pending,
-        "recent_signals": recent,
-    }
-
-
-@app.get("/api/equity-curve")
-async def get_equity_curve():
-    await _ensure_initialized()
-    """자산 곡선"""
-    cursor = await db._db.execute(
-        "SELECT entry_time, pnl_usdt, pnl_pct FROM scalp_trades WHERE exit_time IS NOT NULL ORDER BY exit_time ASC"
-    )
-    rows = await cursor.fetchall()
-
-    curve = []
-    cumulative = 0
-    for row in rows:
-        r = dict(row)
-        cumulative += r.get("pnl_usdt", 0) or 0
-        curve.append({
-            "timestamp": r["entry_time"],
-            "cumulative_pnl": round(cumulative, 2),
-        })
-
-    return {"equity_curve": curve}
 
 
 # ── POST 엔드포인트 ──
@@ -494,25 +407,6 @@ async def manual_update_tp(req: ManualTpRequest):
     return {"ok": True, "queued": True, "symbol": sym, "price": req.price}
 
 
-# ── Setup Tracker / ML 엔드포인트 ──
-
-@app.get("/api/setup-tracker")
-async def get_setup_tracker():
-    await _ensure_initialized()
-    """Legacy — 제거됨 (v3 스캘핑 엔진)"""
-    return {"info": "setup_tracker removed in v3"}
-
-
-@app.get("/api/ml/flow-stats")
-async def get_ml_stats():
-    """모델 통계 (4모델 앙상블)"""
-    try:
-        # from src.strategy.ml_engine import ModelManager  # removed
-        return {"status": "grid_only", "ml": "removed"}
-    except Exception as e:
-        return {"lstm_enabled": False, "has_model": False, "error": str(e)}
-
-
 @app.get("/api/risk/state")
 async def get_risk_state():
     await _ensure_initialized()
@@ -562,91 +456,34 @@ async def get_regime():
 @app.get("/api/engine/overview")
 async def get_engine_overview():
     """
-    Engine 탭 통합 데이터 — regime/state/setup-tracker/real-vs-paper 를 1콜로 반환.
-    히트맵 + 비교뷰용 집약.
+    Engine 탭 통합 데이터 — regime + grid trade stats.
     """
     await _ensure_initialized()
-    symbol = config["exchange"]["symbol"]
 
     # 1) regime
-    regime_detail = await redis.get_json("sys:trade_state")
     regime = await redis.get("sys:regime") or "ranging"
-    if not regime_detail:
-        regime_detail = {"regime": regime, "confidence": 0, "scores": {}}
+    regime_detail = {"regime": regime}
 
-    # 2) engine state
-    engine_state = await redis.get_json("sys:trade_state") or {
-        "candidate": None, "direction": "neutral", "strength": 0,
-        "ml_phase": "cold", "ml_prob": 0.0,
-        "regime": "ranging", "streak": 0, "daily_pnl": 0.0,
-    }
-
-    # 3) SetupTracker 요약
-    setup_summary = {}
-
-    # 4) 스캘핑 트레이드 통계
-    trade_stats = {"total": 0, "wins": 0, "wr": 0.0, "total_pnl": 0.0, "avg_pnl": 0.0}
+    # 2) grid trade stats
+    grid_stats = {"total_cycles": 0, "total_pnl": 0.0, "avg_pnl": 0.0}
     try:
         cur = await db._db.execute(
             """SELECT COUNT(*) as total,
-                      SUM(CASE WHEN pnl_pct > 0 THEN 1 ELSE 0 END) as wins,
                       COALESCE(SUM(pnl_usdt), 0) as total_pnl,
-                      COALESCE(AVG(pnl_pct), 0) as avg_pnl
-               FROM scalp_trades WHERE exit_time IS NOT NULL"""
+                      COALESCE(AVG(pnl_usdt), 0) as avg_pnl
+               FROM grid_trades WHERE status = 'done'"""
         )
         row = dict(await cur.fetchone())
-        trade_stats["total"] = row["total"] or 0
-        trade_stats["wins"] = row["wins"] or 0
-        trade_stats["wr"] = (trade_stats["wins"] / max(trade_stats["total"], 1)) * 100
-        trade_stats["total_pnl"] = round(row["total_pnl"] or 0, 2)
-        trade_stats["avg_pnl"] = round(row["avg_pnl"] or 0, 4)
+        grid_stats["total_cycles"] = row["total"] or 0
+        grid_stats["total_pnl"] = round(row["total_pnl"] or 0, 2)
+        grid_stats["avg_pnl"] = round(row["avg_pnl"] or 0, 4)
     except Exception as e:
-        logger.debug(f"trade stats 집계 실패: {e}")
-
-    # 5) Flow × Regime 히트맵
-    heatmap = {}
-    for setup_name in setup_summary:
-        by_regime = (setup_summary.get(setup_name) or {}).get("by_regime", {}) or {}
-        heatmap[setup_name] = {}
-        for regime_key in ("trending_up", "trending_down", "ranging", "volatile"):
-            r = by_regime.get(regime_key, {}) or {}
-            n = r.get("total", 0)
-            w = r.get("wins", 0)
-            heatmap[setup_name][regime_key] = {
-                "n": n,
-                "wins": w,
-                "wr": (w / max(n, 1)) * 100 if n > 0 else None,
-                "avg_pnl": round(r.get("pnl", 0) / max(n, 1), 2),
-            }
-
-    # ML 상태
-    ml_stats = {}
-    try:
-        # from src.strategy.ml_engine import ModelManager  # removed
-        ml_stats = ModelManager().get_stats()
-    except Exception:
-        pass
+        logger.debug(f"grid trade stats 집계 실패: {e}")
 
     return {
         "regime": regime_detail,
-        "engine": engine_state,
-        "setups": setup_summary,
-        "heatmap": heatmap,
-        "comparison": {"scalp_trades": trade_stats},
-        "ml": ml_stats,
+        "grid_trades": grid_stats,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
 
-@app.get("/api/signals-db")
-async def get_signals_db():
-    """scalp_signals 최근 50건 조회"""
-    await _ensure_initialized()
-    try:
-        cursor = await db._db.execute(
-            "SELECT * FROM scalp_signals ORDER BY ts DESC LIMIT 50"
-        )
-        rows = await cursor.fetchall()
-        return {"signals": [dict(r) for r in rows], "count": len(rows)}
-    except Exception as e:
-        return {"signals": [], "count": 0, "error": str(e)}

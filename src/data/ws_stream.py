@@ -1,25 +1,23 @@
 """
-OKX WebSocket — 전체 데이터 수집 (Binance 대체)
+OKX WebSocket — Grid Trading 데이터 수집
 
 수집 항목:
-  1. trades → CVD 5m/15m/1h + 마이크로스트럭처 15종
+  1. trades → CVD 5m/15m/1h + Volume tracking
   2. tickers → 가격/ticker
   3. candle 7종 → DB 직접 저장 + 이벤트 발행
-  4. books5 → 호가 불균형 (향후)
+  4. books5 → 호가 불균형 (OBI) + spread
 
 Redis 키:
-  flow:combined:cvd_5m/15m/1h   — CVD
-  flow:combined:whale_bias       — 고래 편향
   rt:price:BTC-USDT-SWAP         — 가격
   rt:ticker:BTC-USDT-SWAP        — ticker
   rt:velocity:BTC-USDT-SWAP      — 가격 변속도
-  rt:micro:*                     — 마이크로스트럭처 15종
+  rt:micro:book_imbalance        — OBI
+  rt:micro:spread                — spread
 """
 
 import asyncio
 import json
 import logging
-import math
 import time
 import websockets
 from collections import deque
@@ -30,12 +28,10 @@ logger = logging.getLogger(__name__)
 OKX_WS_PUBLIC = "wss://ws.okx.com:8443/ws/v5/public"
 OKX_WS_BUSINESS = "wss://ws.okx.com:8443/ws/v5/business"  # 캔들 전용
 SYMBOL = "BTC-USDT-SWAP"
-WHALE_THRESHOLD_USD = 50_000
-WHALE_WINDOW_SEC = 300
 
 
 class WebSocketStream:
-    """OKX WebSocket — 전체 시장 데이터 수집 + 마이크로스트럭처"""
+    """OKX WebSocket — Grid Trading 시장 데이터 수집"""
 
     def __init__(self, redis_client: RedisClient, db=None):
         self.redis = redis_client
@@ -56,39 +52,14 @@ class WebSocketStream:
         self._price_window = []
         self._price_window_max = 120
 
-        # 마이크로스트럭처 버퍼
+        # Trade 버퍼 (volume spike detection용)
         self._trades: deque = deque(maxlen=50000)
         self._cvd_snapshots: deque = deque(maxlen=30)
         self._last_cvd_snap = 0
-        self._vwap_vol_sum = 0.0
-        self._vwap_qty_sum = 0.0
-        self._vwap_reset = 0
         self._price_history: deque = deque(maxlen=60)
-        self._last_micro_flush = 0
 
-        # 고래 추적
-        self._whales: deque = deque(maxlen=200)
-
-        # OFI (Order Flow Imbalance) — 이전 호가 스냅샷
-        self._prev_bids: list = []
-        self._prev_asks: list = []
-        self._ofi_accumulator = 0.0
-        self._ofi_reset_ts = 0
-
-        # Book Resilience (Kyle 1985, Foucault et al. 2013)
-        self._depth_ewma = 0.0
-        self._depth_ewma_alpha = 0.15
-        self._depth_initialized = False
-
-        # LOB 스냅샷 — 제거됨 (LSTM 미사용)
-
-        # OU Z-Score (Uhlenbeck & Ornstein 1930, Elliott et al. 2005)
-        self._ou_prices: deque = deque(maxlen=200)  # 5초 간격 가격
-        self._ou_last_sample = 0
-        self._ou_last_z = 0.0  # 감쇠 추적용
-
-        # Hurst / Parkinson — 5분봉 캐시
-        self._candle_5m_cache: deque = deque(maxlen=60)
+        # OBI (최신값 캐시)
+        self._last_obi = 0.0
 
         # 통계
         self._trade_count = 0
@@ -97,6 +68,41 @@ class WebSocketStream:
         # DB 저장 심볼
         from src.utils.helpers import load_config
         self._db_symbol = load_config().get("exchange", {}).get("symbol", "BTC/USDT:USDT")
+
+    # ══════════════════════════════════════════
+    #  Public API for regime_detector
+    # ══════════════════════════════════════════
+
+    @property
+    def obi(self) -> float:
+        """Current Order Book Imbalance [-1, 1]"""
+        return self._last_obi
+
+    @property
+    def trades(self) -> deque:
+        """Recent trades deque: (timestamp, side, size, price, size_usd)"""
+        return self._trades
+
+    @property
+    def cvd_snapshots(self) -> deque:
+        """CVD snapshots deque: (timestamp, cvd_5m_value)"""
+        return self._cvd_snapshots
+
+    @property
+    def cvd_5m(self) -> float:
+        return self._cvd_5m
+
+    @property
+    def cvd_15m(self) -> float:
+        return self._cvd_15m
+
+    @property
+    def cvd_1h(self) -> float:
+        return self._cvd_1h
+
+    # ══════════════════════════════════════════
+    #  Connection
+    # ══════════════════════════════════════════
 
     async def start(self, symbol: str = SYMBOL):
         """OKX WS 연결 시작 (무한 재시도)"""
@@ -130,13 +136,11 @@ class WebSocketStream:
         self._cvd_reset_1h = 0
         self._trades.clear()
         self._cvd_snapshots.clear()
-        self._whales.clear()
-        self._last_micro_flush = 0
         self._trade_count = 0
 
         logger.info(f"OKX WS Public 연결 성공: {symbol} (버퍼 리셋)")
 
-        # Business WS (캔들 전용 — OKX는 캔들을 /business 엔드포인트에서만 제공)
+        # Business WS (캔들 전용)
         ws_biz = await websockets.connect(OKX_WS_BUSINESS, ping_interval=20, open_timeout=10)
         logger.info(f"OKX WS Business 연결 성공 (캔들)")
 
@@ -166,7 +170,7 @@ class WebSocketStream:
             }))
             logger.info("OKX WS 구독: Public 3채널 + Business 7채널")
 
-            # 두 WS에서 동시 수신 — 한쪽이라도 끊기면 양쪽 다 재연결
+            # 두 WS에서 동시 수신
             self._ws_tasks_done = asyncio.Event()
 
             async def _recv_loop(ws_conn, name):
@@ -191,7 +195,7 @@ class WebSocketStream:
                         await self._handle_message(data)
                     except Exception as e:
                         logger.error(f"OKX WS {name} 처리 에러: {e}", exc_info=True)
-                # 한쪽이 끊기면 다른 쪽도 종료시킴
+                # 한쪽이 끊기면 다른 쪽도 종료
                 self._ws_tasks_done.set()
 
             await asyncio.gather(
@@ -250,7 +254,7 @@ class WebSocketStream:
         }, ttl=30)
 
     # ══════════════════════════════════════════
-    #  Trades → CVD + 마이크로스트럭처
+    #  Trades → CVD + Volume tracking
     # ══════════════════════════════════════════
 
     async def _handle_trade(self, trade: dict):
@@ -272,42 +276,16 @@ class WebSocketStream:
         self._cvd_15m = max(-MAX_CVD, min(MAX_CVD, self._cvd_15m + delta))
         self._cvd_1h = max(-MAX_CVD, min(MAX_CVD, self._cvd_1h + delta))
 
-        # ── 마이크로 버퍼 ──
+        # ── 버퍼 ──
         self._trades.append((now_f, side, size, price, size_usd))
         self._price_history.append((now_f, price))
-
-        # VWAP (5분 윈도우)
-        now_sec = int(now_f)
-        if now_sec // 300 != self._vwap_reset:
-            self._vwap_reset = now_sec // 300
-            self._vwap_vol_sum = 0.0
-            self._vwap_qty_sum = 0.0
-        self._vwap_vol_sum += price * size
-        self._vwap_qty_sum += size
 
         # CVD 스냅샷 (5초 간격)
         if now_f - self._last_cvd_snap >= 5:
             self._cvd_snapshots.append((now_f, self._cvd_5m))
             self._last_cvd_snap = now_f
 
-        # ── Redis 갱신 (100체결마다 or 고래) ──
         self._trade_count += 1
-        flush = self._trade_count % 100 == 0 or size_usd >= WHALE_THRESHOLD_USD
-
-        # CVD/Whale → Binance Futures WS로 이관 (binance_stream.py)
-        # OKX trades는 마이크로스트럭처 + 속도 계산에만 사용
-
-        # OU Z-Score 샘플링 (5초 간격)
-        if now_f - self._ou_last_sample >= 5 and price > 0:
-            self._ou_last_sample = now_f
-            self._ou_prices.append(price)
-            if len(self._ou_prices) >= 30:
-                await self._compute_ou_zscore()
-
-        # 마이크로스트럭처 (2초마다 Redis flush)
-        if now_f - self._last_micro_flush >= 2:
-            self._last_micro_flush = now_f
-            await self._flush_microstructure(price)
 
         # ── 가격 변속도 ──
         if price > 0 and ts > 0:
@@ -338,6 +316,7 @@ class WebSocketStream:
                 }, ttl=30)
 
         # ── CVD 윈도우 리셋 ──
+        now_sec = int(now_f)
         if now_sec // 300 != self._cvd_reset_5m:
             self._cvd_reset_5m = now_sec // 300
             self._cvd_5m = delta
@@ -351,9 +330,7 @@ class WebSocketStream:
         # 주기 로그 (5분마다)
         if now_sec - self._last_log >= 300:
             self._last_log = now_sec
-            logger.info(
-                f"OKX trades: {self._trade_count}건 (CVD/Whale은 Binance WS 담당)"
-            )
+            logger.info(f"OKX trades: {self._trade_count}건")
 
     # ══════════════════════════════════════════
     #  Candle → DB 저장 + 이벤트 발행
@@ -381,18 +358,12 @@ class WebSocketStream:
         tf_map = {"1m": "1m", "5m": "5m", "15m": "15m", "1H": "1h", "4H": "4h", "1D": "1d", "1W": "1w"}
         std_tf = tf_map.get(tf, tf.lower())
 
-        # DB 저장 — 완성봉만 (미완성봉 저장 시 ATR 왜곡 위험)
+        # DB 저장 — 완성봉만
         if self.db and is_closed:
             try:
                 await self.db.insert_candles(self._db_symbol, std_tf, [candle_dict])
             except Exception as e:
                 logger.debug(f"OKX candle DB 저장 실패 ({std_tf}): {e}")
-
-        # 5분봉 캐시 (Hurst/Parkinson 계산용)
-        if is_closed and std_tf == "5m":
-            self._candle_5m_cache.append(candle_dict)
-            if len(self._candle_5m_cache) >= 20:
-                await self._compute_regime_features()
 
         # 캔들 확정 → 이벤트 발행
         if is_closed:
@@ -404,11 +375,11 @@ class WebSocketStream:
                 pass
 
     # ══════════════════════════════════════════
-    #  Books (호가창 — 향후 피처 확장용)
+    #  Books (호가창 — OBI + Spread)
     # ══════════════════════════════════════════
 
     async def _handle_books(self, book: dict):
-        """호가 불균형 + OFI (Order Flow Imbalance) 계산"""
+        """호가 불균형 (OBI) + spread 계산"""
         try:
             bids = book.get("bids", [])
             asks = book.get("asks", [])
@@ -426,335 +397,12 @@ class WebSocketStream:
             imbalance = (bid_total - ask_total) / total
             spread = float(asks[0][0]) - float(bids[0][0])
 
+            self._last_obi = imbalance
             await self.redis.set("rt:micro:book_imbalance", str(round(imbalance, 4)), ttl=15)
             await self.redis.set("rt:micro:spread", str(round(spread, 2)), ttl=15)
 
-            # ── OFI (Multi-Level Order Flow Imbalance) ──
-            # Cont, Kukanov, & Stoikov (2014): OFI = Σ(ΔBid_k - ΔAsk_k)
-            if self._prev_bids and self._prev_asks:
-                ofi_tick = 0.0
-                for k in range(min(5, len(bid_sizes), len(self._prev_bids))):
-                    delta_bid = bid_sizes[k] - self._prev_bids[k]
-                    delta_ask = ask_sizes[k] - self._prev_asks[k] if k < len(ask_sizes) and k < len(self._prev_asks) else 0
-                    ofi_tick += delta_bid - delta_ask
-
-                # 5초 윈도우 누적 후 리셋
-                now_sec = int(time.time())
-                if now_sec // 5 != self._ofi_reset_ts:
-                    self._ofi_reset_ts = now_sec // 5
-                    self._ofi_accumulator = ofi_tick
-                else:
-                    self._ofi_accumulator += ofi_tick
-
-                await self.redis.set("rt:micro:ofi", str(round(self._ofi_accumulator, 4)), ttl=15)
-
-            self._prev_bids = bid_sizes
-            self._prev_asks = ask_sizes
-
-            # ── Book Resilience (EWMA depth tracking) ──
-            total_depth = bid_total + ask_total
-            if not self._depth_initialized:
-                self._depth_ewma = total_depth
-                self._depth_initialized = True
-            else:
-                self._depth_ewma = (self._depth_ewma_alpha * total_depth +
-                                    (1 - self._depth_ewma_alpha) * self._depth_ewma)
-
-            resilience = min(2.0, total_depth / max(self._depth_ewma, 1e-10)) / 2.0
-            depth_shock = total_depth < self._depth_ewma * 0.7
-
-            await self.redis.set("rt:micro:book_resilience", str(round(resilience, 4)), ttl=15)
-            if depth_shock:
-                await self.redis.set("rt:micro:depth_shock", "1", ttl=30)
-            else:
-                await self.redis.set("rt:micro:depth_shock", "0", ttl=30)
-
         except Exception:
             pass
-
-    # ══════════════════════════════════════════
-    #  마이크로스트럭처 집계 (2초마다)
-    # ══════════════════════════════════════════
-
-    async def _compute_ou_zscore(self):
-        """Ornstein-Uhlenbeck Z-Score (Elliott et al. 2005)
-        X_{t+1} - X_t = a + b*X_t + ε → μ = -a/b, σ = std(ε)/√(-2b)
-        """
-        try:
-            import numpy as np
-            prices = np.array(list(self._ou_prices))
-            if len(prices) < 30:
-                return
-
-            # OLS: ΔX = a + b*X_{t-1}
-            x = prices[:-1]
-            dx = np.diff(prices)
-            n = len(dx)
-            sx = np.sum(x)
-            sy = np.sum(dx)
-            sxy = np.sum(x * dx)
-            sxx = np.sum(x * x)
-
-            denom = n * sxx - sx * sx
-            if abs(denom) < 1e-10:
-                return
-
-            b = (n * sxy - sx * sy) / denom
-            a = (sy - b * sx) / n
-
-            if b >= 0:
-                # b >= 0 → 비정상 (mean-reverting 아님)
-                await self.redis.set("rt:micro:ou_zscore", "0.0", ttl=30)
-                return
-
-            mu = -a / b  # 평균 회귀 수준
-            residuals = dx - (a + b * x)
-            sigma = float(np.std(residuals))
-            ou_sigma = sigma / math.sqrt(-2 * b) if -2 * b > 1e-10 else sigma
-
-            z = (prices[-1] - mu) / ou_sigma if ou_sigma > 1e-10 else 0
-            z = max(-5.0, min(5.0, z))
-
-            # 시그널 감쇠: 0.93 per update (프로 레퍼런스)
-            # 새 z와 이전 z의 감쇠값 중 절대값이 큰 쪽 사용
-            decayed = self._ou_last_z * 0.93
-            if abs(z) >= abs(decayed):
-                final_z = z  # 새 시그널이 더 강함
-            else:
-                final_z = decayed  # 감쇠 유지
-            self._ou_last_z = final_z
-
-            await self.redis.set("rt:micro:ou_zscore", str(round(final_z, 4)), ttl=30)
-            await self.redis.set("rt:micro:ou_mu", str(round(mu, 1)), ttl=30)
-        except Exception as e:
-            logger.debug(f"OU Z-Score 계산 실패: {e}")
-
-    async def _compute_regime_features(self):
-        """5분봉에서 Hurst Exponent + Parkinson Volatility 계산 → Redis"""
-        candles = list(self._candle_5m_cache)
-        n = len(candles)
-        if n < 20:
-            return
-
-        try:
-            closes = [c["close"] for c in candles[-50:]]
-
-            # ── Hurst Exponent (R/S analysis) ──
-            # Hurst (1951), Mandelbrot & Wallis (1969)
-            returns = [math.log(closes[i] / closes[i-1]) for i in range(1, len(closes)) if closes[i-1] > 0]
-            if len(returns) >= 15:
-                hurst = self._calc_hurst(returns)
-                await self.redis.set("rt:regime:hurst", str(round(hurst, 4)), ttl=600)
-
-            # ── Parkinson Volatility + Realized Vol 블렌딩 (50/50) ──
-            recent = candles[-20:]
-            # Parkinson: σ_P = √[(1/(4n·ln2)) · Σ(ln(H/L))²]
-            sum_sq = 0.0
-            for c in recent:
-                if c["high"] > 0 and c["low"] > 0 and c["high"] >= c["low"]:
-                    log_hl = math.log(c["high"] / c["low"])
-                    sum_sq += log_hl ** 2
-            p_vol = math.sqrt(sum_sq / (4 * len(recent) * math.log(2))) if recent else 0
-
-            # Realized Vol: σ_R = std(log returns)
-            r_vol = 0.0
-            if len(closes) >= 2:
-                log_rets = [math.log(closes[i] / closes[i-1]) for i in range(1, len(closes)) if closes[i-1] > 0]
-                if log_rets:
-                    mean_r = sum(log_rets) / len(log_rets)
-                    r_vol = math.sqrt(sum((r - mean_r)**2 for r in log_rets) / len(log_rets))
-
-            # 50/50 블렌딩 (프로 레퍼런스)
-            blended_vol = p_vol * 0.5 + r_vol * 0.5
-            await self.redis.set("rt:micro:parkinson_vol", str(round(blended_vol, 6)), ttl=600)
-
-        except Exception as e:
-            logger.debug(f"regime features 계산 실패: {e}")
-
-    @staticmethod
-    def _calc_hurst(returns: list[float]) -> float:
-        """Rescaled Range (R/S) Hurst exponent — 동적 n/8, n/4, n/2, n 스케일"""
-        n = len(returns)
-        if n < 16:
-            return 0.5
-
-        import numpy as np
-        ts = np.array(returns)
-
-        # 동적 스케일: n/8, n/4, n/2, n (프로 레퍼런스 동일)
-        sizes = []
-        rs_values = []
-        for divisor in [8, 4, 2, 1]:
-            size = max(4, n // divisor)
-            if size > n or size < 4:
-                continue
-            rs_list = []
-            for start in range(0, n - size + 1, size):
-                chunk = ts[start:start + size]
-                mean_c = np.mean(chunk)
-                cumdev = np.cumsum(chunk - mean_c)
-                r = np.max(cumdev) - np.min(cumdev)
-                s = np.std(chunk, ddof=1)
-                if s > 1e-10:
-                    rs_list.append(r / s)
-            if rs_list:
-                sizes.append(size)
-                rs_values.append(np.mean(rs_list))
-
-        if len(sizes) < 2:
-            return 0.5
-
-        log_n = np.log(sizes)
-        log_rs = np.log(rs_values)
-        slope = np.polyfit(log_n, log_rs, 1)[0]
-        return max(0.0, min(1.0, slope))
-
-    async def _flush_microstructure(self, current_price: float):
-        """trades 이력에서 15종 마이크로 피처 계산 → Redis"""
-        now = time.time()
-        try:
-            # 1. Trade Rate (10초)
-            cutoff_10s = now - 10
-            trades_10s = [(t, s, q, p, u) for t, s, q, p, u in self._trades if t >= cutoff_10s]
-            trade_rate = len(trades_10s) / 10.0
-            await self.redis.set("rt:micro:trade_rate", str(round(trade_rate, 1)), ttl=15)
-
-            # 2. Trade Burst
-            cutoff_60s = now - 60
-            trades_60s = [(t, s, q, p, u) for t, s, q, p, u in self._trades if t >= cutoff_60s]
-            rate_60s = len(trades_60s) / 60.0 if trades_60s else 1.0
-            burst = trade_rate / max(rate_60s, 0.1)
-            await self.redis.set("rt:micro:trade_burst", str(round(burst, 2)), ttl=15)
-
-            # 3. Buy/Sell Ratio (5s/30s/60s)
-            for window_sec, key_suffix in [(5, "5s"), (30, "30s"), (60, "60s")]:
-                cutoff = now - window_sec
-                win_trades = [(s, q) for t, s, q, p, u in self._trades if t >= cutoff]
-                buy_vol = sum(q for s, q in win_trades if s == "buy")
-                sell_vol = sum(q for s, q in win_trades if s == "sell")
-                total = buy_vol + sell_vol
-                ratio = buy_vol / total if total > 0 else 0.5
-                await self.redis.set(f"rt:micro:bs_ratio_{key_suffix}", str(round(ratio, 4)), ttl=15)
-
-            # 4. Absorption
-            cutoff_30s = now - 30
-            trades_30s = [(s, q, u) for t, s, q, p, u in self._trades if t >= cutoff_30s]
-            buy_vol_30 = sum(q for s, q, u in trades_30s if s == "buy")
-            sell_vol_30 = sum(q for s, q, u in trades_30s if s == "sell")
-
-            price_30s_ago = 0
-            for t, p in self._price_history:
-                if t >= cutoff_30s:
-                    price_30s_ago = p
-                    break
-            if price_30s_ago == 0 and self._price_history:
-                price_30s_ago = self._price_history[0][1]
-
-            price_change_30s = abs(current_price - price_30s_ago) if price_30s_ago > 0 else 999
-            atr_proxy = current_price * 0.002
-
-            absorption_score = 0.0
-            absorption_dir = "neutral"
-            if sell_vol_30 > buy_vol_30 * 1.5 and price_change_30s < atr_proxy * 0.3:
-                absorption_score = sell_vol_30 / max(price_change_30s + 0.01, 1) * 0.001
-                absorption_dir = "long"
-            elif buy_vol_30 > sell_vol_30 * 1.5 and price_change_30s < atr_proxy * 0.3:
-                absorption_score = buy_vol_30 / max(price_change_30s + 0.01, 1) * 0.001
-                absorption_dir = "short"
-            absorption_score = min(5.0, absorption_score)
-            await self.redis.set("rt:micro:absorption", json.dumps({
-                "score": round(absorption_score, 2), "direction": absorption_dir,
-            }), ttl=15)
-
-            # 5. Whale Cluster
-            cutoff_wh = now - 60
-            recent_whales = [(t, s, sz) for t, s, sz, _ in self._whales if t >= cutoff_wh]
-            if len(recent_whales) >= 2:
-                max_streak = 0
-                cur_streak = 1
-                cur_dir = recent_whales[0][1]
-                for i in range(1, len(recent_whales)):
-                    if recent_whales[i][1] == cur_dir:
-                        cur_streak += 1
-                    else:
-                        max_streak = max(max_streak, cur_streak)
-                        cur_streak = 1
-                        cur_dir = recent_whales[i][1]
-                max_streak = max(max_streak, cur_streak)
-                avg_size = sum(sz for _, _, sz in recent_whales) / len(recent_whales)
-                cluster_score = max_streak * (avg_size / 100_000)
-                cluster_dir = max(set(s for _, s, _ in recent_whales),
-                                  key=lambda x: sum(1 for _, s2, _ in recent_whales if s2 == x))
-            else:
-                cluster_score, cluster_dir, max_streak = 0.0, "neutral", 0
-            await self.redis.set("rt:micro:whale_cluster", json.dumps({
-                "score": round(min(10.0, cluster_score), 2),
-                "direction": cluster_dir, "count": len(recent_whales),
-                "max_streak": max_streak,
-            }), ttl=15)
-
-            # 6. Delta Acceleration
-            delta_accel = 0.0
-            if len(self._cvd_snapshots) >= 4:
-                snaps = list(self._cvd_snapshots)[-6:]
-                if len(snaps) >= 3:
-                    deltas = [snaps[i+1][1] - snaps[i][1] for i in range(len(snaps)-1)]
-                    if len(deltas) >= 2:
-                        accel = deltas[-1] - deltas[0]
-                        delta_accel = max(-2.0, min(2.0, accel / max(abs(deltas[0]) + 1, 1)))
-            await self.redis.set("rt:micro:delta_accel", str(round(delta_accel, 3)), ttl=15)
-
-            # 7. Price Impact
-            total_vol_60 = sum(u for _, _, _, _, u in trades_60s) if trades_60s else 0
-            prices_60 = [p for t, _, _, p, _ in self._trades if t >= cutoff_60s]
-            if len(prices_60) >= 2 and total_vol_60 > 0:
-                price_range_60 = max(prices_60) - min(prices_60)
-                impact = price_range_60 / (total_vol_60 / 1_000_000)
-                impact = min(500.0, impact)
-            else:
-                impact = 0.0
-            await self.redis.set("rt:micro:price_impact", str(round(impact, 1)), ttl=15)
-
-            # 8. VWAP
-            vwap = self._vwap_vol_sum / self._vwap_qty_sum if self._vwap_qty_sum > 0 else current_price
-            vwap_dev = (current_price - vwap) / vwap * 100 if vwap > 0 else 0
-            await self.redis.set("rt:micro:vwap", json.dumps({
-                "vwap": round(vwap, 1), "deviation_pct": round(vwap_dev, 4),
-                "price": round(current_price, 1),
-            }), ttl=30)
-
-            # 9. Delta Divergence
-            delta_div = 0
-            if len(prices_60) >= 10 and len(self._cvd_snapshots) >= 3:
-                price_high = max(prices_60)
-                price_low = min(prices_60)
-                is_price_high = current_price >= price_high * 0.999
-                is_price_low = current_price <= price_low * 1.001
-                cvd_vals = [v for _, v in list(self._cvd_snapshots)[-12:]]
-                if cvd_vals:
-                    cvd_max = max(cvd_vals)
-                    cvd_min = min(cvd_vals)
-                    is_cvd_high = self._cvd_5m >= cvd_max * 0.95 if cvd_max > 0 else self._cvd_5m >= cvd_max
-                    is_cvd_low = self._cvd_5m <= cvd_min * 0.95 if cvd_min < 0 else self._cvd_5m <= cvd_min
-                    if is_price_high and not is_cvd_high:
-                        delta_div = -1
-                    elif is_price_low and not is_cvd_low:
-                        delta_div = 1
-            await self.redis.set("rt:micro:delta_div", str(delta_div), ttl=15)
-
-            # 10. Momentum Quality
-            bs_ratio = buy_vol_30 / max(buy_vol_30 + sell_vol_30, 1e-10)
-            delta_alignment = 1.0
-            if bs_ratio > 0.6:
-                delta_alignment = 1.5 if self._cvd_5m > 0 else 0.5
-            elif bs_ratio < 0.4:
-                delta_alignment = 1.5 if self._cvd_5m < 0 else 0.5
-            mom_quality = burst * (abs(bs_ratio - 0.5) * 4) * delta_alignment
-            mom_quality = min(5.0, mom_quality)
-            await self.redis.set("rt:micro:momentum_quality", str(round(mom_quality, 2)), ttl=15)
-
-        except Exception as e:
-            logger.error(f"마이크로스트럭처 집계 에러: {e}", exc_info=True)
 
     def stop(self):
         self._running = False
