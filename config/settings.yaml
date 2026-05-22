@@ -36,11 +36,11 @@ regime:
   circuit_breaker_pct: 2.0        # X% 이동
   circuit_breaker_window_sec: 10  # Y초 내
   circuit_breaker_freeze_sec: 60  # 동결 시간
-  # 시그널 가중치
-  weight_obi: 0.25
+  # 시그널 가중치 (OBI z-score는 노이즈 많아 축소, CUSUM 강화)
+  weight_obi: 0.15
   weight_cvd: 0.30
   weight_volume: 0.20
-  weight_cusum: 0.25
+  weight_cusum: 0.35
   # CUSUM 파라미터
   cusum_threshold: 4.0
   cusum_drift: 0.4

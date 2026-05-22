@@ -1,12 +1,13 @@
 # Commit Log
 
 > 자동 생성 — `scripts/update_commit_log.sh` (매 커밋 후 실행)
-> Updated: 2026-05-22 14:29:03    
-> Total commits: 423 (2026-04-03 → 2026-05-22)
+> Updated: 2026-05-22 14:38:04    
+> Total commits: 424 (2026-04-03 → 2026-05-22)
 
 Claude 가 질문/변경 작업 시 이 파일을 참고해서 과거 변경 이력 컨텍스트를 확보합니다. 수동 편집 금지 — 다음 커밋 시 덮어써집니다.
 
 ## 2026-05-22
+- `be9a2c3a` docs: AUDIT 최종 수정 + SPEC/CLAUDE 현재 코드 기준 최신화
 - `c3013227` feat: WS 체결 감지 (10~50ms) + REST 10초 fallback
 - `694a4439` perf: 타이밍 최적화 + 미사용 Redis 쓰기 삭제
 - `eb7abe87` fix: AUDIT MEDIUM 항목 전부 처리 — 레거시 0건 달성

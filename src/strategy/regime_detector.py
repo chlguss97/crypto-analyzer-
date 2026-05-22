@@ -98,9 +98,8 @@ class RegimeDetector:
         self._cvd_velocity_buf: deque = deque(maxlen=60)  # CVD 속도 히스토리
         self._returns_buf: deque = deque(maxlen=300)  # 1초 수익률 히스토리
 
-        # OBI EMA
-        self._obi_ema = 0.0
-        self._obi_alpha = 2.0 / (10 + 1)  # EMA span=10
+        # OBI Z-Score (300초 rolling)
+        self._obi_history: deque = deque(maxlen=300)
 
         # 콜백 (grid_engine이 등록)
         self.on_mode_change = None  # async callback(new_mode, crs)
@@ -184,14 +183,26 @@ class RegimeDetector:
     # ══════════════════════════════════════════
 
     def _calc_obi(self) -> float:
-        """OBI (Order Book Imbalance) → [-1, +1]"""
+        """OBI Z-Score → [-1, +1] (변화 감지, 절대값 아님)"""
         if not self.ws:
             return 0.0
         raw_obi = self.ws.obi
-        # EMA smoothing (10초)
-        self._obi_ema = self._obi_alpha * raw_obi + (1 - self._obi_alpha) * self._obi_ema
-        # 정규화: OBI / 0.5 클리핑
-        return max(-1.0, min(1.0, self._obi_ema / 0.5))
+        self._obi_history.append(raw_obi)
+
+        if len(self._obi_history) < 30:
+            return 0.0
+
+        values = list(self._obi_history)
+        mean = sum(values) / len(values)
+        variance = sum((v - mean) ** 2 for v in values) / len(values)
+        std = variance ** 0.5
+
+        if std < 1e-6:
+            return 0.0
+
+        z = (raw_obi - mean) / std
+        # Z-score [-3, +3] → [-1, +1]
+        return max(-1.0, min(1.0, z / 3.0))
 
     def _calc_cvd_accel(self, now: float) -> float:
         """CVD 가속도 Z-score → [-1, +1]"""

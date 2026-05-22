@@ -351,18 +351,15 @@ class WebSocketStream:
             if not bids or not asks:
                 return
 
-            bid_sizes = [float(b[1]) for b in bids[:5]]
-            ask_sizes = [float(a[1]) for a in asks[:5]]
-            bid_total = sum(bid_sizes)
-            ask_total = sum(ask_sizes)
-            total = bid_total + ask_total
+            # 지수 감쇄 가중치: level 0(실거래)=1.0, level 4(스푸핑)=0.0625
+            weights = [1.0, 0.5, 0.25, 0.125, 0.0625]
+            bid_weighted = sum(float(b[1]) * w for b, w in zip(bids[:5], weights))
+            ask_weighted = sum(float(a[1]) * w for a, w in zip(asks[:5], weights))
+            total = bid_weighted + ask_weighted
             if total <= 0:
                 return
 
-            imbalance = (bid_total - ask_total) / total
-            spread = float(asks[0][0]) - float(bids[0][0])
-
-            self._last_obi = imbalance
+            self._last_obi = (bid_weighted - ask_weighted) / total
 
         except Exception:
             pass
