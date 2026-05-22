@@ -90,7 +90,6 @@ class TelegramNotifier:
             "/stats": self._cmd_stats,
             "/trades": self._cmd_trades,
             "/risk": self._cmd_risk,
-            "/sim": self._cmd_sim,
             "/help": self._cmd_help,
         }
         handler = handlers.get(cmd)
@@ -116,7 +115,8 @@ class TelegramNotifier:
     async def _cmd_status(self):
         try:
             balance = (await self.redis.get("sys:balance")) if self.redis else "?"
-            hurst = (await self.redis.get("rt:regime:hurst")) if self.redis else "?"
+            mode = (await self.redis.get("regime:mode")) if self.redis else "ACTIVE"
+            crs = (await self.redis.get("regime:crs")) if self.redis else "0"
 
             grid_info = ""
             if self.grid_engine:
@@ -134,7 +134,7 @@ class TelegramNotifier:
             text = (
                 "\U0001f4ca <b>GridBot 상태</b>\n\n"
                 f"잔고: ${balance}\n"
-                f"Hurst: {hurst or 'N/A'}\n"
+                f"Mode: {mode or 'ACTIVE'} | CRS: {crs or '0'}\n"
                 f"{grid_info}"
             )
             await self._send(text)
@@ -200,50 +200,29 @@ class TelegramNotifier:
             today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
             log_dir = Path(__file__).parent.parent.parent / "data" / "logs"
 
-            real_trades = []
-            sim_trades = []
-            lab_trades = []
+            grid_cycles = []
             for f in sorted(log_dir.glob("trades_*.jsonl"), reverse=True)[:2]:
                 for line in open(f, encoding="utf-8"):
                     try:
                         r = json.loads(line)
                         if r.get("ts_iso", "")[:10] != today:
                             continue
-                        if r["type"] == "exit":
-                            real_trades.append(r)
-                        elif r["type"] == "sim_exit":
-                            sim_trades.append(r)
-                        elif r["type"] == "lab_exit":
-                            lab_trades.append(r)
+                        if r["type"] == "grid_cycle":
+                            grid_cycles.append(r)
                     except Exception:
                         continue
 
-            # 실거래
-            r_wins = sum(1 for t in real_trades if t.get("pnl_usdt", 0) > 0)
-            r_pnl = sum(t.get("pnl_usdt", 0) for t in real_trades)
-            r_total = len(real_trades)
-            r_wr = r_wins / r_total * 100 if r_total > 0 else 0
+            total = len(grid_cycles)
+            total_pnl = sum(t.get("pnl", 0) for t in grid_cycles)
+            avg_pnl = total_pnl / total if total > 0 else 0
+            wins = sum(1 for t in grid_cycles if t.get("pnl", 0) > 0)
 
             text = (
-                f"\U0001f4c8 <b>Today ({today})</b>\n\n"
-                f"<b>Real:</b> {r_total}건 | {r_wins}W ({r_wr:.0f}%)\n"
-                f"PnL: ${r_pnl:+,.2f}\n"
+                f"\U0001f4c8 <b>Grid Stats ({today})</b>\n\n"
+                f"사이클: {total}건 | {wins}W\n"
+                f"Total PnL: ${total_pnl:+,.2f}\n"
+                f"Avg PnL: ${avg_pnl:+,.2f}\n"
             )
-
-            # Sim
-            if sim_trades:
-                s_wins = sum(1 for t in sim_trades if t.get("pnl_pct", 0) > 0)
-                s_pnl = sum(t.get("pnl_pct", 0) for t in sim_trades)
-                text += f"\n<b>Sim:</b> {len(sim_trades)}건 | {s_wins}W | PnL {s_pnl:+.1f}%\n"
-
-            # Lab
-            if lab_trades:
-                from collections import Counter
-                variants = Counter(t.get("variant", "?") for t in lab_trades)
-                text += f"\n<b>Lab:</b> {len(lab_trades)}건\n"
-                for v, cnt in variants.most_common():
-                    v_pnl = sum(t.get("pnl_pct", 0) for t in lab_trades if t.get("variant") == v)
-                    text += f"  {v}: {cnt}건 avg {v_pnl/cnt:+.1f}%\n"
 
             await self._send(text)
         except Exception as e:
@@ -252,29 +231,29 @@ class TelegramNotifier:
     async def _cmd_trades(self):
         try:
             log_dir = Path(__file__).parent.parent.parent / "data" / "logs"
-            exits = []
+            cycles = []
             for f in sorted(log_dir.glob("trades_*.jsonl"), reverse=True)[:2]:
                 for line in open(f, encoding="utf-8"):
                     try:
                         r = json.loads(line)
-                        if r["type"] in ("exit", "sim_exit"):
-                            exits.append(r)
+                        if r["type"] == "grid_cycle":
+                            cycles.append(r)
                     except Exception:
                         continue
 
-            last5 = exits[-5:]
-            if not last5:
-                return await self._send("\U0001f4cb 최근 거래 없음")
+            last10 = cycles[-10:]
+            if not last10:
+                return await self._send("\U0001f4cb 최근 그리드 사이클 없음")
 
-            lines = ["\U0001f4cb <b>Recent Trades</b>\n"]
-            for t in last5:
-                icon = "\U0001f7e2" if t.get("pnl_usdt", 0) > 0 else "\U0001f534"
+            lines = ["\U0001f4cb <b>Recent Grid Cycles</b>\n"]
+            for t in last10:
+                icon = "\U0001f7e2" if t.get("pnl", 0) > 0 else "\U0001f534"
                 ts = t.get("ts_iso", "")[:16]
-                d = t["direction"][:1].upper()
-                reason = t.get("exit_reason", "?")[:12]
-                pnl = t.get("pnl_usdt", 0)
-                hold = t.get("hold_min", 0)
-                lines.append(f"{icon} {ts} {d} {reason} {pnl:+.1f}$ ({hold}m)")
+                lvl = t.get("level", "?")
+                entry = t.get("entry", 0)
+                exit_p = t.get("exit", 0)
+                pnl = t.get("pnl", 0)
+                lines.append(f"{icon} {ts} L{lvl} ${entry:.0f}->${exit_p:.0f} {pnl:+.2f}$")
 
             await self._send("\n".join(lines))
         except Exception as e:
@@ -283,15 +262,20 @@ class TelegramNotifier:
     async def _cmd_risk(self):
         try:
             balance = await self.executor.get_balance() if self.executor else 0
-            positions = 1 if (self.grid_engine and self.grid_engine.has_position()) else 0
 
-            # risk_manager에서 상태
-            streak = 0
-            daily_pnl = 0
+            # GridEngine 상태
+            grid_active = False
+            grid_cycles = 0
+            grid_pnl = 0.0
+            if self.grid_engine:
+                gs = self.grid_engine.get_status()
+                grid_active = gs.get("active", False)
+                grid_cycles = gs.get("total_cycles", 0)
+                grid_pnl = gs.get("total_pnl", 0)
+
+            # Drawdown
             dd_pct = 0
             if self.risk_manager:
-                streak = self.risk_manager.get_streak()
-                daily_pnl = self.risk_manager.get_daily_pnl()
                 state = self.risk_manager._state
                 peak = state.get("peak_balance", balance)
                 dd_pct = (peak - balance) / peak * 100 if peak > 0 else 0
@@ -299,122 +283,45 @@ class TelegramNotifier:
             text = (
                 f"\U0001f6e1 <b>Risk Status</b>\n\n"
                 f"Balance: ${balance:,.2f}\n"
-                f"Positions: {positions}\n"
-                f"Streak: {streak}\n"
-                f"Daily PnL: {daily_pnl:+.1f}%\n"
-                f"Drawdown: {dd_pct:.1f}% (limit 12%)\n"
-                f"Margin: {self.config.get('risk', {}).get('margin_pct', 0.40)*100:.0f}%"
+                f"Grid: {'ACTIVE' if grid_active else 'PAUSED'}\n"
+                f"Cycles: {grid_cycles} | PnL: ${grid_pnl:+.2f}\n"
+                f"Drawdown: {dd_pct:.1f}% (kill 20%)\n"
             )
             await self._send(text)
         except Exception as e:
             await self._send(f"\u26a0\ufe0f Risk 조회 실패: {e}")
 
 
-    async def _cmd_sim(self):
-        """SimTrader 실전 시뮬 현황"""
-        try:
-            log_dir = Path(__file__).parent.parent.parent / "data" / "logs"
-            sim_trades = []
-            for f in sorted(log_dir.glob("trades_*.jsonl"), reverse=True)[:2]:
-                for line in open(f, encoding="utf-8"):
-                    try:
-                        r = json.loads(line)
-                        if r["type"] == "sim_exit":
-                            sim_trades.append(r)
-                    except Exception:
-                        continue
-
-            if not sim_trades:
-                return await self._send("\U0001f3ae <b>SimTrader</b>\n\n거래 없음")
-
-            wins = sum(1 for t in sim_trades if t.get("pnl_pct", 0) > 0)
-            total = len(sim_trades)
-            total_pnl = sum(t.get("pnl_pct", 0) for t in sim_trades)
-            wr = wins / total * 100 if total > 0 else 0
-
-            text = (
-                f"\U0001f3ae <b>SimTrader (실전 시뮬)</b>\n\n"
-                f"Total: {total}건 | W:{wins} ({wr:.0f}%)\n"
-                f"PnL: {total_pnl:+.1f}%\n"
-            )
-
-            # 최근 3건
-            for t in sim_trades[-3:]:
-                ts = t.get("ts_iso", "")[:16]
-                d = t.get("direction", "?")[:1].upper()
-                pnl = t.get("pnl_pct", 0)
-                conv = t.get("conviction", "?")
-                icon = "\U0001f7e2" if pnl > 0 else "\U0001f534"
-                text += f"\n{icon} {ts} {d} {pnl:+.1f}% conv={conv}"
-
-            await self._send(text)
-        except Exception as e:
-            await self._send(f"\u26a0\ufe0f Sim 조회 실패: {e}")
-
     async def _cmd_help(self):
         await self._send(
             "<b>GridBot v3</b>\n\n"
             "\U0001f7e2 /on \u2014 Autotrading ON\n"
             "\U0001f534 /off \u2014 Autotrading OFF\n"
-            "\U0001f4ca /status \u2014 Bot Status\n"
+            "\U0001f4ca /status \u2014 Grid + Regime 상태\n"
             "\U0001f4b0 /balance \u2014 Balance\n"
             "\U0001f310 /market \u2014 Price/Regime\n"
-            "\U0001f4c8 /stats \u2014 Today Stats\n"
-            "\U0001f4cb /trades \u2014 Recent 5\n"
-            "\U0001f6e1 /risk \u2014 Risk/DD/Streak\n"
-            "\U0001f3ae /sim \u2014 SimTrader\n"
-            "\U0001f6d1 /close \u2014 Close All\n"
-            "\U0001f9f9 /clear \u2014 Clear Zombie\n"
+            "\U0001f4c8 /stats \u2014 Today Grid Stats\n"
+            "\U0001f4cb /trades \u2014 Recent 10 Cycles\n"
+            "\U0001f6e1 /risk \u2014 Risk/DD\n"
+            "\U0001f6d1 /close \u2014 Grid Stop\n"
+            "\U0001f9f9 /clear \u2014 Clear All Orders\n"
         )
 
     # ══════════════════════════════════════════
     #  알림 (notify_*)
     # ══════════════════════════════════════════
 
-    async def notify_entry(self, direction: str, grade: str, score: float,
-                           entry_price: float, sl_price: float,
-                           tp1_price: float, tp2_price: float,
-                           leverage: int, margin: float,
-                           tp3_price: float | None = None,
-                           conviction: int = 0, conviction_mult: float = 1.0):
-        icon = "\U0001f4c8" if direction == "long" else "\U0001f4c9"
-        tp_line = f"TP1: ${tp1_price:,.1f}"
-        conv_str = f"\U0001f3af 확신도: {conviction}/5 ({conviction_mult:.0%})"
+    async def notify_grid_cycle(self, level: int, entry: float,
+                               exit_price: float, pnl: float,
+                               total_cycles: int, total_pnl: float):
+        icon = "\U0001f7e2" if pnl > 0 else "\U0001f534"
         text = (
-            f"{icon} <b>Entry | {grade} {direction.upper()}</b>\n\n"
-            f"{conv_str}\n"
-            f"진입: ${entry_price:,.1f}\n"
-            f"SL: ${sl_price:,.1f} | {tp_line}\n"
-            f"{leverage}x | ${margin:,.0f}\n"
+            f"{icon} <b>Grid Cycle L{level}</b>\n\n"
+            f"${entry:,.1f} -> ${exit_price:,.1f}\n"
+            f"PnL: ${pnl:+.2f}\n"
+            f"Total: {total_cycles}회 | ${total_pnl:+.2f}\n"
             f"{datetime.now(timezone.utc).strftime('%H:%M UTC')}"
         )
-        await self._send(text)
-
-    async def notify_exit(self, direction: str, exit_reason: str,
-                          entry_price: float, exit_price: float,
-                          pnl_pct: float, pnl_usdt: float,
-                          hold_minutes: int,
-                          fee: float = 0.0, funding: float = 0.0):
-        icon = "\U0001f4b5" if pnl_usdt > 0 else "\u2716\ufe0f"
-        text = (
-            f"{icon} <b>Exit | {direction.upper()} | {exit_reason}</b>\n\n"
-            f"${entry_price:,.1f} \u2192 ${exit_price:,.1f}\n"
-            f"PnL: {pnl_pct:+.2f}% (${pnl_usdt:+,.2f})\n"
-            f"Hold: {hold_minutes}min\n"
-            f"{datetime.now(timezone.utc).strftime('%H:%M UTC')}"
-        )
-        await self._send(text)
-
-    async def notify_tp1_hit(self, direction: str, tp1_price: float,
-                             new_sl: float, runner_active: bool,
-                             trail_distance: float = 0):
-        text = (
-            f"\U0001f3af <b>TP1 Hit | {direction.upper()}</b>\n\n"
-            f"50% closed @ ${tp1_price:,.1f}\n"
-            f"SL \u2192 BE ${new_sl:,.1f}\n"
-        )
-        if runner_active:
-            text += f"Runner ON (trail ${trail_distance:.1f})"
         await self._send(text)
 
     async def notify_warning(self, message: str):

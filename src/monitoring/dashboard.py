@@ -221,13 +221,11 @@ async def get_position():
 @app.get("/api/signals")
 async def get_signals():
     await _ensure_initialized()
-    """CandidateDetector + ML Meta-Label 최신 상태 (sys:trade_state)"""
-    trade_state = await redis.get_json("sys:trade_state")
-    if not trade_state:
-        trade_state = {"candidate": None, "direction": "neutral", "strength": 0,
-                       "ml_phase": "cold", "ml_prob": 0.0,
-                       "regime": "ranging", "streak": 0, "daily_pnl": 0.0}
-    return trade_state
+    """레짐 시그널 상태"""
+    signals = await redis.hgetall("regime:signals")
+    if not signals:
+        signals = {"obi": "0", "cvd": "0", "vol": "0", "cusum": "0", "crs": "0", "mode": "ACTIVE"}
+    return signals
 
 
 @app.get("/api/candles")
@@ -410,68 +408,62 @@ async def manual_update_tp(req: ManualTpRequest):
 @app.get("/api/risk/state")
 async def get_risk_state():
     await _ensure_initialized()
-    """실거래 리스크 상태"""
+    """리스크 상태 (모니터링용)"""
     daily = await redis.get("risk:daily_pnl") or "0"
-    weekly = await redis.get("risk:weekly_pnl") or "0"
     streak = await redis.get("risk:streak") or "0"
-    cooldown = await redis.get("risk:cooldown_until") or "0"
-    import time as _t
+    balance = await redis.get("sys:balance") or "0"
     return {
         "daily_pnl_pct": float(daily),
-        "weekly_pnl_pct": float(weekly),
         "streak": int(streak),
-        "cooldown_remaining_min": max(0, (int(cooldown) - int(_t.time())) // 60),
-        "daily_limit": -5.0,
-        "weekly_limit": -10.0,
-        "daily_blocked": float(daily) <= -5.0,
-        "weekly_blocked": float(weekly) <= -10.0,
+        "balance": float(balance),
     }
 
 
 @app.get("/api/engine/state")
 async def get_engine_state():
-    """CandidateDetector + ML Meta-Label 실시간 상태"""
+    """그리드 엔진 + 레짐 실시간 상태"""
     await _ensure_initialized()
-    state = await redis.get_json("sys:trade_state")
-    if not state:
-        state = {"candidate": None, "direction": "neutral", "strength": 0,
-                 "ml_phase": "cold", "ml_prob": 0.0,
-                 "regime": "ranging", "streak": 0, "daily_pnl": 0.0}
-    return state
+    mode = await redis.get("regime:mode") or "ACTIVE"
+    crs = await redis.get("regime:crs") or "0"
+    signals = await redis.hgetall("regime:signals")
+    return {
+        "mode": mode,
+        "crs": float(crs),
+        "signals": signals or {},
+    }
 
 
 @app.get("/api/regime")
 async def get_regime():
-    """현재 마켓 레짐 조회"""
+    """현재 레짐 모드 + CRS"""
     await _ensure_initialized()
-    regime_detail = await redis.get_json("sys:trade_state")
-    regime = await redis.get("sys:regime") or "ranging"
-
-    if not regime_detail:
-        regime_detail = {"regime": regime, "confidence": 0, "scores": {}}
-
-    return regime_detail
+    mode = await redis.get("regime:mode") or "ACTIVE"
+    crs = await redis.get("regime:crs") or "0"
+    signals = await redis.hgetall("regime:signals")
+    return {
+        "mode": mode,
+        "crs": float(crs),
+        "signals": signals or {},
+    }
 
 
 @app.get("/api/engine/overview")
 async def get_engine_overview():
-    """
-    Engine 탭 통합 데이터 — regime + grid trade stats.
-    """
+    """그리드 통합 데이터 — 레짐 + 사이클 통계"""
     await _ensure_initialized()
 
     # 1) regime
-    regime = await redis.get("sys:regime") or "ranging"
-    regime_detail = {"regime": regime}
+    mode = await redis.get("regime:mode") or "ACTIVE"
+    crs = await redis.get("regime:crs") or "0"
 
-    # 2) grid trade stats
+    # 2) grid trade stats (grid_trades 테이블에 status 컬럼 없음)
     grid_stats = {"total_cycles": 0, "total_pnl": 0.0, "avg_pnl": 0.0}
     try:
         cur = await db._db.execute(
             """SELECT COUNT(*) as total,
                       COALESCE(SUM(pnl_usdt), 0) as total_pnl,
                       COALESCE(AVG(pnl_usdt), 0) as avg_pnl
-               FROM grid_trades WHERE status = 'done'"""
+               FROM grid_trades"""
         )
         row = dict(await cur.fetchone())
         grid_stats["total_cycles"] = row["total"] or 0
@@ -481,7 +473,7 @@ async def get_engine_overview():
         logger.debug(f"grid trade stats 집계 실패: {e}")
 
     return {
-        "regime": regime_detail,
+        "regime": {"mode": mode, "crs": float(crs)},
         "grid_trades": grid_stats,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
