@@ -164,7 +164,7 @@ class GridEngine:
         # ATR 계산
         atr_pct = await self._compute_atr_pct(price)
         if atr_pct <= 0:
-            atr_pct = 0.15  # fallback
+            atr_pct = self.spacing_min  # fallback
 
         spacing_pct = max(self.spacing_min, min(self.spacing_max, atr_pct * self.atr_mult))
         spacing_abs = price * spacing_pct / 100
@@ -450,7 +450,7 @@ class GridEngine:
 
     async def _record_cycle(self, lv: GridLevel, counter_price: float, pnl: float):
         """DB에 사이클 기록"""
-        fee = GRID_SIZE_BTC * lv.fill_price * 0.0002 + GRID_SIZE_BTC * counter_price * 0.0002
+        fee = GRID_SIZE_BTC * lv.fill_price * self.maker_fee + GRID_SIZE_BTC * counter_price * self.maker_fee
         try:
             await self.db.insert_grid_trade({
                 "grid_id": str(self.state.created_at)[:8],

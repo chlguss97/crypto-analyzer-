@@ -80,9 +80,16 @@ class RegimeDetector:
 
         # CUSUM
         self.cusum = CUSUM(
-            threshold=cfg.get("cusum_threshold", 4.0),
-            drift=cfg.get("cusum_drift", 0.4),
+            threshold=cfg.get("cusum_threshold", 3.0),
+            drift=cfg.get("cusum_drift", 0.3),
         )
+        self.cusum_decay = cfg.get("cusum_decay", 0.85)
+
+        # Z-Score 정규화 계수
+        self.zscore_divisor = cfg.get("zscore_divisor", 3.0)
+        # 볼륨 스파이크 정규화
+        self.vol_spike_divisor = cfg.get("vol_spike_divisor", 4.0)
+        self.vol_direction_ratio = cfg.get("vol_direction_ratio", 1.5)
 
         # 상태
         self.mode = "ACTIVE"  # ACTIVE | PAUSED | FROZEN
@@ -93,8 +100,7 @@ class RegimeDetector:
         self._frozen_until = 0.0
 
         # 시그널 버퍼
-        self._price_buf: deque = deque(maxlen=15)  # (ts, price) 1초 간격
-        self._vol_1s_buf: deque = deque(maxlen=120)  # 1초 거래량 히스토리
+        self._price_buf: deque = deque(maxlen=15)  # (ts, price) 서킷브레이커 윈도우
         self._cvd_velocity_buf: deque = deque(maxlen=60)  # CVD 속도 히스토리
         self._returns_buf: deque = deque(maxlen=300)  # 1초 수익률 히스토리
 
@@ -202,7 +208,7 @@ class RegimeDetector:
 
         z = (raw_obi - mean) / std
         # Z-score [-3, +3] → [-1, +1]
-        return max(-1.0, min(1.0, z / 3.0))
+        return max(-1.0, min(1.0, z / self.zscore_divisor))
 
     def _calc_cvd_accel(self, now: float) -> float:
         """CVD 가속도 Z-score → [-1, +1]"""
@@ -236,7 +242,7 @@ class RegimeDetector:
 
         z = (cvd_velocity - mean) / std
         # 정규화: z / 3.0 클리핑
-        return max(-1.0, min(1.0, z / 3.0))
+        return max(-1.0, min(1.0, z / self.zscore_divisor))
 
     def _calc_volume_spike(self, now: float) -> float:
         """거래량 스파이크 → [-1, +1] (방향 포함)"""
@@ -279,14 +285,14 @@ class RegimeDetector:
 
         # 방향
         if buy_vol_1s + sell_vol_1s > 0:
-            direction = 1.0 if buy_vol_1s > sell_vol_1s * 1.5 else (
-                -1.0 if sell_vol_1s > buy_vol_1s * 1.5 else 0.0
+            direction = 1.0 if buy_vol_1s > sell_vol_1s * self.vol_direction_ratio else (
+                -1.0 if sell_vol_1s > buy_vol_1s * self.vol_direction_ratio else 0.0
             )
         else:
             direction = 0.0
 
         # 정규화: (ratio - 1) / 4 클리핑 × 방향
-        spike = max(0.0, min(1.0, (vol_ratio - 1.0) / 4.0))
+        spike = max(0.0, min(1.0, (vol_ratio - 1.0) / self.vol_spike_divisor))
         return spike * direction
 
     def _calc_cusum(self, now: float, price: float) -> float:
@@ -318,9 +324,9 @@ class RegimeDetector:
         self.cusum.pos = max(0.0, self.cusum.pos + z - self.cusum.drift)
         self.cusum.neg = max(0.0, self.cusum.neg - z - self.cusum.drift)
 
-        # 감쇄 (무한 누적 방지 — 0.85 = ~6틱 반감기)
-        self.cusum.pos *= 0.85
-        self.cusum.neg *= 0.85
+        # 감쇄 (무한 누적 방지)
+        self.cusum.pos *= self.cusum_decay
+        self.cusum.neg *= self.cusum_decay
 
         # 연속 출력: (pos - neg) / threshold → [-1, +1]
         signal = (self.cusum.pos - self.cusum.neg) / self.cusum.threshold
