@@ -166,7 +166,7 @@ class GridEngine:
     #  그리드 생성
     # ══════════════════════════════════════════
 
-    async def _build_grid(self):
+    async def _build_grid(self, cancel_all: bool = True):
         price_str = await self.redis.get("rt:price:BTC-USDT-SWAP")
         if not price_str:
             logger.warning("[GRID] 가격 없음 → 대기")
@@ -182,7 +182,8 @@ class GridEngine:
 
         logger.info(f"[GRID] 빌드: center=${price:.0f} spacing={spacing_pct:.2f}% (${spacing_abs:.1f})")
 
-        await self.executor.cancel_all_orders()
+        if cancel_all:
+            await self.executor.cancel_all_orders()
 
         self.state = GridState(
             center_price=price,
@@ -303,22 +304,27 @@ class GridEngine:
     # ══════════════════════════════════════════
 
     async def _place_counter_order(self, lv: GridLevel):
+        """Counter-order 배치 (최대 3회 재시도, 2초 간격)"""
         ratio = 1 + self.state.spacing_pct / 100
         if lv.side == "buy":
             tp_price = round(lv.fill_price * ratio, 1)
-            order = await self.executor.place_limit_order(
-                "sell", GRID_SIZE_BTC, tp_price, "long", reduce_only=True)
+            side, pos_side = "sell", "long"
         else:
             tp_price = round(lv.fill_price / ratio, 1)
-            order = await self.executor.place_limit_order(
-                "buy", GRID_SIZE_BTC, tp_price, "short", reduce_only=True)
+            side, pos_side = "buy", "short"
 
-        if order:
-            lv.counter_order_id = order.get("id")
-            lv.counter_status = "placed"
-            logger.info(f"[GRID] counter Lv{lv.level_id}: TP @ ${tp_price:.1f}")
-        else:
-            logger.warning(f"[GRID] counter 실패 Lv{lv.level_id}")
+        for attempt in range(3):
+            order = await self.executor.place_limit_order(
+                side, GRID_SIZE_BTC, tp_price, pos_side, reduce_only=True)
+            if order:
+                lv.counter_order_id = order.get("id")
+                lv.counter_status = "placed"
+                logger.info(f"[GRID] counter Lv{lv.level_id}: TP @ ${tp_price:.1f}")
+                return
+            if attempt < 2:
+                await asyncio.sleep(2)
+
+        logger.warning(f"[GRID] counter 3회 실패 Lv{lv.level_id}")
 
     async def _complete_cycle(self, lv: GridLevel, counter_price: float):
         """사이클 완성: PnL 계산 → DB → 텔레그램 → 재배치"""
@@ -424,16 +430,18 @@ class GridEngine:
         return price > grid_upper or price < grid_lower
 
     async def _rebuild(self):
-        """리빌드: 미체결 취소 (counter 유지), 새 center로 재배치"""
+        """DGT 리빌드: 미체결 그리드 취소 (counter 유지), 새 center로 재배치"""
         old_cycles = self.state.total_cycles if self.state else 0
         old_pnl = self.state.total_pnl if self.state else 0.0
 
+        # counter-order가 아닌 그리드 주문만 취소
         if self.state:
             for lid, lv in self.state.levels.items():
                 if lv.status == "placed" and lv.order_id:
                     await self.executor.cancel_order_by_id(lv.order_id)
+                # counter-order는 유지 (TP 대기 중)
 
-        await self._build_grid()
+        await self._build_grid(cancel_all=False)  # cancel_all 스킵 (이미 개별 취소)
         if self.state:
             self.state.total_cycles = old_cycles
             self.state.total_pnl = old_pnl
@@ -456,15 +464,13 @@ class GridEngine:
         logger.warning(f"[CB] 서킷브레이커! ${price:.0f} → {self.cb_freeze}초 동결")
         self._cb_frozen_until = time.time() + self.cb_freeze
 
+        # 그리드 주문만 취소 (counter-order는 유지 — TP 대기)
         if self.state:
             for lid, lv in self.state.levels.items():
                 if lv.order_id and lv.status == "placed":
                     await self.executor.cancel_order_by_id(lv.order_id)
                     lv.status = "cancelled"
-                if lv.counter_order_id and lv.counter_status == "placed":
-                    await self.executor.cancel_order_by_id(lv.counter_order_id)
-                    lv.counter_status = "none"
-                    lv.counter_order_id = None
+                # counter-order 유지 (포지션 TP 기다림)
             await save_grid_state(self.redis, self.state)
 
         if self.telegram:
@@ -496,6 +502,19 @@ class GridEngine:
             logger.critical(f"[KILL] BOT_KILL DD -{dd_pct:.1f}% → 전체 청산")
             self._running = False
             await self.stop()
+            # 포지션 시장가 청산
+            try:
+                positions = await self.executor.get_positions()
+                for p in positions:
+                    contracts = abs(float(p.get("size", 0)))
+                    if contracts <= 0:
+                        continue
+                    side = "sell" if p.get("direction") == "long" else "buy"
+                    pos_side = p.get("direction", "long")
+                    await self.executor._market_order(side, contracts * 0.01, pos_side, reduce_only=True)
+                    logger.info(f"[KILL] 포지션 청산: {pos_side} {contracts}ct")
+            except Exception as e:
+                logger.error(f"[KILL] 포지션 청산 실패: {e}")
             if self.telegram:
                 try:
                     await self.telegram._send(
