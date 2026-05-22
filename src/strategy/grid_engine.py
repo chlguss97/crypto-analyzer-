@@ -65,7 +65,9 @@ class GridEngine:
         self.state: GridState | None = None
         self._running = True
         self._lock = asyncio.Lock()
-        self._regime_mode = "ACTIVE"  # 마지막으로 확인한 레짐 모드
+        self._regime_mode = "ACTIVE"  # 마지막으로 확인한 레�� 모드
+        self._last_rest_check = 0  # REST fallback 타이머
+        self._pending_ws_events: list = []  # WS에서 온 체결 이벤트 큐
 
         # 잔고 비례 레벨 수 (초기화 시 계산)
         self.num_levels = 2
@@ -127,11 +129,14 @@ class GridEngine:
                     continue
 
                 if self.state.is_active:
-                    async with self._lock:
-                        await self._monitor_tick()
+                    # REST fallback (10초마다) — WS가 주 체결 감지
+                    now = time.time()
+                    if now - self._last_rest_check >= 10:
+                        self._last_rest_check = now
+                        async with self._lock:
+                            await self._monitor_tick()
 
                     # 리밸런스 (30초마다)
-                    now = time.time()
                     if now - rebalance_check >= 30:
                         rebalance_check = now
                         async with self._lock:
@@ -142,7 +147,7 @@ class GridEngine:
             except Exception as e:
                 logger.error(f"[GRID] 루프 에러: {e}", exc_info=True)
 
-            await asyncio.sleep(self.monitor_sec)
+            await asyncio.sleep(1)  # 루프 주기 1초 (WS 이벤트 처리 + 리밸런스 타이밍)
 
     # ══════════════════════════════════════════
     #  그리드 생성
@@ -213,11 +218,82 @@ class GridEngine:
         logger.info(f"[GRID] {len(self.state.levels)}개 레벨 배치 완료")
 
     # ══════════════════════════════════════════
-    #  주문 모니터링 (3초마다)
+    #  WS 체결 콜백 (10~50ms 반응)
+    # ══════════════════════════════════════════
+
+    async def on_order_update(self, order_info: dict):
+        """OrderStream WS에서 호출 — 체결/취소 즉시 처리"""
+        if not self.state or not self.state.is_active:
+            return
+
+        order_id = order_info.get("id", "")
+        status = order_info.get("status", "")
+        fill_price = float(order_info.get("price") or 0)
+
+        async with self._lock:
+            for lid, lv in self.state.levels.items():
+                # 그리드 주문 체결
+                if lv.status == "placed" and lv.order_id == order_id:
+                    if status == "closed":
+                        lv.status = "filled"
+                        lv.fill_price = fill_price if fill_price > 0 else lv.price
+                        lv.fill_time = time.time()
+                        logger.info(f"[GRID] WS 체결 Lv{lid} @ ${lv.fill_price:.1f}")
+                        await self._place_counter_order(lv)
+                        await save_grid_state(self.redis, self.state)
+                    elif status == "canceled":
+                        lv.status = "cancelled"
+                    return
+
+                # Counter-order 체결 (사이클 완성)
+                if lv.counter_status == "placed" and lv.counter_order_id == order_id:
+                    if status == "closed":
+                        counter_price = fill_price if fill_price > 0 else lv.price
+                        lv.counter_status = "filled"
+                        lv.counter_fill_price = counter_price
+
+                        # PnL
+                        pnl = self._calc_cycle_pnl(lv, counter_price)
+                        lv.cycle_count += 1
+                        lv.cycle_pnl += pnl
+                        self.state.total_cycles += 1
+                        self.state.total_pnl += pnl
+
+                        logger.info(
+                            f"[GRID] WS 사이클 완성 Lv{lid}: "
+                            f"${lv.fill_price:.1f}→${counter_price:.1f} "
+                            f"PnL=${pnl:+.3f} (총 {self.state.total_cycles}사이클 ${self.state.total_pnl:+.2f})"
+                        )
+
+                        await self._record_cycle(lv, counter_price, pnl)
+                        if self.risk_manager:
+                            balance = await self.executor.get_balance()
+                            pnl_pct = (pnl / balance * 100) if balance > 0 else 0
+                            await self.risk_manager.record_trade_result(pnl_pct, pnl)
+
+                        if self.telegram:
+                            try:
+                                await self.telegram._send(
+                                    f"\u2705 Grid #{self.state.total_cycles} | "
+                                    f"Lv{lid} ${lv.fill_price:.0f}→${counter_price:.0f} | "
+                                    f"<b>${pnl:+.3f}</b> | 총 ${self.state.total_pnl:+.2f}"
+                                )
+                            except Exception:
+                                pass
+
+                        await self._replace_grid_order(lv)
+                        await save_grid_state(self.redis, self.state)
+                    elif status == "canceled":
+                        lv.counter_status = "none"
+                        lv.counter_order_id = None
+                    return
+
+    # ══════════════════════════════════════════
+    #  REST Fallback 모니터링 (10초마다)
     # ══════════════════════════════════════════
 
     async def _monitor_tick(self):
-        """오픈 주문 확인 → 체결 감지 → counter-order 배치"""
+        """REST fallback — WS 누락 대비 10초마다 상태 확인"""
         if not self.state:
             return
 

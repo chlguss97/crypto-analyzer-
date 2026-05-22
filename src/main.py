@@ -22,6 +22,7 @@ from src.data.candle_collector import CandleCollector
 from src.data.ws_stream import WebSocketStream
 from src.strategy.grid_engine import GridEngine
 from src.strategy.regime_detector import RegimeDetector
+from src.data.order_stream import OrderStream
 from src.trading.risk_manager import RiskManager
 from src.trading.executor import OrderExecutor
 from src.monitoring.telegram_bot import TelegramNotifier
@@ -68,9 +69,10 @@ class GridBot:
         self.executor = OrderExecutor()
         self.risk_manager = RiskManager(self.redis, executor=self.executor)
 
-        # 레짐 감지 + 그리드
+        # 레짐 감지 + 그리드 + 주문 WS
         self.regime_detector: RegimeDetector | None = None
         self.grid_engine: GridEngine | None = None
+        self.order_stream: OrderStream = OrderStream()
 
         # 모니터링
         self.telegram = TelegramNotifier()
@@ -119,7 +121,9 @@ class GridBot:
             telegram=self.telegram, risk_manager=self.risk_manager,
             config=self.config, regime_detector=self.regime_detector,
         )
-        logger.info("[GRID] 그리드 엔진 + 레짐 감지 초기화 완료")
+        # OrderStream → GridEngine 콜백 연결
+        self.order_stream.on_order_update = self.grid_engine.on_order_update
+        logger.info("[GRID] 그리드 엔진 + 레짐 감지 + WS 체결 감지 초기화 완료")
 
     # ══════════════════════════════════════════════════
     #  지원 루프들
@@ -253,6 +257,7 @@ class GridBot:
         tasks = [
             # 데이터
             asyncio.create_task(self.ws_stream.start()),
+            asyncio.create_task(self.order_stream.start()),
             asyncio.create_task(self.periodic_candle_update()),
             # 레짐 감지 + 그리드
             asyncio.create_task(self.regime_detector.run()),
