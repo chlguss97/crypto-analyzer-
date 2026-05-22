@@ -1,12 +1,13 @@
 # Commit Log
 
 > 자동 생성 — `scripts/update_commit_log.sh` (매 커밋 후 실행)
-> Updated: 2026-05-22 15:16:23    
-> Total commits: 425 (2026-04-03 → 2026-05-22)
+> Updated: 2026-05-22 15:37:49    
+> Total commits: 426 (2026-04-03 → 2026-05-22)
 
 Claude 가 질문/변경 작업 시 이 파일을 참고해서 과거 변경 이력 컨텍스트를 확보합니다. 수동 편집 금지 — 다음 커밋 시 덮어써집니다.
 
 ## 2026-05-22
+- `593da41a` fix: CUSUM 죽은 시그널 해결 — 연속형 출력 + 파라미터 보정
 - `ad94710a` fix: OBI 포화 문제 해결 — Z-Score + 가중 호가 + 가중치 조정
 - `be9a2c3a` docs: AUDIT 최종 수정 + SPEC/CLAUDE 현재 코드 기준 최신화
 - `c3013227` feat: WS 체결 감지 (10~50ms) + REST 10초 fallback

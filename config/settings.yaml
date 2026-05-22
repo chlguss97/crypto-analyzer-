@@ -42,8 +42,8 @@ regime:
   weight_volume: 0.20
   weight_cusum: 0.35
   # CUSUM 파라미터
-  cusum_threshold: 2.0
-  cusum_drift: 0.25
+  cusum_threshold: 3.0
+  cusum_drift: 0.3
 
 # ── 리스크 ──
 risk:

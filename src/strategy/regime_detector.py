@@ -318,9 +318,9 @@ class RegimeDetector:
         self.cusum.pos = max(0.0, self.cusum.pos + z - self.cusum.drift)
         self.cusum.neg = max(0.0, self.cusum.neg - z - self.cusum.drift)
 
-        # 감쇄 (무한 누적 방지)
-        self.cusum.pos *= 0.95
-        self.cusum.neg *= 0.95
+        # 감쇄 (무한 누적 방지 — 0.85 = ~6틱 반감기)
+        self.cusum.pos *= 0.85
+        self.cusum.neg *= 0.85
 
         # 연속 출력: (pos - neg) / threshold → [-1, +1]
         signal = (self.cusum.pos - self.cusum.neg) / self.cusum.threshold
