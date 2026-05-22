@@ -1,5 +1,5 @@
 """
-GridEngine — ATR-Adaptive Grid Trading
+GridEngine — ATR-Adaptive Grid Trading + Leading Regime Detection
 
 BTC 무기한 선물 양방향 그리드 트레이딩.
 방향 예측 불필요 — 가격 진동에서 구조적 수익.
@@ -9,13 +9,13 @@ BTC 무기한 선물 양방향 그리드 트레이딩.
   체결 → counter-order(TP) → 사이클 완성 → 재배치
 
 ATR 적응:
-  spacing = clamp(ATR% × 0.6, 0.10%, 0.50%)
+  spacing = clamp(ATR% × 0.6, 0.15%, 0.50%) 기하식
   1시간마다 재계산
 
-안전장치:
-  Hurst > 0.7 → 일시정지 (추세장)
-  BOT_KILL -20% DD → 정지
-  가격 drift > range 50% → 리밸런스
+레짐 연동:
+  RegimeDetector → ACTIVE/PAUSED/FROZEN
+  PAUSED: 미체결 취소, counter 유지
+  FROZEN: 전 주문 취소, 60초 동결
 """
 
 import asyncio
@@ -40,32 +40,35 @@ class GridEngine:
 
     def __init__(self, executor: OrderExecutor, db: Database,
                  redis: RedisClient, telegram=None, risk_manager=None,
-                 config: dict = None):
+                 config: dict = None, regime_detector=None):
         self.executor = executor
         self.db = db
         self.redis = redis
         self.telegram = telegram
         self.risk_manager = risk_manager
+        self.regime = regime_detector
 
         cfg = (config or {}).get("grid", {})
         self.enabled = cfg.get("enabled", False)
-        self.leverage = cfg.get("leverage", 20)
-        self.num_levels = cfg.get("levels", 4)  # 총 레벨 (buy+sell)
-        self.half_levels = self.num_levels // 2
+        self.target_leverage = cfg.get("target_leverage", 8)
         self.atr_mult = cfg.get("atr_mult", 0.6)
-        self.spacing_min = cfg.get("spacing_min_pct", 0.10)
+        self.spacing_min = cfg.get("spacing_min_pct", 0.15)
         self.spacing_max = cfg.get("spacing_max_pct", 0.50)
         self.rebalance_sec = cfg.get("rebalance_sec", 3600)
         self.drift_pct = cfg.get("drift_rebalance_pct", 50)
-        self.hurst_pause = cfg.get("hurst_pause", 0.70)
-        self.monitor_sec = cfg.get("monitor_sec", 3)
+        self.monitor_sec = cfg.get("monitor_sec", 1)
         self.atr_period = cfg.get("atr_period", 14)
         self.atr_tf = cfg.get("atr_timeframe", "5m")
 
         self.symbol = (config or {}).get("exchange", {}).get("symbol", "BTC/USDT:USDT")
         self.state: GridState | None = None
         self._running = True
-        self._lock = asyncio.Lock()  # 상태 변경 동시성 보호
+        self._lock = asyncio.Lock()
+        self._regime_mode = "ACTIVE"  # 마지막으로 확인한 레짐 모드
+
+        # 잔고 비례 레벨 수 (초기화 시 계산)
+        self.num_levels = 2
+        self.half_levels = 1
 
     # ══════════════════════════════════════════
     #  메인 루프
@@ -77,12 +80,20 @@ class GridEngine:
             logger.info("[GRID] 비활성화 (grid.enabled=false)")
             return
 
+        # 잔고 기반 레벨 수 + 레버리지 계산
+        balance = await self.executor.get_balance()
+        await self._calc_auto_levels(balance)
+
         # 레버리지 설정
         try:
-            await self.executor.set_leverage(self.leverage, "long")
-            await self.executor.set_leverage(self.leverage, "short")
+            await self.executor.set_leverage(self.target_leverage, "long")
+            await self.executor.set_leverage(self.target_leverage, "short")
         except Exception as e:
             logger.warning(f"[GRID] 레버리지 설정 실패: {e}")
+
+        # RegimeDetector 콜백 등록
+        if self.regime:
+            self.regime.on_mode_change = self._on_regime_change
 
         # 크래시 복구
         await self._recover()
@@ -109,20 +120,10 @@ class GridEngine:
                     await asyncio.sleep(5)
                     continue
 
-                # 레짐 게이트 (정지 중에도 항상 체크 → 복귀 판단)
-                await self._check_regime()
-
+                # 레짐 모드 확인 (RegimeDetector가 콜백으로 전환)
                 if not self.state.is_active:
-                    await asyncio.sleep(5)
+                    await asyncio.sleep(3)
                     continue
-
-                # 리스크 게이트
-                if self.risk_manager:
-                    allowed, reason = self.risk_manager.is_trading_allowed()
-                    if not allowed:
-                        logger.warning(f"[GRID] 리스크 정지: {reason}")
-                        await self._pause("risk_gate")
-                        continue
 
                 if self.state.is_active:
                     async with self._lock:
@@ -458,27 +459,102 @@ class GridEngine:
             self.state.total_pnl = old_pnl
 
     # ══════════════════════════════════════════
-    #  레짐 게이트
+    #  레짐 연동 (RegimeDetector 콜백)
     # ══════════════════════════════════════════
 
-    async def _check_regime(self):
-        """Hurst > 0.7 → 그리드 일시정지"""
-        hurst_str = await self.redis.get("rt:regime:hurst")
-        if not hurst_str:
+    async def _on_regime_change(self, new_mode: str, crs: float):
+        """RegimeDetector가 모드 전환 시 호출"""
+        old_mode = self._regime_mode
+        self._regime_mode = new_mode
+
+        if new_mode == "PAUSED" and self.state and self.state.is_active:
+            logger.warning(f"[GRID] 레짐 PAUSED (CRS={crs:.3f}) → 미체결 취소")
+            await self._pause("regime_paused")
+            if self.telegram:
+                try:
+                    await self.telegram._send(
+                        f"\u26a0\ufe0f <b>Grid PAUSED</b> | CRS={crs:.3f}\n추세 감지 → 미체결 주문 취소"
+                    )
+                except Exception:
+                    pass
+
+        elif new_mode == "FROZEN" and self.state:
+            logger.warning(f"[GRID] 서킷브레이커 → FROZEN")
+            await self._freeze()
+            if self.telegram:
+                try:
+                    await self.telegram._send(
+                        f"\U0001f6a8 <b>서킷브레이커!</b> 전 주문 취소 + 60초 동결"
+                    )
+                except Exception:
+                    pass
+
+        elif new_mode == "ACTIVE" and self.state and not self.state.is_active:
+            if self.state.pause_reason in ("regime_paused", "frozen"):
+                logger.info(f"[GRID] 레짐 ACTIVE → 그리드 재개")
+                self.state.is_active = True
+                self.state.pause_reason = None
+                await self._rebuild()
+                if self.telegram:
+                    try:
+                        await self.telegram._send(
+                            f"\u2705 <b>Grid ACTIVE</b> | 그리드 재개"
+                        )
+                    except Exception:
+                        pass
+
+    async def _freeze(self):
+        """서킷브레이커: 전 주문 취소 (counter 포함)"""
+        if not self.state:
             return
+        self.state.is_active = False
+        self.state.pause_reason = "frozen"
 
-        hurst = float(hurst_str)
+        for lid, lv in self.state.levels.items():
+            if lv.order_id:
+                await self.executor.cancel_order_by_id(lv.order_id)
+                if lv.status == "placed":
+                    lv.status = "cancelled"
+            if lv.counter_order_id:
+                await self.executor.cancel_order_by_id(lv.counter_order_id)
+                lv.counter_status = "none"
+                lv.counter_order_id = None
 
-        if hurst > self.hurst_pause and self.state and self.state.is_active:
-            if self.state.pause_reason != "hurst_gate":
-                logger.warning(f"[GRID] Hurst {hurst:.2f} > {self.hurst_pause} → 일시정지")
-                await self._pause("hurst_gate")
+        await save_grid_state(self.redis, self.state)
 
-        elif hurst <= self.hurst_pause and self.state and self.state.pause_reason == "hurst_gate":
-            logger.info(f"[GRID] Hurst {hurst:.2f} ≤ {self.hurst_pause} → 재개")
-            self.state.is_active = True
-            self.state.pause_reason = None
-            await self._rebuild()
+    # ══════════════════════════════════════════
+    #  잔고 비례 자동 레벨 계산
+    # ══════════════════════════════════════════
+
+    async def _calc_auto_levels(self, balance: float):
+        """잔고 기반 레벨 수 + 레버리지 자동 계산"""
+        price_str = await self.redis.get("rt:price:BTC-USDT-SWAP")
+        btc_price = float(price_str) if price_str else 78000
+
+        # ATR 기반 레버리지 조절
+        atr_pct = await self._compute_atr_pct(btc_price)
+        if atr_pct < 0.10:
+            self.target_leverage = 10  # 저변동
+        elif atr_pct > 0.30:
+            self.target_leverage = 6   # 고변동
+        else:
+            self.target_leverage = 8   # 평시
+
+        contract_value = btc_price * GRID_SIZE_BTC
+        max_notional = balance * self.target_leverage
+        total = min(10, max(2, int(max_notional / contract_value)))
+
+        # 짝수 강제
+        if total % 2 != 0:
+            total -= 1
+
+        self.num_levels = total
+        self.half_levels = total // 2
+
+        logger.info(
+            f"[GRID] 자동 사이징: ${balance:.0f} × {self.target_leverage}x = "
+            f"{self.num_levels}레벨 ({self.half_levels} buy + {self.half_levels} sell)"
+        )
 
     async def _pause(self, reason: str):
         """그리드 일시정지 (counter-order는 유지)"""

@@ -21,6 +21,7 @@ from src.data.storage import Database, RedisClient
 from src.data.candle_collector import CandleCollector
 from src.data.ws_stream import WebSocketStream
 from src.strategy.grid_engine import GridEngine
+from src.strategy.regime_detector import RegimeDetector
 from src.trading.risk_manager import RiskManager
 from src.trading.executor import OrderExecutor
 from src.monitoring.telegram_bot import TelegramNotifier
@@ -67,7 +68,8 @@ class GridBot:
         self.executor = OrderExecutor()
         self.risk_manager = RiskManager(self.redis, executor=self.executor)
 
-        # 그리드
+        # 레짐 감지 + 그리드
+        self.regime_detector: RegimeDetector | None = None
         self.grid_engine: GridEngine | None = None
 
         # 모니터링
@@ -106,13 +108,18 @@ class GridBot:
         except Exception as e:
             logger.warning(f"5분봉 캐시 확인 실패: {e}")
 
+        # RegimeDetector 초기화
+        self.regime_detector = RegimeDetector(
+            redis=self.redis, ws_stream=self.ws_stream, config=self.config,
+        )
+
         # GridEngine 초기화
         self.grid_engine = GridEngine(
             executor=self.executor, db=self.db, redis=self.redis,
             telegram=self.telegram, risk_manager=self.risk_manager,
-            config=self.config,
+            config=self.config, regime_detector=self.regime_detector,
         )
-        logger.info("[GRID] 그리드 엔진 초기화 완료")
+        logger.info("[GRID] 그리드 엔진 + 레짐 감지 초기화 완료")
 
     # ══════════════════════════════════════════════════
     #  지원 루프들
@@ -246,7 +253,8 @@ class GridBot:
             # 데이터
             asyncio.create_task(self.ws_stream.start()),
             asyncio.create_task(self.periodic_candle_update()),
-            # 그리드
+            # 레짐 감지 + 그리드
+            asyncio.create_task(self.regime_detector.run()),
             asyncio.create_task(self.grid_engine.run()),
             # 지원
             asyncio.create_task(self.periodic_daily_reset()),
