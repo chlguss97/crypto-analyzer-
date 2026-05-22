@@ -59,6 +59,7 @@ class GridEngine:
         self.monitor_sec = cfg.get("monitor_sec", 1)
         self.atr_period = cfg.get("atr_period", 14)
         self.atr_tf = cfg.get("atr_timeframe", "5m")
+        self.maker_fee = (config or {}).get("fees", {}).get("maker", 0.0002)
 
         self.symbol = (config or {}).get("exchange", {}).get("symbol", "BTC/USDT:USDT")
         self.state: GridState | None = None
@@ -182,10 +183,12 @@ class GridEngine:
             last_rebalance=time.time(),
         )
 
-        # 레벨 생성 + 주문 배치
+        # 레벨 생성 + 주문 배치 (기하식: level_n = center × (1+spacing%)^n)
+        ratio = 1 + spacing_pct / 100  # e.g. 1.0015
+
         for i in range(1, self.half_levels + 1):
-            # BUY 레벨 (음수)
-            buy_price = round(price - i * spacing_abs, 1)
+            # BUY 레벨 (음수) — center 아래
+            buy_price = round(price / (ratio ** i), 1)
             buy_level = GridLevel(level_id=-i, side="buy", price=buy_price)
             order = await self.executor.place_limit_order(
                 "buy", GRID_SIZE_BTC, buy_price, "long"
@@ -195,8 +198,8 @@ class GridEngine:
                 buy_level.status = "placed"
             self.state.levels[-i] = buy_level
 
-            # SELL 레벨 (양수)
-            sell_price = round(price + i * spacing_abs, 1)
+            # SELL 레벨 (양수) — center 위
+            sell_price = round(price * (ratio ** i), 1)
             sell_level = GridLevel(level_id=i, side="sell", price=sell_price)
             order = await self.executor.place_limit_order(
                 "sell", GRID_SIZE_BTC, sell_price, "short"
@@ -283,8 +286,12 @@ class GridEngine:
                             f"PnL=${pnl:+.3f} (총 {self.state.total_cycles}사이클 ${self.state.total_pnl:+.2f})"
                         )
 
-                        # DB 기록
+                        # DB 기록 + 리스크 매니저 갱신
                         await self._record_cycle(lv, counter_price, pnl)
+                        if self.risk_manager:
+                            balance = await self.executor.get_balance()
+                            pnl_pct = (pnl / balance * 100) if balance > 0 else 0
+                            await self.risk_manager.record_trade_result(pnl_pct, pnl)
 
                         # 텔레그램 알림
                         if self.telegram:
@@ -362,7 +369,7 @@ class GridEngine:
         price_diff = abs(counter_price - lv.fill_price)
         gross = GRID_SIZE_BTC * price_diff
         # maker 수수료 양쪽
-        fee = GRID_SIZE_BTC * lv.fill_price * 0.0002 + GRID_SIZE_BTC * counter_price * 0.0002
+        fee = GRID_SIZE_BTC * lv.fill_price * self.maker_fee + GRID_SIZE_BTC * counter_price * self.maker_fee
         return round(gross - fee, 4)
 
     async def _record_cycle(self, lv: GridLevel, counter_price: float, pnl: float):

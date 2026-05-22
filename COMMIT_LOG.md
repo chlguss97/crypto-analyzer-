@@ -1,12 +1,13 @@
 # Commit Log
 
 > 자동 생성 — `scripts/update_commit_log.sh` (매 커밋 후 실행)
-> Updated: 2026-05-22 11:19:56    
-> Total commits: 418 (2026-04-03 → 2026-05-22)
+> Updated: 2026-05-22 11:24:41    
+> Total commits: 419 (2026-04-03 → 2026-05-22)
 
 Claude 가 질문/변경 작업 시 이 파일을 참고해서 과거 변경 이력 컨텍스트를 확보합니다. 수동 편집 금지 — 다음 커밋 시 덮어써집니다.
 
 ## 2026-05-22
+- `57bb2742` feat: Phase 1+2 — RegimeDetector 신규 + GridEngine 연동
 - `50b4f563` refactor: Phase 0 레거시 전면 삭제 — Grid v3 클린 코드베이스
 - `4d24c53c` fix: Hurst 정지 후 영구 멈춤 버그 — 레짐 체크를 is_active 전으로 이동
 

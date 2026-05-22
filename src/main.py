@@ -95,7 +95,7 @@ class GridBot:
         await self.risk_manager.initialize(balance)
         logger.info(f"잔고: ${balance:.2f}")
 
-        # 캔들 백필 (ATR + Hurst 계산용)
+        # 캔들 백필 (ATR 계산용)
         logger.info("캔들 백필 시작...")
         await self.candle_collector.backfill_all()
         logger.info("캔들 백필 완료")
@@ -126,7 +126,7 @@ class GridBot:
     # ══════════════════════════════════════════════════
 
     async def periodic_candle_update(self):
-        """캔들 REST 백업 (60초, ATR/Hurst용)"""
+        """캔들 REST 백업 (60초, ATR용)"""
         while self._running:
             try:
                 for tf in ["1m", "5m", "15m", "1h", "4h", "1d", "1w"]:
@@ -236,6 +236,7 @@ class GridBot:
         self.telegram.redis = self.redis
         self.telegram.executor = self.executor
         self.telegram.risk_manager = self.risk_manager
+        self.telegram.grid_engine = self.grid_engine
 
         await self.telegram.notify_bot_status("running")
         try:

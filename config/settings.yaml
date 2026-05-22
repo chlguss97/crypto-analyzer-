@@ -8,7 +8,7 @@ exchange:
   margin_mode: "isolated"
 
 timeframes:
-  candles: ["1m", "5m", "15m", "1h", "4h", "1d"]
+  candles: ["1m", "5m", "15m", "1h", "4h", "1d", "1w"]
 
 # ── 그리드 트레이딩 ──
 grid:
@@ -47,7 +47,7 @@ regime:
 
 # ── 리스크 ──
 risk:
-  backstop_drawdown_pct: 0.20     # 거래소 백스탑 -20%
+  backstop_drawdown_pct: 20       # 거래소 백스탑 -20% (미구현, 참조용)
 
 fees:
   taker: 0.0005

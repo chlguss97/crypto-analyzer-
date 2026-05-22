@@ -353,16 +353,44 @@ class RegimeDetector:
                 self._pause_since = 0
 
         elif self.mode == "PAUSED":
-            # PAUSED → ACTIVE: |CRS| < 0.15, 30초 연속 + vol 정상
+            # PAUSED → ACTIVE: |CRS| < 0.15, 30초 연속 + vol_ratio < 2.0
             if abs_crs < self.resume_threshold:
                 if self._resume_since == 0:
                     self._resume_since = now
                 elif now - self._resume_since >= self.resume_confirm_sec:
                     if now - self._last_mode_switch >= self.cooldown_sec:
-                        await self._set_mode("ACTIVE", self.crs)
-                        self._resume_since = 0
+                        # 거래량 정상 확인 (vol_ratio < 2.0)
+                        vol_ok = self._check_vol_normal(now)
+                        if vol_ok:
+                            await self._set_mode("ACTIVE", self.crs)
+                            self._resume_since = 0
+                        # vol 높으면 대기 유지
             else:
                 self._resume_since = 0
+
+    def _check_vol_normal(self, now: float) -> bool:
+        """거래량이 정상 수준인지 확인 (vol_ratio < 2.0)"""
+        if not self.ws:
+            return True
+        trades = self.ws.trades
+        if len(trades) < 10:
+            return True
+
+        cutoff_1s = now - 1.0
+        cutoff_60s = now - 60.0
+        vol_1s = 0.0
+        total_60s = 0.0
+
+        for ts, side, size, price, size_usd in reversed(trades):
+            if ts < cutoff_60s:
+                break
+            total_60s += size
+            if ts >= cutoff_1s:
+                vol_1s += size
+
+        avg_1s = total_60s / 60.0 if total_60s > 0 else 1e-10
+        vol_ratio = vol_1s / avg_1s if avg_1s > 1e-10 else 1.0
+        return vol_ratio < 2.0
 
     async def _set_mode(self, new_mode: str, crs: float):
         """모드 전환 + 콜백 + 로그"""
