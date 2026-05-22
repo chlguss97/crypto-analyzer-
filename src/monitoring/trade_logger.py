@@ -6,7 +6,7 @@ TradeLogger — Grid Trading JSONL 로거
 이벤트 타입:
   - grid_cycle: 그리드 사이클 완성
   - hourly_snapshot: 시간별 스냅샷
-  - regime_change: 모드 전환 (ACTIVE/PAUSED/FROZEN)
+  - dgt_rebuild: DGT 경계 돌파 리빌드
 """
 
 import json

@@ -21,7 +21,6 @@ from src.data.storage import Database, RedisClient
 from src.data.candle_collector import CandleCollector
 from src.data.ws_stream import WebSocketStream
 from src.strategy.grid_engine import GridEngine
-from src.strategy.regime_detector import RegimeDetector
 from src.data.order_stream import OrderStream
 from src.trading.risk_manager import RiskManager
 from src.trading.executor import OrderExecutor
@@ -69,8 +68,7 @@ class GridBot:
         self.executor = OrderExecutor()
         self.risk_manager = RiskManager(self.redis, executor=self.executor)
 
-        # 레짐 감지 + 그리드 + 주문 WS
-        self.regime_detector: RegimeDetector | None = None
+        # 그리드 + 주문 WS
         self.grid_engine: GridEngine | None = None
         self.order_stream: OrderStream = OrderStream()
 
@@ -102,28 +100,15 @@ class GridBot:
         await self.candle_collector.backfill_all()
         logger.info("캔들 백필 완료")
 
-        # ATR 계산용 캔들 캐시 확인
-        try:
-            candles_5m = await self.db.get_candles(self.symbol, "5m", limit=60)
-            if candles_5m:
-                logger.info(f"5분봉 캐시: {len(candles_5m)}개 (ATR 계산 준비)")
-        except Exception as e:
-            logger.warning(f"5분봉 캐시 확인 실패: {e}")
-
-        # RegimeDetector 초기화
-        self.regime_detector = RegimeDetector(
-            redis=self.redis, ws_stream=self.ws_stream, config=self.config,
-        )
-
         # GridEngine 초기화
         self.grid_engine = GridEngine(
             executor=self.executor, db=self.db, redis=self.redis,
             telegram=self.telegram, risk_manager=self.risk_manager,
-            config=self.config, regime_detector=self.regime_detector,
+            config=self.config,
         )
         # OrderStream → GridEngine 콜백 연결
         self.order_stream.on_order_update = self.grid_engine.on_order_update
-        logger.info("[GRID] 그리드 엔진 + 레짐 감지 + WS 체결 감지 초기화 완료")
+        logger.info("[GRID] 그리드 엔진 + WS 체결 감지 초기화 완료")
 
     # ══════════════════════════════════════════════════
     #  지원 루프들
@@ -185,12 +170,10 @@ class GridBot:
                 self._last_snap = _time.time()
                 try:
                     bal = float(await self.redis.get("sys:balance") or 0)
-                    mode = await self.redis.get("regime:mode") or "ACTIVE"
                     grid_status = self.grid_engine.get_status() if self.grid_engine else {}
                     _append_jsonl({
                         "type": "hourly_snapshot",
                         "balance": round(bal, 2),
-                        "regime_mode": mode,
                         "grid_active": grid_status.get("active", False),
                         "grid_cycles": grid_status.get("total_cycles", 0),
                         "grid_pnl": grid_status.get("total_pnl", 0),
@@ -247,8 +230,8 @@ class GridBot:
             bal = await self.executor.get_balance()
             grid_cfg = self.config.get("grid", {})
             await self.telegram._send(
-                f"\U0001f7e2 <b>GridBot v3 — Leading Regime Detection</b>\n"
-                f"Balance: ${bal:,.2f} | Target Lev: {grid_cfg.get('target_leverage', 8)}x\n"
+                f"\U0001f7e2 <b>GridBot v4 — Minimal Grid</b>\n"
+                f"Balance: ${bal:,.2f} | Leverage: {grid_cfg.get('leverage', 10)}x\n"
                 f"Size: {grid_cfg.get('size_btc', 0.01)} BTC/level | Spacing: {grid_cfg.get('spacing_min_pct', 0.15)}%~{grid_cfg.get('spacing_max_pct', 0.50)}%"
             )
         except Exception:
@@ -259,8 +242,7 @@ class GridBot:
             asyncio.create_task(self.ws_stream.start()),
             asyncio.create_task(self.order_stream.start()),
             asyncio.create_task(self.periodic_candle_update()),
-            # 레짐 감지 + 그리드
-            asyncio.create_task(self.regime_detector.run()),
+            # 그리드
             asyncio.create_task(self.grid_engine.run()),
             # 지원
             asyncio.create_task(self.periodic_daily_reset()),

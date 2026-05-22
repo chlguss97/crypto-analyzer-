@@ -221,11 +221,11 @@ async def get_position():
 @app.get("/api/signals")
 async def get_signals():
     await _ensure_initialized()
-    """레짐 시그널 상태"""
-    signals = await redis.hgetall("regime:signals")
-    if not signals:
-        signals = {"obi": "0", "cvd": "0", "vol": "0", "cusum": "0", "crs": "0", "mode": "ACTIVE"}
-    return signals
+    """그리드 상태"""
+    grid_state = await redis.get_json("grid:state:BTC/USDT:USDT")
+    if not grid_state:
+        return {"active": False}
+    return {"active": True, "center": grid_state.get("center_price"), "spacing": grid_state.get("spacing_pct")}
 
 
 @app.get("/api/candles")
@@ -421,29 +421,14 @@ async def get_risk_state():
 
 @app.get("/api/engine/state")
 async def get_engine_state():
-    """그리드 엔진 + 레짐 실시간 상태"""
+    """그리드 엔진 상태"""
     await _ensure_initialized()
-    mode = await redis.get("regime:mode") or "ACTIVE"
-    crs = await redis.get("regime:crs") or "0"
-    signals = await redis.hgetall("regime:signals")
+    grid_state = await redis.get_json("grid:state:BTC/USDT:USDT")
+    balance = await redis.get("sys:balance") or "0"
     return {
-        "mode": mode,
-        "crs": float(crs),
-        "signals": signals or {},
-    }
-
-
-@app.get("/api/regime")
-async def get_regime():
-    """현재 레짐 모드 + CRS"""
-    await _ensure_initialized()
-    mode = await redis.get("regime:mode") or "ACTIVE"
-    crs = await redis.get("regime:crs") or "0"
-    signals = await redis.hgetall("regime:signals")
-    return {
-        "mode": mode,
-        "crs": float(crs),
-        "signals": signals or {},
+        "active": bool(grid_state),
+        "balance": float(balance),
+        "grid": grid_state or {},
     }
 
 
@@ -452,11 +437,7 @@ async def get_engine_overview():
     """그리드 통합 데이터 — 레짐 + 사이클 통계"""
     await _ensure_initialized()
 
-    # 1) regime
-    mode = await redis.get("regime:mode") or "ACTIVE"
-    crs = await redis.get("regime:crs") or "0"
-
-    # 2) grid trade stats (grid_trades 테이블에 status 컬럼 없음)
+    # 1) grid trade stats
     grid_stats = {"total_cycles": 0, "total_pnl": 0.0, "avg_pnl": 0.0}
     try:
         cur = await db._db.execute(
@@ -473,7 +454,6 @@ async def get_engine_overview():
         logger.debug(f"grid trade stats 집계 실패: {e}")
 
     return {
-        "regime": {"mode": mode, "crs": float(crs)},
         "grid_trades": grid_stats,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }

@@ -115,8 +115,7 @@ class TelegramNotifier:
     async def _cmd_status(self):
         try:
             balance = (await self.redis.get("sys:balance")) if self.redis else "?"
-            mode = (await self.redis.get("regime:mode")) if self.redis else "ACTIVE"
-            crs = (await self.redis.get("regime:crs")) if self.redis else "0"
+            bal_str = (await self.redis.get("sys:balance")) if self.redis else "0"
 
             grid_info = ""
             if self.grid_engine:
@@ -134,7 +133,7 @@ class TelegramNotifier:
             text = (
                 "\U0001f4ca <b>GridBot 상태</b>\n\n"
                 f"잔고: ${balance}\n"
-                f"Mode: {mode or 'ACTIVE'} | CRS: {crs or '0'}\n"
+                f"Balance: ${float(bal_str or 0):,.2f}\n"
                 f"{grid_info}"
             )
             await self._send(text)
@@ -176,19 +175,7 @@ class TelegramNotifier:
     async def _cmd_market(self):
         try:
             price = (await self.redis.get("rt:price:BTC-USDT-SWAP")) if self.redis else "?"
-            mode = (await self.redis.get("regime:mode")) if self.redis else "?"
-
-            icons = {"ACTIVE": "\u2705", "PAUSED": "\u26a0\ufe0f", "FROZEN": "\U0001f6a8"}
-            icon = icons.get(mode, "\U0001f4ca")
-
-            text = f"\U0001f310 <b>Market</b>\n\nBTC: ${float(price):,.1f}\nMode: {icon} {mode}"
-
-            # CRS
-            if self.redis:
-                crs = await self.redis.get("regime:crs")
-                if crs:
-                    text += f"\nCRS: {float(crs):.3f}"
-
+            text = f"\U0001f310 <b>Market</b>\n\nBTC: ${float(price):,.1f}"
             await self._send(text)
         except Exception as e:
             await self._send(f"\u26a0\ufe0f Market 조회 실패: {e}")

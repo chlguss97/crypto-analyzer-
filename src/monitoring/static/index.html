@@ -3,309 +3,159 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>GridBot v3</title>
+<title>GridBot v4</title>
 <style>
 :root {
-  --bg: #0d1117; --card: #161b22; --border: #21262d;
-  --text: #e6edf3; --dim: #8b949e; --muted: #484f58;
-  --green: #3fb950; --red: #f85149; --yellow: #d29922; --blue: #58a6ff;
+  --bg:#0d1117; --card:#161b22; --border:#21262d;
+  --text:#e6edf3; --dim:#8b949e;
+  --green:#3fb950; --red:#f85149; --yellow:#d29922; --blue:#58a6ff;
 }
-* { margin:0; padding:0; box-sizing:border-box; }
-body { font-family: 'SF Mono','Cascadia Code','Consolas',monospace; background:var(--bg); color:var(--text); font-size:13px; }
-a { color:var(--blue); }
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'SF Mono','Cascadia Code','Consolas',monospace;background:var(--bg);color:var(--text);font-size:13px}
 
-/* Header */
-.header { background:#0d1117; border-bottom:1px solid var(--border); padding:10px 20px; display:flex; justify-content:space-between; align-items:center; position:sticky; top:0; z-index:10; }
-.header h1 { font-size:16px; font-weight:700; }
-.header-right { display:flex; gap:12px; align-items:center; font-size:12px; }
-.badge { padding:3px 10px; border-radius:12px; font-size:11px; font-weight:600; text-transform:uppercase; }
-.badge-active { background:rgba(63,185,80,.15); color:var(--green); }
-.badge-paused { background:rgba(210,153,34,.15); color:var(--yellow); }
-.badge-frozen { background:rgba(248,81,73,.15); color:var(--red); }
-.heartbeat { color:var(--dim); }
-.heartbeat .dot { display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--green); margin-right:4px; }
+.header{background:var(--bg);border-bottom:1px solid var(--border);padding:10px 20px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:10}
+.header h1{font-size:16px;font-weight:700}
+.header-right{display:flex;gap:12px;align-items:center;font-size:12px}
+.badge{padding:3px 10px;border-radius:12px;font-size:11px;font-weight:600;text-transform:uppercase}
+.badge-run{background:rgba(63,185,80,.15);color:var(--green)}
+.badge-stop{background:rgba(248,81,73,.15);color:var(--red)}
+.badge-pause{background:rgba(210,153,34,.15);color:var(--yellow)}
 
-/* Layout */
-.grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; padding:16px 20px; max-width:1200px; margin:0 auto; }
-@media(max-width:768px) { .grid { grid-template-columns:1fr; padding:12px; } }
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:16px 20px;max-width:1100px;margin:0 auto}
+@media(max-width:768px){.grid{grid-template-columns:1fr;padding:12px}}
+.card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:14px}
+.card-title{font-size:11px;font-weight:600;text-transform:uppercase;color:var(--dim);margin-bottom:10px;letter-spacing:.5px}
+.card-full{grid-column:1/-1}
 
-/* Cards */
-.card { background:var(--card); border:1px solid var(--border); border-radius:8px; padding:14px; }
-.card-title { font-size:11px; font-weight:600; text-transform:uppercase; color:var(--dim); margin-bottom:10px; letter-spacing:.5px; }
-.card-full { grid-column: 1 / -1; }
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{text-align:left;color:var(--dim);font-weight:500;padding:4px 6px;border-bottom:1px solid var(--border)}
+td{padding:4px 6px;border-bottom:1px solid rgba(33,38,45,.5)}
+.tg{color:var(--green)}.tr{color:var(--red)}.td{color:var(--dim)}
 
-/* Tables */
-table { width:100%; border-collapse:collapse; font-size:12px; }
-th { text-align:left; color:var(--dim); font-weight:500; padding:4px 6px; border-bottom:1px solid var(--border); }
-td { padding:4px 6px; border-bottom:1px solid rgba(33,38,45,.5); }
-.text-green { color:var(--green); } .text-red { color:var(--red); } .text-yellow { color:var(--yellow); } .text-dim { color:var(--dim); }
+.big-price{font-size:28px;font-weight:700;letter-spacing:-1px}
+.sub-row{display:flex;gap:16px;margin-top:6px;font-size:12px;color:var(--dim)}
+.kv{display:flex;justify-content:space-between;padding:3px 0;font-size:12px}
+.kv .k{color:var(--dim)}
 
-/* Market price */
-.big-price { font-size:28px; font-weight:700; letter-spacing:-1px; }
-.sub-row { display:flex; gap:16px; margin-top:6px; font-size:12px; color:var(--dim); }
-.sub-row span { display:flex; gap:4px; }
-
-/* CRS bar */
-.crs-bar-bg { height:8px; background:var(--border); border-radius:4px; position:relative; margin:8px 0; }
-.crs-bar-fill { height:100%; border-radius:4px; position:absolute; top:0; }
-.crs-bar-marker { position:absolute; top:-3px; width:3px; height:14px; background:var(--text); border-radius:1px; }
-.signal-row { display:flex; gap:12px; flex-wrap:wrap; font-size:12px; margin-top:6px; }
-.signal-row .item { color:var(--dim); }
-.signal-row .val { color:var(--text); margin-left:4px; }
-
-/* Buttons */
-.controls { display:flex; gap:8px; flex-wrap:wrap; padding:0 20px 16px; max-width:1200px; margin:0 auto; }
-.btn { padding:6px 16px; border:1px solid var(--border); border-radius:6px; background:var(--card); color:var(--text); font-size:12px; font-family:inherit; cursor:pointer; }
-.btn:hover { border-color:var(--blue); }
-.btn-danger { border-color:var(--red); color:var(--red); }
-.btn-danger:hover { background:rgba(248,81,73,.1); }
-
-/* KV pairs */
-.kv { display:flex; justify-content:space-between; padding:3px 0; font-size:12px; }
-.kv .k { color:var(--dim); }
+.controls{display:flex;gap:8px;padding:0 20px 16px;max-width:1100px;margin:0 auto}
+.btn{padding:6px 16px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);font-size:12px;font-family:inherit;cursor:pointer}
+.btn:hover{border-color:var(--blue)}
+.btn-danger{border-color:var(--red);color:var(--red)}
+.btn-danger:hover{background:rgba(248,81,73,.1)}
 </style>
 </head>
 <body>
 
 <div class="header">
-  <h1>GridBot v3</h1>
+  <h1>GridBot v4</h1>
   <div class="header-right">
-    <span id="balance" class="text-dim">--</span>
-    <span id="mode-badge" class="badge badge-active">--</span>
-    <span class="heartbeat"><span class="dot" id="hb-dot"></span><span id="hb-time">--</span></span>
+    <span id="bal" class="td">--</span>
+    <span id="badge" class="badge badge-stop">--</span>
   </div>
 </div>
 
 <div class="controls">
-  <button class="btn" onclick="doPost('/api/pause')">Pause</button>
-  <button class="btn" onclick="doPost('/api/resume')">Resume</button>
-  <button class="btn" onclick="toggleAutotrading()">Auto-trading Toggle</button>
-  <button class="btn btn-danger" onclick="if(confirm('모든 포지션 청산?')) doPost('/api/close-all')">Kill (Close All)</button>
+  <button class="btn" onclick="post('/api/pause')">Pause</button>
+  <button class="btn btn-danger" onclick="if(confirm('Close all positions?'))post('/api/close-all')">Close All</button>
 </div>
 
 <div class="grid">
-  <!-- Market -->
   <div class="card">
     <div class="card-title">Market</div>
-    <div class="big-price" id="btc-price">--</div>
+    <div class="big-price" id="price">--</div>
     <div class="sub-row">
-      <span>H <span id="m-high" class="text-green">--</span></span>
-      <span>L <span id="m-low" class="text-red">--</span></span>
-      <span>Funding <span id="m-fund">--</span></span>
+      <span>24h H <span id="hi" class="tg">--</span></span>
+      <span>24h L <span id="lo" class="tr">--</span></span>
     </div>
   </div>
 
-  <!-- Risk -->
-  <div class="card">
-    <div class="card-title">Risk</div>
-    <div id="risk-body">
-      <div class="kv"><span class="k">Daily PnL</span><span id="r-daily">--</span></div>
-      <div class="kv"><span class="k">Streak</span><span id="r-streak">--</span></div>
-      <div class="kv"><span class="k">Balance</span><span id="r-balance">--</span></div>
-      <div class="kv"><span class="k">Drawdown</span><span id="r-dd">--</span></div>
-    </div>
-  </div>
-
-  <!-- Regime -->
-  <div class="card">
-    <div class="card-title">Regime Detection</div>
-    <div style="display:flex;justify-content:space-between;font-size:12px;">
-      <span>CRS</span><span id="crs-val" class="text-dim">--</span>
-    </div>
-    <div class="crs-bar-bg">
-      <div class="crs-bar-fill" id="crs-fill" style="width:50%;left:0;background:var(--muted);"></div>
-      <div class="crs-bar-marker" id="crs-marker" style="left:50%;"></div>
-    </div>
-    <div class="signal-row" id="signals-row">
-      <span class="item">OBI:<span class="val" id="s-obi">--</span></span>
-      <span class="item">CVD:<span class="val" id="s-cvd">--</span></span>
-      <span class="item">Vol:<span class="val" id="s-vol">--</span></span>
-      <span class="item">CUSUM:<span class="val" id="s-cusum">--</span></span>
-    </div>
-    <div class="kv" style="margin-top:6px;"><span class="k">Mode</span><span id="regime-mode">--</span></div>
-  </div>
-
-  <!-- Grid Status -->
   <div class="card">
     <div class="card-title">Grid Status</div>
-    <div style="display:flex;gap:16px;margin-bottom:8px;font-size:12px;">
-      <span class="text-dim">Center: <span id="g-center" class="text-green">--</span></span>
-      <span class="text-dim">Spacing: <span id="g-spacing">--</span></span>
-      <span class="text-dim">Cycles: <span id="g-cycles">--</span></span>
-    </div>
+    <div class="kv"><span class="k">Center</span><span id="gs-center">--</span></div>
+    <div class="kv"><span class="k">Spacing</span><span id="gs-spacing">--</span></div>
+    <div class="kv"><span class="k">Levels</span><span id="gs-levels">--</span></div>
+    <div class="kv"><span class="k">Total Cycles</span><span id="gs-cycles">--</span></div>
+    <div class="kv"><span class="k">Total PnL</span><span id="gs-pnl">--</span></div>
+  </div>
+
+  <div class="card card-full">
+    <div class="card-title">Levels</div>
     <table>
-      <thead><tr><th>Lvl</th><th>Side</th><th>Price</th><th>Status</th><th>Counter</th></tr></thead>
-      <tbody id="grid-tbody"><tr><td colspan="5" class="text-dim">loading...</td></tr></tbody>
+      <thead><tr><th>ID</th><th>Side</th><th>Price</th><th>Status</th></tr></thead>
+      <tbody id="tb-levels"><tr><td colspan="4" class="td">loading...</td></tr></tbody>
     </table>
   </div>
 
-  <!-- Cycle History -->
   <div class="card card-full">
     <div class="card-title">Cycle History</div>
     <table>
-      <thead><tr><th>Time</th><th>Level</th><th>Entry</th><th>Exit</th><th>PnL</th><th>Cum.</th></tr></thead>
-      <tbody id="history-tbody"><tr><td colspan="6" class="text-dim">loading...</td></tr></tbody>
+      <thead><tr><th>Time</th><th>Level</th><th>Entry</th><th>Exit</th><th>PnL</th></tr></thead>
+      <tbody id="tb-cycles"><tr><td colspan="5" class="td">loading...</td></tr></tbody>
     </table>
   </div>
 </div>
 
 <script>
-const $ = id => document.getElementById(id);
-const fmt = (v, d=2) => v != null ? Number(v).toFixed(d) : '--';
-const fmtUsd = v => v != null ? '$' + Number(v).toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2}) : '--';
+const $=id=>document.getElementById(id);
+const f=(v,d=2)=>v!=null?Number(v).toFixed(d):'--';
+const usd=v=>v!=null?'$'+Number(v).toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2}):'--';
 
-async function doPost(url) {
-  try { await fetch(url, {method:'POST'}); } catch(e) { console.error(e); }
-}
-async function toggleAutotrading() {
-  try { await fetch('/api/autotrading', {method:'POST'}); } catch(e) { console.error(e); }
-}
+async function post(u){try{await fetch(u,{method:'POST'})}catch(e){console.error(e)}}
+async function get(u){try{const r=await fetch(u);return r.ok?await r.json():null}catch{return null}}
 
-async function fetchJson(url) {
-  try { const r = await fetch(url); if(!r.ok) return null; return await r.json(); } catch { return null; }
-}
-
-async function refresh() {
-  const [market, engine, risk, signals, regime] = await Promise.all([
-    fetchJson('/api/market'),
-    fetchJson('/api/engine/state'),
-    fetchJson('/api/risk/state'),
-    fetchJson('/api/signals'),
-    fetchJson('/api/regime'),
+async function tick(){
+  const [status,market,state,overview]=await Promise.all([
+    get('/api/status'),get('/api/market'),get('/api/engine/state'),get('/api/engine/overview')
   ]);
 
-  // Market
-  if (market) {
-    $('btc-price').textContent = fmtUsd(market.price || market.last);
-    $('m-high').textContent = fmtUsd(market.high_24h || market.high);
-    $('m-low').textContent = fmtUsd(market.low_24h || market.low);
-    $('m-fund').textContent = market.funding_rate != null ? (Number(market.funding_rate)*100).toFixed(4)+'%' : '--';
+  if(status){
+    const b=$('badge'),mode=status.status||status.mode||'stopped';
+    b.textContent=mode.toUpperCase();
+    b.className='badge '+(mode.match(/run|active|live/i)?'badge-run':mode.match(/pause/i)?'badge-pause':'badge-stop');
+    if(status.daily_pnl!=null){const el=$('gs-pnl');el.textContent=usd(status.daily_pnl);el.className=(status.daily_pnl>=0?'tg':'tr')}
+    if(status.balance!=null)$('bal').textContent=usd(status.balance);
   }
 
-  // Engine state (grid levels)
-  if (engine) {
-    const mode = engine.mode || engine.status || 'UNKNOWN';
-    const badge = $('mode-badge');
-    badge.textContent = mode.toUpperCase();
-    badge.className = 'badge ' + (
-      mode.match(/active|running|live/i) ? 'badge-active' :
-      mode.match(/pause/i) ? 'badge-paused' : 'badge-frozen'
-    );
+  if(market){
+    $('price').textContent=usd(market.price||market.last);
+    $('hi').textContent=usd(market.high_24h||market.high);
+    $('lo').textContent=usd(market.low_24h||market.low);
+  }
 
-    $('balance').textContent = fmtUsd(engine.balance || engine.equity);
-    $('g-center').textContent = fmtUsd(engine.center_price);
-    $('g-spacing').textContent = engine.spacing_pct != null ? fmt(engine.spacing_pct,3)+'%' : '--';
-    $('g-cycles').textContent = engine.active_cycles ?? engine.completed_cycles ?? '--';
+  if(state){
+    if(state.balance&&!status)$('bal').textContent=usd(state.balance);
+    $('gs-center').textContent=usd(state.center_price);
+    $('gs-spacing').textContent=state.spacing_pct!=null?f(state.spacing_pct,3)+'%':'--';
+    const lvls=state.levels||state.grid_levels||[];
+    $('gs-levels').textContent=lvls.length;
+    if(state.completed_cycles!=null)$('gs-cycles').textContent=state.completed_cycles;
 
-    // Heartbeat
-    if (engine.ts || engine.timestamp) {
-      const t = new Date(engine.ts || engine.timestamp);
-      $('hb-time').textContent = t.toLocaleTimeString('ko');
-      const age = (Date.now() - t.getTime())/1000;
-      $('hb-dot').style.background = age < 10 ? 'var(--green)' : age < 30 ? 'var(--yellow)' : 'var(--red)';
-    }
-
-    // Grid levels table
-    const levels = engine.levels || engine.grid_levels || [];
-    if (levels.length) {
-      $('grid-tbody').innerHTML = levels.map(lv => {
-        const side = (lv.side||'').toLowerCase();
-        const sideClass = side === 'buy' ? 'text-green' : 'text-red';
-        const status = lv.status || lv.state || '--';
-        const counter = lv.counter_status || lv.counter || '--';
-        return `<tr>
-          <td>${lv.level ?? lv.id ?? '--'}</td>
-          <td class="${sideClass}">${(lv.side||'--').toUpperCase()}</td>
-          <td>${fmtUsd(lv.price)}</td>
-          <td>${status}</td>
-          <td>${counter}</td>
-        </tr>`;
-      }).join('');
-    }
-
-    // Cycle history from engine overview
-    const cycles = engine.cycles || engine.history || [];
-    if (cycles.length) {
-      let cum = 0;
-      $('history-tbody').innerHTML = cycles.slice(-20).map(c => {
-        cum += (c.pnl || 0);
-        const pnlClass = (c.pnl||0) >= 0 ? 'text-green' : 'text-red';
-        const t = c.time || c.ts || c.closed_at || '';
-        const timeStr = t ? new Date(t).toLocaleString('ko',{hour:'2-digit',minute:'2-digit',second:'2-digit'}) : '--';
-        return `<tr>
-          <td>${timeStr}</td>
-          <td>${c.level ?? '--'}</td>
-          <td>${fmtUsd(c.entry)}</td>
-          <td>${fmtUsd(c.exit)}</td>
-          <td class="${pnlClass}">${fmt(c.pnl)}</td>
-          <td>${fmt(cum)}</td>
-        </tr>`;
+    if(lvls.length){
+      $('tb-levels').innerHTML=lvls.map(l=>{
+        const s=(l.side||'').toLowerCase();
+        return`<tr><td>${l.level??l.id??'--'}</td><td class="${s==='buy'?'tg':'tr'}">${(l.side||'--').toUpperCase()}</td><td>${usd(l.price)}</td><td>${l.status||l.state||'--'}</td></tr>`;
       }).join('');
     }
   }
 
-  // Risk
-  if (risk) {
-    $('r-daily').textContent = fmtUsd(risk.daily_pnl ?? risk.pnl_today);
-    $('r-daily').className = (risk.daily_pnl??risk.pnl_today??0) >= 0 ? 'text-green' : 'text-red';
-    $('r-streak').textContent = risk.streak ?? '--';
-    $('r-balance').textContent = fmtUsd(risk.balance ?? risk.equity);
-    $('r-dd').textContent = risk.drawdown_pct != null ? fmt(risk.drawdown_pct)+'%' : '--';
-  }
-
-  // Signals
-  if (signals) {
-    $('s-obi').textContent = fmt(signals.obi ?? signals.OBI, 3);
-    $('s-cvd').textContent = fmt(signals.cvd ?? signals.CVD, 1);
-    $('s-vol').textContent = fmt(signals.volume ?? signals.vol, 1);
-    $('s-cusum').textContent = fmt(signals.cusum ?? signals.CUSUM, 3);
-  }
-
-  // Regime
-  if (regime) {
-    const crs = regime.crs ?? regime.CRS ?? 0;
-    $('crs-val').textContent = fmt(crs, 3);
-    const pct = ((crs + 1) / 2) * 100;
-    $('crs-marker').style.left = pct + '%';
-    const fill = $('crs-fill');
-    if (crs >= 0) {
-      fill.style.left = '50%'; fill.style.width = (pct-50)+'%'; fill.style.background = 'var(--green)';
-    } else {
-      fill.style.left = pct+'%'; fill.style.width = (50-pct)+'%'; fill.style.background = 'var(--red)';
-    }
-    $('regime-mode').textContent = regime.mode || regime.regime || '--';
+  const cycles=(overview&&(overview.cycles||overview.history||overview.trades))||
+               (state&&(state.cycles||state.history))||[];
+  if(cycles.length){
+    if(!$('gs-cycles').textContent||$('gs-cycles').textContent==='--')$('gs-cycles').textContent=cycles.length;
+    let cum=0;
+    const rows=cycles.slice(-20);
+    if(overview&&overview.total_pnl!=null){const el=$('gs-pnl');el.textContent=usd(overview.total_pnl);el.className=(overview.total_pnl>=0?'tg':'tr')}
+    $('tb-cycles').innerHTML=rows.map(c=>{
+      cum+=(c.pnl||0);
+      const t=c.time||c.ts||c.closed_at||'';
+      const ts=t?new Date(t).toLocaleTimeString('ko'):'--';
+      return`<tr><td>${ts}</td><td>${c.level??'--'}</td><td>${usd(c.entry)}</td><td>${usd(c.exit)}</td><td class="${(c.pnl||0)>=0?'tg':'tr'}">${f(c.pnl)}</td></tr>`;
+    }).join('');
   }
 }
 
-// Also try fetching overview for history if engine/state doesn't have it
-async function fetchHistory() {
-  const ov = await fetchJson('/api/engine/overview');
-  if (ov && (ov.cycles || ov.history || ov.trades)) {
-    const cycles = ov.cycles || ov.history || ov.trades || [];
-    if (cycles.length) {
-      let cum = 0;
-      $('history-tbody').innerHTML = cycles.slice(-20).map(c => {
-        cum += (c.pnl || 0);
-        const pnlClass = (c.pnl||0) >= 0 ? 'text-green' : 'text-red';
-        const t = c.time || c.ts || c.closed_at || '';
-        const timeStr = t ? new Date(t).toLocaleString('ko',{hour:'2-digit',minute:'2-digit',second:'2-digit'}) : '--';
-        return `<tr>
-          <td>${timeStr}</td>
-          <td>${c.level ?? '--'}</td>
-          <td>${fmtUsd(c.entry)}</td>
-          <td>${fmtUsd(c.exit)}</td>
-          <td class="${pnlClass}">${fmt(c.pnl)}</td>
-          <td>${fmt(cum)}</td>
-        </tr>`;
-      }).join('');
-    }
-  }
-}
-
-refresh();
-fetchHistory();
-setInterval(refresh, 3000);
-setInterval(fetchHistory, 10000);
+tick();
+setInterval(tick,5000);
 </script>
 </body>
 </html>
