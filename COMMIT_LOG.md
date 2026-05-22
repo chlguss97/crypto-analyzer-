@@ -1,12 +1,13 @@
 # Commit Log
 
 > 자동 생성 — `scripts/update_commit_log.sh` (매 커밋 후 실행)
-> Updated: 2026-05-22 13:06:45    
-> Total commits: 420 (2026-04-03 → 2026-05-22)
+> Updated: 2026-05-22 13:13:18    
+> Total commits: 421 (2026-04-03 → 2026-05-22)
 
 Claude 가 질문/변경 작업 시 이 파일을 참고해서 과거 변경 이력 컨텍스트를 확보합니다. 수동 편집 금지 — 다음 커밋 시 덮어써집니다.
 
 ## 2026-05-22
+- `eb7abe87` fix: AUDIT MEDIUM 항목 전부 처리 — 레거시 0건 달성
 - `ea379e55` fix: AUDIT 전수검사 결과 수정 — CRITICAL/HIGH 전부 처리
 - `57bb2742` feat: Phase 1+2 — RegimeDetector 신규 + GridEngine 연동
 - `50b4f563` refactor: Phase 0 레거시 전면 삭제 — Grid v3 클린 코드베이스

@@ -126,7 +126,7 @@ class GridBot:
     # ══════════════════════════════════════════════════
 
     async def periodic_candle_update(self):
-        """캔들 REST 백업 (60초, ATR용)"""
+        """캔들 REST 백업 (120초, WS가 실시간 처리하므로 백업용)"""
         while self._running:
             try:
                 for tf in ["1m", "5m", "15m", "1h", "4h", "1d", "1w"]:
@@ -135,7 +135,7 @@ class GridBot:
                         await self.db.insert_candles(self.symbol, tf, candles)
             except Exception as e:
                 logger.error(f"캔들 REST 에러: {e}")
-            await asyncio.sleep(60)
+            await asyncio.sleep(120)
 
     async def periodic_daily_reset(self):
         last_reset_date = None

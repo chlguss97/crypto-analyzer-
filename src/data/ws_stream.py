@@ -5,14 +5,11 @@ OKX WebSocket — Grid Trading 데이터 수집
   1. trades → CVD 5m/15m/1h + Volume tracking
   2. tickers → 가격/ticker
   3. candle 7종 → DB 직접 저장 + 이벤트 발행
-  4. books5 → 호가 불균형 (OBI) + spread
+  4. books5 → OBI (인메모리, ws.obi 프로퍼티)
 
 Redis 키:
   rt:price:BTC-USDT-SWAP         — 가격
   rt:ticker:BTC-USDT-SWAP        — ticker
-  rt:velocity:BTC-USDT-SWAP      — 가격 변속도
-  rt:micro:book_imbalance        — OBI
-  rt:micro:spread                — spread
 """
 
 import asyncio
@@ -47,10 +44,6 @@ class WebSocketStream:
         self._cvd_reset_5m = 0
         self._cvd_reset_15m = 0
         self._cvd_reset_1h = 0
-
-        # 가격 변속도 추적
-        self._price_window = []
-        self._price_window_max = 120
 
         # Trade 버퍼 (volume spike detection용)
         self._trades: deque = deque(maxlen=50000)
@@ -280,40 +273,12 @@ class WebSocketStream:
         self._trades.append((now_f, side, size, price, size_usd))
         self._price_history.append((now_f, price))
 
-        # CVD 스냅샷 (5초 간격)
-        if now_f - self._last_cvd_snap >= 5:
+        # CVD 스냅샷 (2초 간격)
+        if now_f - self._last_cvd_snap >= 2:
             self._cvd_snapshots.append((now_f, self._cvd_5m))
             self._last_cvd_snap = now_f
 
         self._trade_count += 1
-
-        # ── 가격 변속도 ──
-        if price > 0 and ts > 0:
-            self._price_window.append((ts, price))
-            cutoff = ts - 60_000
-            while self._price_window and self._price_window[0][0] < cutoff:
-                self._price_window.pop(0)
-
-            if len(self._price_window) >= 5:
-                prices_in_window = [p for _, p in self._price_window]
-                win_high = max(prices_in_window)
-                win_low = min(prices_in_window)
-                oldest_price = self._price_window[0][1]
-
-                ts_10s = ts - 10_000
-                prices_10s = [p for t, p in self._price_window if t >= ts_10s]
-                ts_30s = ts - 30_000
-                prices_30s = [p for t, p in self._price_window if t >= ts_30s]
-
-                await self.redis.hset(f"rt:velocity:{SYMBOL}", {
-                    "range_60s": str(round(win_high - win_low, 1)),
-                    "move_60s": str(round(price - oldest_price, 1)),
-                    "range_30s": str(round((max(prices_30s) - min(prices_30s)) if len(prices_30s) >= 2 else 0, 1)),
-                    "move_30s": str(round((price - prices_30s[0]) if prices_30s else 0, 1)),
-                    "range_10s": str(round((max(prices_10s) - min(prices_10s)) if len(prices_10s) >= 2 else 0, 1)),
-                    "move_10s": str(round((price - prices_10s[0]) if prices_10s else 0, 1)),
-                    "ts": str(ts),
-                }, ttl=30)
 
         # ── CVD 윈도우 리셋 ──
         now_sec = int(now_f)
@@ -398,8 +363,6 @@ class WebSocketStream:
             spread = float(asks[0][0]) - float(bids[0][0])
 
             self._last_obi = imbalance
-            await self.redis.set("rt:micro:book_imbalance", str(round(imbalance, 4)), ttl=15)
-            await self.redis.set("rt:micro:spread", str(round(spread, 2)), ttl=15)
 
         except Exception:
             pass

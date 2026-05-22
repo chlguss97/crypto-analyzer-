@@ -206,36 +206,8 @@ class BinanceStream:
             logger.debug(f"aggTrade 처리 에러: {e}")
 
     async def _flush_to_redis(self, now: float):
-        """CVD/Whale/Vol을 Redis에 저장"""
-        try:
-            # CVD
-            await self.redis.set("flow:combined:cvd_5m", str(round(self._cvd_5m, 2)), ttl=400)
-            await self.redis.set("flow:combined:cvd_15m", str(round(self._cvd_15m, 2)), ttl=1200)
-            await self.redis.set("flow:combined:cvd_1h", str(round(self._cvd_1h, 2)), ttl=4800)
-
-            # Whale bias (최근 5분)
-            cutoff = now - WHALE_WINDOW_SEC
-            recent_whales = [w for w in self._whales if w["ts"] > cutoff]
-            if recent_whales:
-                buy_vol = sum(w["size_usd"] for w in recent_whales if w["side"] == "buy")
-                sell_vol = sum(w["size_usd"] for w in recent_whales if w["side"] == "sell")
-                total = buy_vol + sell_vol
-                bias = (buy_vol - sell_vol) / total if total > 0 else 0
-                await self.redis.set("flow:combined:whale_bias", str(round(bias, 4)), ttl=600)
-
-            # VPIN (50버킷 이동 평균)
-            if len(self._vpin_buckets) >= 10:
-                vpin = sum(self._vpin_buckets) / len(self._vpin_buckets)
-                await self.redis.set("rt:micro:vpin", str(round(vpin, 4)), ttl=30)
-
-            # Vol ratio (1분 거래 수 대비 20분 평균)
-            if self._vol_avg_20:
-                avg = sum(self._vol_avg_20) / len(self._vol_avg_20)
-                ratio = self._trade_count_1m / avg if avg > 0 else 1.0
-                await self.redis.set("bn:vol_ratio_1m", str(round(ratio, 2)), ttl=120)
-
-        except Exception as e:
-            logger.debug(f"Redis flush 에러: {e}")
+        """Binance 데이터 Redis 저장 (funding/OI만 유지, 나머지는 미사용 제거)"""
+        pass  # funding/OI는 REST 폴링에서 직접 저장
 
     # ══════════════════════════════════════════
     #  REST — 청산/펀딩/OI (기존 유지)

@@ -130,9 +130,9 @@ class GridEngine:
                     async with self._lock:
                         await self._monitor_tick()
 
-                    # 리밸런스 (60초마다)
+                    # 리밸런스 (30초마다)
                     now = time.time()
-                    if now - rebalance_check >= 60:
+                    if now - rebalance_check >= 30:
                         rebalance_check = now
                         async with self._lock:
                             await self._check_rebalance()
@@ -223,7 +223,7 @@ class GridEngine:
 
         # 30초마다 상태 로그
         now = time.time()
-        if now - getattr(self, "_last_status_log", 0) >= 10:
+        if now - getattr(self, "_last_status_log", 0) >= 30:
             self._last_status_log = now
             price_str = await self.redis.get("rt:price:BTC-USDT-SWAP")
             price = float(price_str) if price_str else 0

@@ -184,12 +184,11 @@ class TelegramNotifier:
 
             text = f"\U0001f310 <b>Market</b>\n\nBTC: ${float(price):,.1f}\nRegime: {icon} {regime}"
 
-            # 속도
+            # CRS
             if self.redis:
-                vel = await self.redis.hgetall("rt:velocity:BTC-USDT-SWAP")
-                if vel:
-                    text += f"\n60s Range: ${float(vel.get('range_60s', 0)):.0f}"
-                    text += f"\n60s Move: ${float(vel.get('move_60s', 0)):+.0f}"
+                crs = await self.redis.get("regime:crs")
+                if crs:
+                    text += f"\nCRS: {float(crs):.3f}"
 
             await self._send(text)
         except Exception as e:

@@ -29,9 +29,9 @@ grid:
 regime:
   pause_threshold: 0.35           # |CRS| ≥ 0.35 → PAUSED
   resume_threshold: 0.15          # |CRS| < 0.15 → ACTIVE
-  pause_confirm_sec: 5            # 정지 확인 시간
-  resume_confirm_sec: 30          # 복귀 확인 시간
-  mode_switch_cooldown_sec: 30    # 모드 전환 최소 간격
+  pause_confirm_sec: 2            # 정지 확인 (2초 — 빠르게 멈춤)
+  resume_confirm_sec: 15          # 복귀 확인 (15초 — 안정 확인 후 재개)
+  mode_switch_cooldown_sec: 15    # 모드 전환 최소 간격
   # 서킷브레이커
   circuit_breaker_pct: 2.0        # X% 이동
   circuit_breaker_window_sec: 10  # Y초 내
