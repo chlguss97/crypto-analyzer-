@@ -28,8 +28,13 @@ scalp:
   macd_slow: 26
   macd_signal: 9
 
-  # SL — ATR 기반
-  sl_atr_mult: 1.0              # ATR × 배수
+  # 볼린저밴드 (타점 + SL)
+  bb_period: 20                 # Jay "20이평" 기준
+  bb_std: 2.0                   # 표준편차
+  bb_mid_avoid_pct: 30          # BB 중간 ±15% 구간 매매 금지 (35~65%)
+
+  # SL — BB 밴드 이탈 (primary) + ATR fallback
+  sl_atr_mult: 1.0              # ATR × 배수 (BB 없을 때 fallback)
   sl_min_pct: 0.5               # 최소 SL %
   sl_max_pct: 2.0               # 최대 SL %
 

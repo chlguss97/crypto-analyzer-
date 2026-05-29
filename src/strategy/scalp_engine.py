@@ -1,14 +1,15 @@
 """
-ScalpEngine — Jay 단타법 (StochRSI + MACD)
+ScalpEngine — Jay 단타법 (볼린저밴드 + StochRSI + MACD)
 
 BTC 무기한 선물 단타 매매. 후행 확인 후 진입, 먹고 나감.
 파라미터 시작 시 1회 설정.
 
 매매 로직:
-  롱 진입: StochRSI 바닥권 골크 + MACD 골크
-  숏 진입: StochRSI 상단권 데크 + MACD 데크
+  타점: 볼린저밴드 상단(숏) / 하단(롱) 에서만 진입
+  신호: StochRSI 크로스 + MACD 크로스
+  금지: BB 중간(20이평) 근처 매매 금지
   청산: StochRSI 반대편 도달
-  SL: ATR × 1.0 (clamp 0.5%~2.0%)
+  SL: BB 밴드 이탈 (롱→하단 이탈, 숏→상단 이탈)
 """
 
 import asyncio
@@ -18,7 +19,7 @@ import time
 
 import numpy as np
 
-from src.strategy.indicators import stoch_rsi, macd, atr
+from src.strategy.indicators import stoch_rsi, macd, atr, bollinger_bands
 from src.strategy.scalp_state import (
     ScalpState, save_scalp_state, load_scalp_state,
 )
@@ -62,10 +63,15 @@ class ScalpEngine:
         self.macd_slow = cfg.get("macd_slow", 26)
         self.macd_signal = cfg.get("macd_signal", 9)
 
-        # SL
-        self.sl_atr_mult = cfg.get("sl_atr_mult", 1.0)
-        self.sl_min_pct = cfg.get("sl_min_pct", 0.5)
-        self.sl_max_pct = cfg.get("sl_max_pct", 2.0)
+        # 볼린저밴드 (타점)
+        self.bb_period = cfg.get("bb_period", 20)
+        self.bb_std = cfg.get("bb_std", 2.0)
+        self.bb_mid_avoid_pct = cfg.get("bb_mid_avoid_pct", 30)  # BB 중간 ±30% 구간 매매 금지
+
+        # BB 밴드 값 (SL 체크용, 캔들 닫힐 때 갱신)
+        self._bb_upper = 0.0
+        self._bb_lower = 0.0
+        self._bb_middle = 0.0
 
         # 안전장치
         safety = (config or {}).get("safety", {})
@@ -177,7 +183,7 @@ class ScalpEngine:
     # ══════════════════════════════════════════
 
     async def _on_candle_close(self):
-        """1h 캔들 닫힐 때 StochRSI + MACD 평가"""
+        """캔들 닫힐 때 BB + StochRSI + MACD 평가"""
         candles = await self.db.get_candles(self.symbol, self.timeframe, limit=100)
         if len(candles) < 60:
             logger.warning(f"[SCALP] 캔들 부족: {len(candles)}개 (최소 60)")
@@ -186,8 +192,9 @@ class ScalpEngine:
         closes = np.array([c["close"] for c in candles], dtype=float)
         highs = np.array([c["high"] for c in candles], dtype=float)
         lows = np.array([c["low"] for c in candles], dtype=float)
+        price = closes[-1]
 
-        # 지표 계산
+        # ── 지표 계산 ──
         k_line, d_line = stoch_rsi(
             closes, self.srsi_period, self.srsi_period,
             self.srsi_k_smooth, self.srsi_d_smooth
@@ -195,8 +202,11 @@ class ScalpEngine:
         macd_line, signal_line, _ = macd(
             closes, self.macd_fast, self.macd_slow, self.macd_signal
         )
+        bb_upper, bb_middle, bb_lower = bollinger_bands(
+            closes, self.bb_period, self.bb_std
+        )
 
-        # 최근 2개 값 (크로스 감지)
+        # NaN 체크
         if np.isnan(k_line[-1]) or np.isnan(k_line[-2]):
             logger.debug("[SCALP] 지표 NaN — 데이터 부족")
             return
@@ -204,11 +214,18 @@ class ScalpEngine:
             return
         if np.isnan(signal_line[-1]) or np.isnan(signal_line[-2]):
             return
+        if np.isnan(bb_upper[-1]) or np.isnan(bb_lower[-1]):
+            return
 
         k_now, k_prev = k_line[-1], k_line[-2]
         d_now, d_prev = d_line[-1], d_line[-2]
         m_now, m_prev = macd_line[-1], macd_line[-2]
         s_now, s_prev = signal_line[-1], signal_line[-2]
+
+        # BB 값 저장 (SL 체크용)
+        self._bb_upper = bb_upper[-1]
+        self._bb_middle = bb_middle[-1]
+        self._bb_lower = bb_lower[-1]
 
         # 크로스 감지
         srsi_golden = (k_prev <= d_prev) and (k_now > d_now)
@@ -219,16 +236,26 @@ class ScalpEngine:
         srsi_bottom = k_now < self.srsi_os  # < 20
         srsi_top = k_now > self.srsi_ob     # > 80
 
-        # ATR 기반 SL 계산
-        atr_vals = atr(highs, lows, closes, period=14)
-        if not np.isnan(atr_vals[-1]) and closes[-1] > 0:
-            atr_pct = atr_vals[-1] / closes[-1] * 100
-            self.state.sl_pct = max(self.sl_min_pct, min(self.sl_max_pct,
-                                    atr_pct * self.sl_atr_mult))
+        # BB 위치 판단
+        bb_range = self._bb_upper - self._bb_lower
+        if bb_range > 0:
+            bb_position = (price - self._bb_lower) / bb_range * 100  # 0=하단, 100=상단
+        else:
+            bb_position = 50
+
+        # BB 중간 구간 = 매매 금지 (Jay: "20이평만 피해서 매매하면 돈을 번다")
+        mid_low = 50 - self.bb_mid_avoid_pct / 2   # 35
+        mid_high = 50 + self.bb_mid_avoid_pct / 2   # 65
+        in_bb_middle = mid_low < bb_position < mid_high
+
+        # BB 상하단 근처 판단
+        near_bb_lower = bb_position < mid_low      # 하단 구간 (롱 타점)
+        near_bb_upper = bb_position > mid_high     # 상단 구간 (숏 타점)
 
         logger.info(
             f"[SCALP] 지표 | K={k_now:.1f} D={d_now:.1f} "
             f"MACD={m_now:.1f} Sig={s_now:.1f} | "
+            f"BB={bb_position:.0f}% (${self._bb_lower:,.0f}-${self._bb_upper:,.0f}) | "
             f"pos={self.state.position} pending={self.state.pending_signal}"
         )
 
@@ -251,13 +278,25 @@ class ScalpEngine:
             if time.time() - self.state.last_trade_time < self.cooldown_sec:
                 return
 
-        # ── 롱 신호 ──
-        if self._check_long_entry(srsi_golden, srsi_bottom, macd_golden, k_now):
+        # BB 중간 매매 금지
+        if in_bb_middle:
+            # 대기 신호도 BB 중간이면 진입 안 함 (등록만 유지)
+            if self.state.pending_signal:
+                self.state.signal_candle_count += 1
+                if self.state.signal_candle_count > self.signal_timeout:
+                    self.state.pending_signal = None
+            await save_scalp_state(self.redis, self.state)
             return
 
-        # ── 숏 신호 ──
-        if self._check_short_entry(srsi_death, srsi_top, macd_death, k_now):
-            return
+        # ── 롱 신호 (BB 하단 근처에서만) ──
+        if near_bb_lower:
+            if self._check_long_entry(srsi_golden, srsi_bottom, macd_golden, k_now):
+                return
+
+        # ── 숏 신호 (BB 상단 근처에서만) ──
+        if near_bb_upper:
+            if self._check_short_entry(srsi_death, srsi_top, macd_death, k_now):
+                return
 
         # ── 대기 신호 타임아웃 ──
         if self.state.pending_signal:
@@ -372,16 +411,19 @@ class ScalpEngine:
 
             await save_scalp_state(self.redis, self.state)
 
+            sl_ref = f"BB {'하단' if direction == 'long' else '상단'}"
+            sl_price = self._bb_lower if direction == "long" else self._bb_upper
+
             logger.info(
                 f"[SCALP] ENTRY {direction.upper()} @ ${fill_price:,.1f} | "
-                f"SL={self.state.sl_pct:.2f}%"
+                f"SL={sl_ref} ${sl_price:,.0f}"
             )
 
             if self.telegram:
                 icon = "\U0001f7e2" if direction == "long" else "\U0001f534"
                 await self.telegram._send(
                     f"{icon} <b>Scalp {direction.upper()}</b> @ ${fill_price:,.1f}\n"
-                    f"Size: {self.size_btc} BTC | SL: {self.state.sl_pct:.1f}%"
+                    f"Size: {self.size_btc} BTC | SL: {sl_ref} ${sl_price:,.0f}"
                 )
 
             _append_jsonl({
@@ -505,7 +547,13 @@ class ScalpEngine:
     # ══════════════════════════════════════════
 
     async def _check_stop_loss(self):
-        """ATR 기반 SL — 0.5초 간격 체크"""
+        """BB 밴드 이탈 SL — 0.5초 간격 체크
+
+        Jay: "볼밴이 터지면 틀린거. 내 손절은 하단이니까"
+        롱 → 가격이 BB 하단 이탈 시 청산
+        숏 → 가격이 BB 상단 이탈 시 청산
+        BB 값이 없으면 ATR 기반 fallback
+        """
         if not self.state or self.state.position == "flat":
             return
 
@@ -514,6 +562,27 @@ class ScalpEngine:
             return
         price = float(price_str)
 
+        # BB 밴드 이탈 체크 (primary)
+        if self._bb_lower > 0 and self._bb_upper > 0:
+            if self.state.position == "long" and price < self._bb_lower:
+                logger.warning(
+                    f"[SCALP] BB SL: price ${price:,.0f} < BB하단 ${self._bb_lower:,.0f}"
+                )
+                async with self._lock:
+                    if self.state.position != "flat":
+                        await self._close_position("bb_lower_breach")
+                return
+
+            if self.state.position == "short" and price > self._bb_upper:
+                logger.warning(
+                    f"[SCALP] BB SL: price ${price:,.0f} > BB상단 ${self._bb_upper:,.0f}"
+                )
+                async with self._lock:
+                    if self.state.position != "flat":
+                        await self._close_position("bb_upper_breach")
+                return
+
+        # ATR fallback (BB 값 없을 때)
         if self.state.position == "long":
             loss_pct = (self.state.entry_price - price) / self.state.entry_price * 100
         else:
@@ -521,7 +590,7 @@ class ScalpEngine:
 
         if loss_pct >= self.state.sl_pct:
             logger.warning(
-                f"[SCALP] STOP LOSS {loss_pct:.2f}% >= {self.state.sl_pct:.2f}%"
+                f"[SCALP] ATR SL fallback {loss_pct:.2f}% >= {self.state.sl_pct:.2f}%"
             )
             async with self._lock:
                 if self.state.position != "flat":
