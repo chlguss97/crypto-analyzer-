@@ -118,7 +118,7 @@ class ScalpBot:
         """캔들 REST 백업 (120초, WS가 실시간 처리하므로 백업용)"""
         while self._running:
             try:
-                for tf in ["1m", "5m", "15m", "1h", "4h", "1d", "1w"]:
+                for tf in ["1m", "5m", "15m", "30m", "1h", "4h", "1d", "1w"]:
                     candles = await self.candle_collector.fetch_candles(tf, limit=5)
                     if candles:
                         await self.db.insert_candles(self.symbol, tf, candles)

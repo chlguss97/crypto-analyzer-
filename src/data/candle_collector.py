@@ -126,6 +126,6 @@ class CandleCollector:
 
     async def backfill_all(self):
         """전체 타임프레임 백필"""
-        for tf, days in [("1m", 3), ("5m", 7), ("15m", 30), ("1h", 60),
-                         ("4h", 90), ("1d", 365), ("1w", 365)]:
+        for tf, days in [("1m", 3), ("5m", 7), ("15m", 30), ("30m", 30),
+                         ("1h", 60), ("4h", 90), ("1d", 365), ("1w", 365)]:
             await self.backfill(tf, days=days)

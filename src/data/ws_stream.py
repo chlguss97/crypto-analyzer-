@@ -78,20 +78,21 @@ class WebSocketStream:
                 ],
             }))
 
-            # Business: 캔들 7종
+            # Business: 캔들 8종 (30m 포함)
             await ws_biz.send(json.dumps({
                 "op": "subscribe",
                 "args": [
                     {"channel": "candle1m", "instId": symbol},
                     {"channel": "candle5m", "instId": symbol},
                     {"channel": "candle15m", "instId": symbol},
+                    {"channel": "candle30m", "instId": symbol},
                     {"channel": "candle1H", "instId": symbol},
                     {"channel": "candle4H", "instId": symbol},
                     {"channel": "candle1D", "instId": symbol},
                     {"channel": "candle1W", "instId": symbol},
                 ],
             }))
-            logger.info("OKX WS 구독: tickers + candle 7종")
+            logger.info("OKX WS 구독: tickers + candle 8종")
 
             self._ws_tasks_done = asyncio.Event()
 
