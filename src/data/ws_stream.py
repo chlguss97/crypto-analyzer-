@@ -3,7 +3,7 @@ OKX WebSocket — 실시간 데이터 수집 (tickers + candles)
 
 수집 항목:
   1. tickers → 가격/ticker
-  2. candle 7종 → DB 직접 저장 + 이벤트 발행
+  2. candle 8종 (30m 포함) → DB 직접 저장 + 이벤트 발행
 
 Redis 키:
   rt:price:BTC-USDT-SWAP         — 가격
@@ -189,7 +189,7 @@ class WebSocketStream:
         if candle_dict["close"] <= 0:
             return
 
-        tf_map = {"1m": "1m", "5m": "5m", "15m": "15m", "1H": "1h", "4H": "4h", "1D": "1d", "1W": "1w"}
+        tf_map = {"1m": "1m", "5m": "5m", "15m": "15m", "30m": "30m", "1H": "1h", "4H": "4h", "1D": "1d", "1W": "1w"}
         std_tf = tf_map.get(tf, tf.lower())
 
         if self.db and is_closed:

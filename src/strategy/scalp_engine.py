@@ -49,7 +49,6 @@ class ScalpEngine:
         self.size_btc = cfg.get("size_btc", 0.01)
         self.signal_timeout = cfg.get("signal_timeout_candles", 3)
         self.cooldown_sec = cfg.get("cooldown_sec", 0)
-        self.bb_filter = cfg.get("bollinger_filter", False)
 
         # StochRSI
         self.srsi_period = cfg.get("stoch_rsi_period", 14)
@@ -148,18 +147,14 @@ class ScalpEngine:
                             async with self._lock:
                                 await self._on_candle_close()
 
-                # 서킷브레이커 체크
                 now = time.time()
-                if now < self._cb_frozen_until:
-                    await asyncio.sleep(0.5)
-                    continue
 
                 # BOT_KILL 체크 (30초)
                 if now - self._last_kill_check >= 30:
                     self._last_kill_check = now
                     await self._check_bot_kill()
 
-                # 포지션 중 SL 체크
+                # SL 체크 — 서킷브레이커 동결 중에도 항상 동작
                 if self.state and self.state.position != "flat":
                     await self._check_stop_loss()
 
@@ -184,6 +179,11 @@ class ScalpEngine:
 
     async def _on_candle_close(self):
         """캔들 닫힐 때 BB + StochRSI + MACD 평가"""
+        # 서킷브레이커 동결 중 신규 진입 차단 (SL/청산은 별도 루프에서 동작)
+        if time.time() < self._cb_frozen_until:
+            logger.info("[SCALP] 서킷브레이커 동결 중 — 신호 평가 스킵")
+            return
+
         candles = await self.db.get_candles(self.symbol, self.timeframe, limit=100)
         if len(candles) < 60:
             logger.warning(f"[SCALP] 캔들 부족: {len(candles)}개 (최소 60)")
@@ -431,7 +431,9 @@ class ScalpEngine:
                 "direction": direction,
                 "price": fill_price,
                 "size_btc": self.size_btc,
-                "sl_pct": self.state.sl_pct,
+                "bb_upper": round(self._bb_upper, 1),
+                "bb_lower": round(self._bb_lower, 1),
+                "sl": f"BB {'하단' if direction == 'long' else '상단'} ${sl_price:,.0f}",
             })
 
     async def _close_position(self, reason: str):

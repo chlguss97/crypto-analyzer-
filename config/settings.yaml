@@ -14,7 +14,6 @@ scalp:
   size_btc: 0.01
   signal_timeout_candles: 3     # 두 번째 조건 대기 최대 캔들 수
   cooldown_sec: 0               # 매매 간 쿨다운 (0=없음)
-  bollinger_filter: false       # BB 추가 확인 (선택)
 
   # StochRSI (TradingView 기본)
   stoch_rsi_period: 14
