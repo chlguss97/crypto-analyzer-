@@ -98,20 +98,20 @@ class ScalpEngine:
         balance = await self.executor.get_balance()
         self._peak_balance = balance
 
-        # 레버리지 설정 (1회)
-        try:
-            await self.executor.set_leverage(self.leverage, "long")
-            await self.executor.set_leverage(self.leverage, "short")
-        except Exception as e:
-            logger.error(f"[SCALP] 레버리지 설정 실패: {e}")
-
-        # 크래시 복구
+        # 크래시 복구 (고아 포지션 먼저 정리)
         await self._recover()
         if not self.state:
             self.state = ScalpState(
                 is_active=True, created_at=time.time(),
                 peak_balance=balance,
             )
+
+        # 레버리지 설정 (복구 후 — 포지션 있으면 설정 불가)
+        try:
+            await self.executor.set_leverage(self.leverage, "long")
+            await self.executor.set_leverage(self.leverage, "short")
+        except Exception as e:
+            logger.error(f"[SCALP] 레버리지 설정 실패: {e}")
 
         logger.info(
             f"[SCALP] 엔진 시작 | TF={self.timeframe} | {self.leverage}x | "
