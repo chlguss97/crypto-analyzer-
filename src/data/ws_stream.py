@@ -1,5 +1,5 @@
 """
-OKX WebSocket — Grid Trading 데이터 수집 (Minimal)
+OKX WebSocket — 실시간 데이터 수집 (tickers + candles)
 
 수집 항목:
   1. tickers → 가격/ticker

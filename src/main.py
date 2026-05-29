@@ -1,8 +1,8 @@
 """
-GridEngine — BTC ATR-Adaptive Grid Trading
+ScalpBot — Jay 단타법 (StochRSI + MACD)
 
-4레벨 양방향 그리드 (2 buy + 2 sell).
-방향 예측 불필요 — 가격 진동에서 구조적 수익.
+BTC 무기한 선물 단타 자동매매.
+후행 확인 진입, 먹고 나감.
 """
 
 import asyncio
@@ -20,7 +20,7 @@ from src.utils.helpers import load_config, load_env
 from src.data.storage import Database, RedisClient
 from src.data.candle_collector import CandleCollector
 from src.data.ws_stream import WebSocketStream
-from src.strategy.grid_engine import GridEngine
+from src.strategy.scalp_engine import ScalpEngine
 from src.data.order_stream import OrderStream
 from src.trading.risk_manager import RiskManager
 from src.trading.executor import OrderExecutor
@@ -47,11 +47,11 @@ _fh.setLevel(logging.WARNING)
 _fh.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s", datefmt="%Y-%m-%d %H:%M:%S"))
 logging.getLogger().addHandler(_fh)
 
-logger = logging.getLogger("GridBot")
+logger = logging.getLogger("ScalpBot")
 
 
-class GridBot:
-    """BTC ATR-Adaptive Grid Trading Bot"""
+class ScalpBot:
+    """BTC Jay 단타법 자동매매 Bot"""
 
     def __init__(self):
         load_env()
@@ -68,8 +68,8 @@ class GridBot:
         self.executor = OrderExecutor()
         self.risk_manager = RiskManager(self.redis, executor=self.executor)
 
-        # 그리드 + 주문 WS
-        self.grid_engine: GridEngine | None = None
+        # 전략 + 주문 WS
+        self.engine: ScalpEngine | None = None
         self.order_stream: OrderStream = OrderStream()
 
         # 모니터링
@@ -81,7 +81,7 @@ class GridBot:
 
     async def initialize(self):
         logger.info("=" * 50)
-        logger.info("GridBot — ATR-Adaptive Grid Trading")
+        logger.info("ScalpBot — Jay 단타법 (StochRSI + MACD)")
         logger.info("=" * 50)
 
         await self.db.connect()
@@ -95,20 +95,20 @@ class GridBot:
         await self.risk_manager.initialize(balance)
         logger.info(f"잔고: ${balance:.2f}")
 
-        # 캔들 백필 (ATR 계산용)
+        # 캔들 백필 (지표 계산용)
         logger.info("캔들 백필 시작...")
         await self.candle_collector.backfill_all()
         logger.info("캔들 백필 완료")
 
-        # GridEngine 초기화
-        self.grid_engine = GridEngine(
+        # ScalpEngine 초기화
+        self.engine = ScalpEngine(
             executor=self.executor, db=self.db, redis=self.redis,
             telegram=self.telegram, risk_manager=self.risk_manager,
             config=self.config,
         )
-        # OrderStream → GridEngine 콜백 연결
-        self.order_stream.on_order_update = self.grid_engine.on_order_update
-        logger.info("[GRID] 그리드 엔진 + WS 체결 감지 초기화 완료")
+        # OrderStream → ScalpEngine 콜백 연결
+        self.order_stream.on_order_update = self.engine.on_order_update
+        logger.info("[SCALP] 스캘프 엔진 + WS 체결 감지 초기화 완료")
 
     # ══════════════════════════════════════════════════
     #  지원 루프들
@@ -140,14 +140,14 @@ class GridBot:
 
                 try:
                     bal = await self.executor.get_balance()
-                    grid_status = self.grid_engine.get_status() if self.grid_engine else {}
-                    grid_pnl = await self.db.get_grid_pnl_summary(hours=24)
+                    engine_status = self.engine.get_status() if self.engine else {}
+                    scalp_pnl = await self.db.get_scalp_pnl_summary(hours=24)
 
                     report = (
                         f"\U0001f4ca <b>Daily Report | {now_dt.strftime('%Y-%m-%d')}</b>\n\n"
                         f"Balance: ${bal:,.2f}\n"
-                        f"Grid: {'ACTIVE' if grid_status.get('active') else 'PAUSED'}\n"
-                        f"24h: {grid_pnl['cycles']}사이클 ${grid_pnl['pnl']:+.2f}"
+                        f"Scalp: {'ACTIVE' if engine_status.get('active') else 'PAUSED'}\n"
+                        f"24h: {scalp_pnl['trades']}건 ${scalp_pnl['pnl']:+.2f}"
                     )
                     await self.telegram._send(report)
                 except Exception:
@@ -170,13 +170,14 @@ class GridBot:
                 self._last_snap = _time.time()
                 try:
                     bal = float(await self.redis.get("sys:balance") or 0)
-                    grid_status = self.grid_engine.get_status() if self.grid_engine else {}
+                    engine_status = self.engine.get_status() if self.engine else {}
                     _append_jsonl({
                         "type": "hourly_snapshot",
                         "balance": round(bal, 2),
-                        "grid_active": grid_status.get("active", False),
-                        "grid_cycles": grid_status.get("total_cycles", 0),
-                        "grid_pnl": grid_status.get("total_pnl", 0),
+                        "scalp_active": engine_status.get("active", False),
+                        "scalp_trades": engine_status.get("total_trades", 0),
+                        "scalp_pnl": engine_status.get("total_pnl", 0),
+                        "win_rate": engine_status.get("win_rate", 0),
                     })
                 except Exception:
                     pass
@@ -197,9 +198,9 @@ class GridBot:
                 action = cmd.get("action")
                 logger.info(f"[CMD] {action}: {cmd}")
 
-                if action == "close_all" and self.grid_engine:
-                    await self.grid_engine.stop()
-                    logger.info("[CMD] 그리드 정지")
+                if action == "close_all" and self.engine:
+                    await self.engine.stop()
+                    logger.info("[CMD] 엔진 정지")
                 elif action == "notify":
                     await self.telegram._send(cmd.get("msg", ""))
             except asyncio.CancelledError:
@@ -216,23 +217,24 @@ class GridBot:
         await self.initialize()
         self._running = True
 
-        logger.info("봇 시작 — GridBot")
+        logger.info("봇 시작 — ScalpBot")
         await self.redis.set("sys:bot_status", "running")
         await self.redis.set("sys:autotrading", "on")
 
         self.telegram.redis = self.redis
         self.telegram.executor = self.executor
         self.telegram.risk_manager = self.risk_manager
-        self.telegram.grid_engine = self.grid_engine
+        self.telegram.engine = self.engine
 
         await self.telegram.notify_bot_status("running")
         try:
             bal = await self.executor.get_balance()
-            grid_cfg = self.config.get("grid", {})
+            scalp_cfg = self.config.get("scalp", {})
             await self.telegram._send(
-                f"\U0001f7e2 <b>GridBot v4 — Minimal Grid</b>\n"
-                f"Balance: ${bal:,.2f} | Leverage: {grid_cfg.get('leverage', 10)}x\n"
-                f"Size: {grid_cfg.get('size_btc', 0.01)} BTC/level | Spacing: {grid_cfg.get('spacing_min_pct', 0.15)}%~{grid_cfg.get('spacing_max_pct', 0.50)}%"
+                f"\U0001f7e2 <b>ScalpBot v5 — Jay 단타법</b>\n"
+                f"Balance: ${bal:,.2f} | Leverage: {scalp_cfg.get('leverage', 10)}x\n"
+                f"TF: {scalp_cfg.get('timeframe', '1h')} | Size: {scalp_cfg.get('size_btc', 0.01)} BTC\n"
+                f"MACD({scalp_cfg.get('macd_fast', 8)},{scalp_cfg.get('macd_slow', 26)},{scalp_cfg.get('macd_signal', 9)})"
             )
         except Exception:
             pass
@@ -242,8 +244,8 @@ class GridBot:
             asyncio.create_task(self.ws_stream.start()),
             asyncio.create_task(self.order_stream.start()),
             asyncio.create_task(self.periodic_candle_update()),
-            # 그리드
-            asyncio.create_task(self.grid_engine.run()),
+            # 전략
+            asyncio.create_task(self.engine.run()),
             # 지원
             asyncio.create_task(self.periodic_daily_reset()),
             asyncio.create_task(self.periodic_heartbeat()),
@@ -267,8 +269,8 @@ class GridBot:
 
     async def cleanup(self):
         logger.info("=== Graceful Shutdown ===")
-        if self.grid_engine:
-            await self.grid_engine.stop()
+        if self.engine:
+            await self.engine.stop()
         await self.candle_collector.close()
         await self.executor.close()
         await self.redis.close()
@@ -278,7 +280,7 @@ class GridBot:
 # ── 엔트리포인트 ──
 
 async def main():
-    engine = GridBot()
+    engine = ScalpBot()
 
     loop = asyncio.get_event_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):

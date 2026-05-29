@@ -4,7 +4,7 @@ OKX Private WebSocket — 주문 상태 실시간 수신
 orders 채널 구독 → 체결/취소 즉시 콜백
 REST 폴링(1초)보다 20배 빠름 (10~50ms)
 
-사용: grid_engine이 on_order_update 콜백 등록
+사용: scalp_engine이 on_order_update 콜백 등록
 """
 
 import asyncio
@@ -31,7 +31,7 @@ class OrderStream:
         self._ws = None
         self._reconnect_count = 0
 
-        # 콜백: grid_engine이 등록
+        # 콜백: scalp_engine이 등록
         self.on_order_update = None  # async callback(order_data)
 
     async def start(self):

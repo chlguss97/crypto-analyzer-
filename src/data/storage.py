@@ -1,7 +1,7 @@
 """
-Storage layer — SQLite (candles, grid_trades) + Redis async wrapper
+Storage layer — SQLite (candles, scalp_trades) + Redis async wrapper
 
-Grid-only: 캔들 + 그리드 사이클 기록
+Scalp Trading: 캔들 + 단타 매매 기록
 """
 
 import aiosqlite
@@ -34,12 +34,9 @@ CREATE TABLE IF NOT EXISTS candles (
 CREATE INDEX IF NOT EXISTS idx_candles_lookup
     ON candles(symbol, timeframe, timestamp DESC);
 
-CREATE TABLE IF NOT EXISTS grid_trades (
+CREATE TABLE IF NOT EXISTS scalp_trades (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    grid_id TEXT NOT NULL,
-    level_id INTEGER NOT NULL,
-    cycle_num INTEGER NOT NULL,
-    side TEXT NOT NULL,
+    direction TEXT NOT NULL,
     entry_price REAL NOT NULL,
     exit_price REAL NOT NULL,
     size_btc REAL NOT NULL,
@@ -47,14 +44,15 @@ CREATE TABLE IF NOT EXISTS grid_trades (
     fee_total REAL NOT NULL,
     entry_time INTEGER NOT NULL,
     exit_time INTEGER NOT NULL,
-    spacing_pct REAL NOT NULL
+    exit_reason TEXT NOT NULL,
+    timeframe TEXT NOT NULL
 );
-CREATE INDEX IF NOT EXISTS idx_grid_trades_ts ON grid_trades(exit_time DESC);
+CREATE INDEX IF NOT EXISTS idx_scalp_trades_ts ON scalp_trades(exit_time DESC);
 """
 
 
 class Database:
-    """SQLite 비동기 래퍼 — Grid Trading 스키마"""
+    """SQLite 비동기 래퍼 — Scalp Trading 스키마"""
 
     def __init__(self):
         self.db_path = DATA_DIR / "scalp.db"
@@ -128,29 +126,29 @@ class Database:
         row = await cursor.fetchone()
         return row[0] if row and row[0] else None
 
-    # ── Grid Trades ──
+    # ── Scalp Trades ──
 
-    async def insert_grid_trade(self, trade: dict) -> int:
+    async def insert_scalp_trade(self, trade: dict) -> int:
         cursor = await self._db.execute(
-            """INSERT INTO grid_trades
-               (grid_id, level_id, cycle_num, side, entry_price, exit_price,
-                size_btc, pnl_usdt, fee_total, entry_time, exit_time, spacing_pct)
-               VALUES (:grid_id, :level_id, :cycle_num, :side, :entry_price, :exit_price,
-                       :size_btc, :pnl_usdt, :fee_total, :entry_time, :exit_time, :spacing_pct)""",
+            """INSERT INTO scalp_trades
+               (direction, entry_price, exit_price, size_btc, pnl_usdt,
+                fee_total, entry_time, exit_time, exit_reason, timeframe)
+               VALUES (:direction, :entry_price, :exit_price, :size_btc, :pnl_usdt,
+                       :fee_total, :entry_time, :exit_time, :exit_reason, :timeframe)""",
             trade,
         )
         await self._db.commit()
         return cursor.lastrowid
 
-    async def get_grid_pnl_summary(self, hours: int = 24) -> dict:
+    async def get_scalp_pnl_summary(self, hours: int = 24) -> dict:
         since = int(time.time() * 1000) - hours * 3600 * 1000
         row = await self._db.execute_fetchall(
             "SELECT COUNT(*), COALESCE(SUM(pnl_usdt),0), COALESCE(SUM(fee_total),0) "
-            "FROM grid_trades WHERE exit_time > ?", (since,)
+            "FROM scalp_trades WHERE exit_time > ?", (since,)
         )
         if row and row[0]:
-            return {"cycles": row[0][0], "pnl": row[0][1], "fees": row[0][2]}
-        return {"cycles": 0, "pnl": 0, "fees": 0}
+            return {"trades": row[0][0], "pnl": row[0][1], "fees": row[0][2]}
+        return {"trades": 0, "pnl": 0, "fees": 0}
 
 
 def _json_default(obj):

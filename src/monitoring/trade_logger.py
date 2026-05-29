@@ -1,12 +1,12 @@
 """
-TradeLogger — Grid Trading JSONL 로거
+TradeLogger — Scalp Trading JSONL 로거
 
 주간 JSONL 파일 + 텍스트 로그 파일.
 
 이벤트 타입:
-  - grid_cycle: 그리드 사이클 완성
+  - scalp_entry: 단타 진입
+  - scalp_exit: 단타 청산
   - hourly_snapshot: 시간별 스냅샷
-  - dgt_rebuild: DGT 경계 돌파 리빌드
 """
 
 import json
@@ -69,13 +69,13 @@ class TradeLogger:
             handler.suffix = "%Y-W%W"
             self.logger.addHandler(handler)
 
-    def log_grid_cycle(self, level_id: int, side: str,
-                       entry_price: float, exit_price: float,
-                       pnl: float, total_cycles: int):
+    def log_scalp_trade(self, direction: str, entry_price: float,
+                        exit_price: float, pnl: float, reason: str,
+                        total_trades: int):
         self.logger.info(
-            f"GRID CYCLE | Lv{level_id} {side.upper()} | "
-            f"${entry_price:,.1f} → ${exit_price:,.1f} | "
-            f"PnL ${pnl:+.3f} | 총 {total_cycles}사이클"
+            f"SCALP | {direction.upper()} | "
+            f"${entry_price:,.1f} -> ${exit_price:,.1f} | "
+            f"PnL ${pnl:+.3f} | {reason} | #{total_trades}"
         )
 
     def log_risk_event(self, event: str, detail: str = ""):

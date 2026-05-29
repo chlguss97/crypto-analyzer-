@@ -201,5 +201,5 @@ class RiskManager:
         return self._state["trade_count_today"]
 
     def is_trading_allowed(self) -> tuple[bool, str]:
-        """매매 가능 여부 — 항상 허용 (BOT_KILL은 grid_engine에서 직접 체크)"""
+        """매매 가능 여부 — 항상 허용 (BOT_KILL은 scalp_engine에서 직접 체크)"""
         return True, "OK"

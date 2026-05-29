@@ -1,31 +1,32 @@
-# GridBot v4 — Minimal Grid (Pionex 철학)
+# ScalpBot v5 — Jay 단타법 (StochRSI + MACD)
 
 ## 프로젝트 개요
 - BTC 무기한 선물(OKX) 자동매매 시스템
-- **현재 전략: Minimal Grid — 멈추지 않는 봇** (2026-05-22~)
-- 설계서: `SPEC_V4.md`
+- **현재 전략: Jay 단타법 — 후행 확인 매매** (2026-05-29~)
+- 설계서: `SPEC_V5.md`
 - 변경 인덱스: `COMMIT_LOG.md`
 - 운영 매뉴얼: `MANUAL.md`
 
 ## 설계 원칙
-1. **절대 멈추지 않는다** (가동률 = 수익)
-2. **파라미터 시작 시 1회 설정, 실행 중 불변** (Pionex 철학)
-3. **레짐 감지 없음** (오탐 비용 > 방어 이익)
-4. **추세는 그리드 구조가 자체 흡수**
-5. **DGT 리빌드**: 경계 돌파 시 즉시 center 재설정 (Chen et al. 2025)
+1. **후행 확인 후 진입** (예측 아닌 확인)
+2. **파라미터 시작 시 1회 설정, 실행 중 불변**
+3. **단순할수록 강건** (지표 2개만: StochRSI + MACD)
+4. **먹고 나간다** (StochRSI 도달 = 즉시 청산)
+5. **거짓 신호 필터** (소진 구간 스킵)
 
 ## 현재 전략
-- **레버리지**: 10x 고정 (Neutral 그리드, 순노출≈0)
-- **spacing**: ATR(14,5m) × 0.6, clamp [0.15%~0.50%], 기하식
-- **레벨**: 잔고 비례 자동 ($500→4, $1000→8)
-- **주문**: 전부 post-only limit (maker 0.02%)
-- **체결 감지**: OKX Private WS push (10~50ms) + REST 30초 fallback
+- **타임프레임**: 1h (Jay 권장 30m~1h)
+- **롱 진입**: StochRSI(14) K<20 골든크로스 + MACD(8,26,9) 골든크로스
+- **숏 진입**: StochRSI K>80 데드크로스 + MACD 데드크로스
+- **청산**: StochRSI 반대편 도달 (롱→K>80, 숏→K<20)
+- **SL**: ATR(14,1h) × 1.0, clamp [0.5%~2.0%]
+- **레버리지**: 10x 고정, isolated margin
+- **주문**: 시장가 (모멘텀 전략)
 - **안전장치**: 서킷브레이커(2%/10초) + BOT_KILL(-20%)
-- **리빌드**: DGT — 가격이 그리드 경계 돌파 시 즉시
 
 ## 기술스택
 - Python 3.11 / ccxt / FastAPI
-- DB: SQLite(scalp.db: candles + grid_trades) + Redis
+- DB: SQLite(scalp.db: candles + scalp_trades) + Redis
 - 알림: Telegram
 - 서버: Vultr Singapore, Docker Compose
 

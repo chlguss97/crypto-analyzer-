@@ -10,7 +10,7 @@ RETRY_DELAY = 2
 
 
 class OrderExecutor:
-    """OKX 주문 실행 — Grid Trading 전용 (limit post-only + 복구용 market)"""
+    """OKX 주문 실행 — limit post-only + market 주문"""
 
     def __init__(self):
         self.config = load_config()
@@ -138,13 +138,13 @@ class OrderExecutor:
         logger.error("시장가 주문 최종 실패")
         return None
 
-    # ── 그리드 트레이딩용 ──
+    # ── limit 주문 ──
 
     async def place_limit_order(
         self, side: str, size_btc: float, price: float,
         pos_side: str, reduce_only: bool = False,
     ) -> dict | None:
-        """그리드용 limit 주문: post-only, 즉시 반환 (체결 대기 없음)"""
+        """limit 주문: post-only, 즉시 반환 (체결 대기 없음)"""
         contracts = self._btc_to_contracts(size_btc)
         params = {"tdMode": "isolated", "posSide": pos_side, "postOnly": True}
         if reduce_only:
@@ -155,16 +155,16 @@ class OrderExecutor:
                 amount=contracts, price=round(price, 1), params=params,
             )
             logger.debug(
-                f"[GRID] limit {side} {size_btc}BTC @ ${price:.1f} "
+                f"[EXEC] limit {side} {size_btc}BTC @ ${price:.1f} "
                 f"id={order.get('id')} reduce={reduce_only}"
             )
             return order
         except Exception as e:
             err = str(e)
             if "51121" in err or "post only" in err.lower():
-                logger.debug(f"[GRID] post-only 거부 @ ${price:.1f}")
+                logger.debug(f"[EXEC] post-only 거부 @ ${price:.1f}")
             else:
-                logger.error(f"[GRID] limit order 실패: {e}")
+                logger.error(f"[EXEC] limit order 실패: {e}")
             return None
 
     async def cancel_order_by_id(self, order_id: str) -> bool:

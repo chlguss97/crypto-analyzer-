@@ -43,7 +43,6 @@ async def verify_auth(
             headers={"WWW-Authenticate": "Basic"},
         )
     if not DASHBOARD_PASS:
-        # 비밀번호 미설정 시 읽기 전용 모드 (매매 API 는 _require_auth 에서 별도 차단)
         return credentials.username
     correct_user = secrets.compare_digest(credentials.username, DASHBOARD_USER)
     correct_pass = secrets.compare_digest(credentials.password, DASHBOARD_PASS)
@@ -57,8 +56,8 @@ async def verify_auth(
 
 
 app = FastAPI(
-    title="GridBot v4",
-    version="3.0.0",
+    title="ScalpBot v5",
+    version="5.0.0",
     dependencies=[Depends(verify_auth)],
 )
 
@@ -72,7 +71,7 @@ app.add_middleware(
 
 @app.get("/health")
 async def health():
-    """컨테이너 헬스체크 — 인증 불필요. uvicorn 이벤트 루프 살아있으면 즉시 200"""
+    """컨테이너 헬스체크 — 인증 불필요"""
     return {
         "status": "ok",
         "initialized": _initialized,
@@ -92,7 +91,7 @@ load_env()
 config = load_config()
 db: Optional[Database] = None
 redis: Optional[RedisClient] = None
-executor = None  # 별도 컨테이너에서는 항상 None (매매 엔드포인트 비활성)
+executor = None
 
 logger.info(f"Dashboard 모듈 로드 완료 — user={DASHBOARD_USER} pass_set={bool(DASHBOARD_PASS)}")
 
@@ -100,17 +99,17 @@ logger.info(f"Dashboard 모듈 로드 완료 — user={DASHBOARD_USER} pass_set=
 # ── Request Models ──
 
 class ManualOrderRequest(BaseModel):
-    direction: str          # 'long' | 'short'
-    leverage: int = 10      # 1~100
-    margin_usdt: float      # 마진 금액 (USDT)
+    direction: str
+    leverage: int = 10
+    margin_usdt: float
     sl_price: Optional[float] = None
     tp_price: Optional[float] = None
-    order_type: str = "market"  # 'market' | 'limit'
+    order_type: str = "market"
     limit_price: Optional[float] = None
 
 class CloseRequest(BaseModel):
-    direction: str          # 'long' | 'short'
-    close_pct: float = 1.0  # 0~1 (부분 청산)
+    direction: str
+    close_pct: float = 1.0
 
 
 # ── Lazy Init (race-safe + timeout) ──
@@ -120,7 +119,6 @@ _init_lock = asyncio.Lock()
 
 
 async def _ensure_initialized():
-    """첫 API 호출 시 lazy DB/Redis 연결. Lock 으로 race 차단 + timeout 으로 hang 방지."""
     global _initialized, db, redis
     if _initialized and db is not None and redis is not None:
         return
@@ -130,15 +128,14 @@ async def _ensure_initialized():
         try:
             _db = Database()
             _rd = RedisClient()
-            # 각 connect 에 8초 timeout — 네트워크 이슈로 이벤트 루프 행 방지
             try:
                 await asyncio.wait_for(_db.connect(), timeout=8.0)
             except asyncio.TimeoutError:
-                logger.error("Dashboard DB connect timeout (8s) — 일부 API 불가")
+                logger.error("Dashboard DB connect timeout (8s)")
             try:
                 await asyncio.wait_for(_rd.connect(), timeout=5.0)
             except asyncio.TimeoutError:
-                logger.error("Dashboard Redis connect timeout (5s) — 일부 API 불가")
+                logger.error("Dashboard Redis connect timeout (5s)")
             db = _db
             redis = _rd
             _initialized = True
@@ -154,7 +151,6 @@ async def _ensure_initialized():
 async def startup():
     port = os.getenv("DASHBOARD_PORT", "8000")
     logger.info(f"Dashboard 시작 — uvicorn listening on 0.0.0.0:{port} (lazy init mode)")
-    # Redis 를 백그라운드에서 미리 초기화해둠 — 첫 요청 지연 방지. 실패해도 서버는 뜸.
     asyncio.create_task(_ensure_initialized())
 
 
@@ -179,17 +175,14 @@ async def shutdown():
 async def get_status():
     """봇 상태 조회"""
     await _ensure_initialized()
-    status = await redis.get("sys:bot_status") or "unknown"
+    bot_status = await redis.get("sys:bot_status") or "unknown"
     heartbeat = await redis.get("sys:last_heartbeat") or "0"
-
-    # 리스크 상태
     streak = await redis.get("risk:streak") or "0"
     daily_pnl = await redis.get("risk:daily_pnl") or "0"
-
     autotrading = await redis.get("sys:autotrading") or "off"
 
     return {
-        "status": status,
+        "status": bot_status,
         "last_heartbeat": heartbeat,
         "streak": int(streak),
         "daily_pnl_pct": float(daily_pnl),
@@ -204,13 +197,9 @@ async def get_position():
     """현재 활성 포지션"""
     symbol = config["exchange"]["symbol"]
     pos_data = await redis.hgetall(f"pos:active:{symbol}")
-
     if not pos_data:
         return {"active": False, "position": None}
-
-    # 현재가
     price = await redis.get("rt:price:BTC-USDT-SWAP")
-
     return {
         "active": True,
         "position": pos_data,
@@ -221,11 +210,19 @@ async def get_position():
 @app.get("/api/signals")
 async def get_signals():
     await _ensure_initialized()
-    """그리드 상태"""
-    grid_state = await redis.get_json("grid:state:BTC/USDT:USDT")
-    if not grid_state:
+    """스캘프 상태"""
+    from src.strategy.scalp_state import SCALP_REDIS_KEY
+    scalp_state = await redis.get_json(SCALP_REDIS_KEY)
+    if not scalp_state:
         return {"active": False}
-    return {"active": True, "center": grid_state.get("center_price"), "spacing": grid_state.get("spacing_pct")}
+    return {
+        "active": True,
+        "position": scalp_state.get("position", "flat"),
+        "entry_price": scalp_state.get("entry_price", 0),
+        "total_trades": scalp_state.get("total_trades", 0),
+        "total_pnl": scalp_state.get("total_pnl", 0),
+        "pending_signal": scalp_state.get("pending_signal"),
+    }
 
 
 @app.get("/api/candles")
@@ -242,11 +239,8 @@ async def get_candles(timeframe: str = "15m", limit: int = 200):
     )
     rows = await cursor.fetchall()
     candles = [dict(r) for r in reversed(rows)]
-
-    # lightweight-charts 포맷: timestamp를 초 단위로
     for c in candles:
         c["time"] = c["timestamp"] // 1000
-
     return {"candles": candles, "count": len(candles), "timeframe": timeframe}
 
 
@@ -255,7 +249,6 @@ async def get_candles(timeframe: str = "15m", limit: int = 200):
 @app.post("/api/pause")
 async def pause_bot():
     await _ensure_initialized()
-    """봇 일시정지"""
     await redis.set("sys:bot_status", "paused")
     logger.warning("봇 일시정지 (대시보드)")
     return {"status": "paused"}
@@ -264,7 +257,6 @@ async def pause_bot():
 @app.post("/api/resume")
 async def resume_bot():
     await _ensure_initialized()
-    """봇 재개"""
     await redis.set("sys:bot_status", "running")
     logger.info("봇 재개 (대시보드)")
     return {"status": "running"}
@@ -272,11 +264,10 @@ async def resume_bot():
 
 @app.post("/api/close-all")
 async def close_all():
-    """전 포지션 청산 (킬 스위치) — Redis 플래그 + 명령 큐"""
+    """전 포지션 청산 (킬 스위치)"""
     await _ensure_initialized()
     _require_auth()
     await redis.set("sys:bot_status", "stopped")
-    # bot 컨테이너가 명령 큐 구독 → close_all 실행
     await redis.rpush("cmd:bot", json.dumps({"action": "close_all", "reason": "dashboard_kill"}))
     logger.warning("킬 스위치 작동 (대시보드)")
     return {"status": "stopped", "message": "전 포지션 청산 요청 전송됨"}
@@ -291,7 +282,6 @@ async def get_market():
     ticker = await redis.hgetall("rt:ticker:BTC-USDT-SWAP")
     funding = await redis.get("rt:funding:BTC-USDT-SWAP")
     oi = await redis.get("rt:oi:BTC-USDT-SWAP")
-
     return {
         "ticker": ticker or {},
         "open_interest": float(oi) if oi else None,
@@ -300,17 +290,16 @@ async def get_market():
     }
 
 
-# ── 매매 엔드포인트 (별도 컨테이너: Redis 명령 큐 → bot 컨테이너가 실행) ──
+# ── 매매 엔드포인트 ──
 
 def _require_auth():
-    """매매 API는 비밀번호 필수"""
     if not DASHBOARD_PASS:
         raise HTTPException(403, "매매 API는 DASHBOARD_PASS 설정 필수")
 
 
 @app.post("/api/trade/open")
 async def manual_open(req: ManualOrderRequest):
-    """수동 매매 진입 — Redis 명령 큐로 bot 컨테이너에 위임"""
+    """수동 매매 진입 — Redis 명령 큐"""
     _require_auth()
     await _ensure_initialized()
     await redis.rpush("cmd:bot", json.dumps({
@@ -358,7 +347,7 @@ async def get_live_positions():
 
 @app.post("/api/autotrading")
 async def toggle_autotrading():
-    """자동매매 ON/OFF 토글 — Redis 플래그 + 알림 요청 큐"""
+    """자동매매 ON/OFF 토글"""
     await _ensure_initialized()
     current = await redis.get("sys:autotrading") or "off"
     new_state = "off" if current == "on" else "on"
@@ -383,7 +372,6 @@ class ManualTpRequest(BaseModel):
 
 @app.post("/api/position/sl")
 async def manual_update_sl(req: ManualSlRequest):
-    """사용자 SL 가격 수동 수정 — Redis 명령 큐"""
     _require_auth()
     await _ensure_initialized()
     sym = req.symbol or config["exchange"]["symbol"]
@@ -395,7 +383,6 @@ async def manual_update_sl(req: ManualSlRequest):
 
 @app.post("/api/position/tp")
 async def manual_update_tp(req: ManualTpRequest):
-    """사용자 TP1 가격 수동 수정 — Redis 명령 큐"""
     _require_auth()
     await _ensure_initialized()
     sym = req.symbol or config["exchange"]["symbol"]
@@ -408,7 +395,6 @@ async def manual_update_tp(req: ManualTpRequest):
 @app.get("/api/risk/state")
 async def get_risk_state():
     await _ensure_initialized()
-    """리스크 상태 (모니터링용)"""
     daily = await redis.get("risk:daily_pnl") or "0"
     streak = await redis.get("risk:streak") or "0"
     balance = await redis.get("sys:balance") or "0"
@@ -421,41 +407,42 @@ async def get_risk_state():
 
 @app.get("/api/engine/state")
 async def get_engine_state():
-    """그리드 엔진 상태"""
+    """스캘프 엔진 상태"""
     await _ensure_initialized()
-    grid_state = await redis.get_json("grid:state:BTC/USDT:USDT")
+    from src.strategy.scalp_state import SCALP_REDIS_KEY
+    scalp_state = await redis.get_json(SCALP_REDIS_KEY)
     balance = await redis.get("sys:balance") or "0"
     return {
-        "active": bool(grid_state),
+        "active": bool(scalp_state),
         "balance": float(balance),
-        "grid": grid_state or {},
+        "scalp": scalp_state or {},
     }
 
 
 @app.get("/api/engine/overview")
 async def get_engine_overview():
-    """그리드 통합 데이터 — 레짐 + 사이클 통계"""
+    """스캘프 통합 데이터"""
     await _ensure_initialized()
 
-    # 1) grid trade stats
-    grid_stats = {"total_cycles": 0, "total_pnl": 0.0, "avg_pnl": 0.0}
+    scalp_stats = {"total_trades": 0, "total_pnl": 0.0, "avg_pnl": 0.0, "win_rate": 0.0}
     try:
         cur = await db._db.execute(
             """SELECT COUNT(*) as total,
                       COALESCE(SUM(pnl_usdt), 0) as total_pnl,
-                      COALESCE(AVG(pnl_usdt), 0) as avg_pnl
-               FROM grid_trades"""
+                      COALESCE(AVG(pnl_usdt), 0) as avg_pnl,
+                      SUM(CASE WHEN pnl_usdt > 0 THEN 1 ELSE 0 END) as wins
+               FROM scalp_trades"""
         )
         row = dict(await cur.fetchone())
-        grid_stats["total_cycles"] = row["total"] or 0
-        grid_stats["total_pnl"] = round(row["total_pnl"] or 0, 2)
-        grid_stats["avg_pnl"] = round(row["avg_pnl"] or 0, 4)
+        total = row["total"] or 0
+        scalp_stats["total_trades"] = total
+        scalp_stats["total_pnl"] = round(row["total_pnl"] or 0, 2)
+        scalp_stats["avg_pnl"] = round(row["avg_pnl"] or 0, 4)
+        scalp_stats["win_rate"] = round((row["wins"] or 0) / total * 100, 1) if total > 0 else 0
     except Exception as e:
-        logger.debug(f"grid trade stats 집계 실패: {e}")
+        logger.debug(f"scalp trade stats 집계 실패: {e}")
 
     return {
-        "grid_trades": grid_stats,
+        "scalp_trades": scalp_stats,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
-
-

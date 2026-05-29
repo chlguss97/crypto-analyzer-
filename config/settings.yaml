@@ -1,22 +1,37 @@
-# ── GridBot v4 — Minimal ATR-Adaptive Grid ──
+# ── ScalpBot v5 — Jay 단타법 (StochRSI + MACD) ──
 
-strategy: "grid"
+strategy: "scalp"
 
 exchange:
   name: "okx"
   symbol: "BTC/USDT:USDT"
   margin_mode: "isolated"
 
-grid:
+scalp:
   enabled: true
   leverage: 10
+  timeframe: "1h"               # 30m 또는 1h (Jay 권장)
   size_btc: 0.01
-  atr_mult: 0.6
-  spacing_min_pct: 0.15
-  spacing_max_pct: 0.50
-  spacing_type: "geometric"
-  atr_period: 14
-  atr_timeframe: "5m"
+  signal_timeout_candles: 3     # 두 번째 조건 대기 최대 캔들 수
+  cooldown_sec: 0               # 매매 간 쿨다운 (0=없음)
+  bollinger_filter: false       # BB 추가 확인 (선택)
+
+  # StochRSI (TradingView 기본)
+  stoch_rsi_period: 14
+  stoch_rsi_k: 3
+  stoch_rsi_d: 3
+  stoch_rsi_ob: 80              # 과매수 기준
+  stoch_rsi_os: 20              # 과매도 기준
+
+  # MACD (Jay: fast=8)
+  macd_fast: 8
+  macd_slow: 26
+  macd_signal: 9
+
+  # SL — ATR 기반
+  sl_atr_mult: 1.0              # ATR × 배수
+  sl_min_pct: 0.5               # 최소 SL %
+  sl_max_pct: 2.0               # 최대 SL %
 
 safety:
   circuit_breaker_pct: 2.0

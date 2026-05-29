@@ -1,12 +1,13 @@
 # Commit Log
 
 > 자동 생성 — `scripts/update_commit_log.sh` (매 커밋 후 실행)
-> Updated: 2026-05-22 21:50:25    
-> Total commits: 430 (2026-04-03 → 2026-05-22)
+> Updated: 2026-05-22 21:58:17    
+> Total commits: 431 (2026-04-03 → 2026-05-22)
 
 Claude 가 질문/변경 작업 시 이 파일을 참고해서 과거 변경 이력 컨텍스트를 확보합니다. 수동 편집 금지 — 다음 커밋 시 덮어써집니다.
 
 ## 2026-05-22
+- `439cd110` fix: AUDIT v4 최종 — HIGH 2건 + MEDIUM 4건 수정
 - `51e1545b` fix: AUDIT HIGH 4건 수정
 - `d5e3b8a7` feat: SPEC v4 — Minimal DGT Grid (전면 리팩터)
 - `edaf0e8b` refactor: 하드코딩 수치 → config 이관 + 수수료 버그 수정
