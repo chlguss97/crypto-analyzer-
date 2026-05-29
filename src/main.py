@@ -43,7 +43,7 @@ _log_dir = _P(__file__).parent.parent / "data" / "logs"
 _log_dir.mkdir(parents=True, exist_ok=True)
 _fh = _TRH(_log_dir / "bot.log", when="W0", backupCount=520, encoding="utf-8", utc=True)
 _fh.suffix = "%Y-W%W"
-_fh.setLevel(logging.WARNING)
+_fh.setLevel(logging.INFO)
 _fh.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s", datefmt="%Y-%m-%d %H:%M:%S"))
 logging.getLogger().addHandler(_fh)
 
@@ -184,6 +184,38 @@ class ScalpBot:
 
             await asyncio.sleep(60)
 
+    async def periodic_position_check(self):
+        """30초마다 포지션 상태 Redis 동기화 + JSONL 기록"""
+        while self._running:
+            try:
+                positions = await self.executor.get_positions()
+                symbol = self.config["exchange"]["symbol"]
+
+                if positions:
+                    for p in positions:
+                        await self.redis.hset(f"pos:active:{symbol}", {
+                            "direction": p.get("direction", ""),
+                            "size": str(p.get("size", 0)),
+                            "entry_price": str(p.get("entry_price", 0)),
+                            "unrealized_pnl": str(p.get("unrealized_pnl", 0)),
+                            "leverage": str(p.get("leverage", 0)),
+                            "liquidation_price": str(p.get("liquidation_price", 0)),
+                        }, ttl=60)
+                else:
+                    await self.redis.delete(f"pos:active:{symbol}")
+            except Exception as e:
+                logger.debug(f"포지션 체크 에러: {e}")
+            await asyncio.sleep(30)
+
+    async def periodic_candle_cleanup(self):
+        """매일 1회 오래된 소형 캔들 정리"""
+        while self._running:
+            try:
+                await self.db.cleanup_old_candles()
+            except Exception as e:
+                logger.debug(f"캔들 정리 에러: {e}")
+            await asyncio.sleep(86400)  # 24시간
+
     async def periodic_dashboard_commands(self):
         while self._running:
             try:
@@ -249,6 +281,8 @@ class ScalpBot:
             # 지원
             asyncio.create_task(self.periodic_daily_reset()),
             asyncio.create_task(self.periodic_heartbeat()),
+            asyncio.create_task(self.periodic_position_check()),
+            asyncio.create_task(self.periodic_candle_cleanup()),
             asyncio.create_task(self.periodic_dashboard_commands()),
             asyncio.create_task(self.telegram.poll_commands()),
         ]

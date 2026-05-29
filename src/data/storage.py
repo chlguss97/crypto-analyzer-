@@ -150,6 +150,27 @@ class Database:
             return {"trades": row[0][0], "pnl": row[0][1], "fees": row[0][2]}
         return {"trades": 0, "pnl": 0, "fees": 0}
 
+    async def cleanup_old_candles(self):
+        """오래된 소형 캔들 정리 — 1m(3일), 5m(7일), 15m(30일) 보존"""
+        now_ms = int(time.time() * 1000)
+        retention = {
+            "1m": 3 * 86400 * 1000,
+            "5m": 7 * 86400 * 1000,
+            "15m": 30 * 86400 * 1000,
+        }
+        total_deleted = 0
+        for tf, max_age_ms in retention.items():
+            cutoff = now_ms - max_age_ms
+            cursor = await self._db.execute(
+                "DELETE FROM candles WHERE timeframe=? AND timestamp < ?",
+                (tf, cutoff),
+            )
+            total_deleted += cursor.rowcount
+        if total_deleted > 0:
+            await self._db.commit()
+            logger.info(f"캔들 정리: {total_deleted}개 삭제")
+        return total_deleted
+
 
 def _json_default(obj):
     import numpy as np

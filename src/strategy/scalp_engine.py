@@ -259,6 +259,21 @@ class ScalpEngine:
             f"pos={self.state.position} pending={self.state.pending_signal}"
         )
 
+        # 신호 JSONL 기록 (복기용)
+        _append_jsonl({
+            "type": "scalp_signal",
+            "k": round(k_now, 1), "d": round(d_now, 1),
+            "macd": round(m_now, 1), "sig": round(s_now, 1),
+            "bb_pct": round(bb_position, 0),
+            "bb_upper": round(self._bb_upper, 1),
+            "bb_lower": round(self._bb_lower, 1),
+            "price": round(price, 1),
+            "pos": self.state.position,
+            "pending": self.state.pending_signal,
+            "srsi_gc": srsi_golden, "srsi_dc": srsi_death,
+            "macd_gc": macd_golden, "macd_dc": macd_death,
+        })
+
         # ── 청산 체크 (진입보다 우선) ──
         if self.state.position == "long" and srsi_top:
             await self._close_position("stoch_rsi_top")
@@ -613,6 +628,12 @@ class ScalpEngine:
                     f"[SCALP] BOT_KILL DD -{dd_pct:.1f}% | "
                     f"peak=${self._peak_balance:.2f} now=${balance:.2f}"
                 )
+                _append_jsonl({
+                    "type": "bot_kill",
+                    "dd_pct": round(dd_pct, 1),
+                    "peak": round(self._peak_balance, 2),
+                    "balance": round(balance, 2),
+                })
                 # 포지션 청산
                 if self.state and self.state.position != "flat":
                     await self._close_position("bot_kill")
@@ -656,6 +677,12 @@ class ScalpEngine:
                             f"[SCALP] 서킷브레이커! {move_pct:.2f}% in {self.cb_window}s"
                         )
                         self._cb_frozen_until = now + self.cb_freeze
+                        _append_jsonl({
+                            "type": "circuit_breaker",
+                            "move_pct": round(move_pct, 2),
+                            "price": round(price, 1),
+                            "freeze_sec": self.cb_freeze,
+                        })
                         if self.telegram:
                             await self.telegram.notify_warning(
                                 f"서킷브레이커: {move_pct:.2f}% ({self.cb_window}초) "
