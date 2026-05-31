@@ -68,22 +68,25 @@
 | **Stochastic RSI** | RSI(14), Stoch(14), K(3), D(3) | 과매수/과매도 크로스 |
 | **MACD** | fast=8, slow=26, signal=9 | 모멘텀 크로스 확인 |
 | **ATR** | period=14 | SL fallback |
+| **4h MACD** | fast=8, slow=26, signal=9 | 큰 방향 필터 (0선 기준) |
 
-### 2.2 롱 진입 (3조건 동시 충족)
+### 2.2 롱 진입 (4조건 동시 충족)
 
 ```
-조건 1: 가격이 BB 하단 구간 (BB position < 35%)
+조건 1: 가격이 BB 하단 구간 (BB position < 40%)
 조건 2: StochRSI K < 20 (바닥권) AND K가 D를 상향 돌파 (골든크로스)
 조건 3: MACD 라인이 Signal 라인을 상향 돌파 (골든크로스)
+조건 4: 4시간 MACD > 0 (큰 방향이 상승일 때만)
 필터:  K > 70 이면 스킵 (소진)
 ```
 
-### 2.3 숏 진입 (3조건 동시 충족)
+### 2.3 숏 진입 (4조건 동시 충족)
 
 ```
-조건 1: 가격이 BB 상단 구간 (BB position > 65%)
+조건 1: 가격이 BB 상단 구간 (BB position > 60%)
 조건 2: StochRSI K > 80 (상단권) AND K가 D를 하향 돌파 (데드크로스)
 조건 3: MACD 라인이 Signal 라인을 하향 돌파 (데드크로스)
+조건 4: 4시간 MACD < 0 (큰 방향이 하락일 때만)
 필터:  K < 30 이면 스킵 (소진)
 ```
 
@@ -106,9 +109,11 @@ pending_signal 등록은 유지, 타임아웃만 진행
 
 ```
 StochRSI와 MACD가 동시에 크로스하지 않는 경우:
-  → pending_signal 등록 ("long_wait_macd", "short_wait_srsi" 등)
-  → 3캔들 내 두 번째 조건 충족 + BB 구간 OK → 진입
-  → 3캔들 초과 시 폐기
+  → pending_signal 등록 (BB 위치 무관, 어디서든 감지)
+  → 5캔들(2.5시간) 내 두 번째 조건 충족 + BB 구간 OK → 진입
+  → 5캔들 초과 시 폐기
+  
+신호 등록은 BB 중간에서도 가능 (진입만 BB 상하단에서)
 ```
 
 ### 2.7 거짓 신호 필터

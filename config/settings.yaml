@@ -12,7 +12,7 @@ scalp:
   leverage: 10
   timeframe: "30m"              # 30m (Jay 권장, 1h 대비 매매 빈도 2배)
   size_btc: 0.03
-  signal_timeout_candles: 3     # 두 번째 조건 대기 최대 캔들 수
+  signal_timeout_candles: 5     # 두 번째 조건 대기 최대 캔들 수 (2.5시간)
   cooldown_sec: 0               # 매매 간 쿨다운 (0=없음)
 
   # StochRSI (TradingView 기본)
