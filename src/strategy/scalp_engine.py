@@ -206,6 +206,17 @@ class ScalpEngine:
             closes, self.bb_period, self.bb_std
         )
 
+        # 4시간 MACD 방향 (Jay 심화: 큰 그림 필터)
+        candles_4h = await self.db.get_candles(self.symbol, "4h", limit=60)
+        macd_4h_value = 0.0
+        if len(candles_4h) >= 40:
+            closes_4h = np.array([c["close"] for c in candles_4h], dtype=float)
+            macd_4h_line, _, _ = macd(
+                closes_4h, self.macd_fast, self.macd_slow, self.macd_signal
+            )
+            if not np.isnan(macd_4h_line[-1]):
+                macd_4h_value = macd_4h_line[-1]
+
         # NaN 체크
         if np.isnan(k_line[-1]) or np.isnan(k_line[-2]):
             logger.debug("[SCALP] 지표 NaN — 데이터 부족")
@@ -252,10 +263,11 @@ class ScalpEngine:
         near_bb_lower = bb_position < mid_low      # 하단 구간 (롱 타점)
         near_bb_upper = bb_position > mid_high     # 상단 구간 (숏 타점)
 
-        macd_zone = "롱OK" if m_now >= 0 else "숏OK"
+        macd_4h_zone = "롱OK" if macd_4h_value >= 0 else "숏OK"
         logger.info(
             f"[SCALP] 지표 | K={k_now:.1f} D={d_now:.1f} "
-            f"MACD={m_now:.1f} Sig={s_now:.1f} [{macd_zone}] | "
+            f"MACD={m_now:.1f} Sig={s_now:.1f} | "
+            f"4h={macd_4h_value:.0f}[{macd_4h_zone}] | "
             f"BB={bb_position:.0f}% (${self._bb_lower:,.0f}-${self._bb_upper:,.0f}) | "
             f"pos={self.state.position} pending={self.state.pending_signal}"
         )
@@ -265,6 +277,7 @@ class ScalpEngine:
             "type": "scalp_signal",
             "k": round(k_now, 1), "d": round(d_now, 1),
             "macd": round(m_now, 1), "sig": round(s_now, 1),
+            "macd_4h": round(macd_4h_value, 1),
             "bb_pct": round(bb_position, 0),
             "bb_upper": round(self._bb_upper, 1),
             "bb_lower": round(self._bb_lower, 1),
@@ -311,14 +324,14 @@ class ScalpEngine:
             await save_scalp_state(self.redis, self.state)
             return
 
-        # ── 롱 진입 (BB 하단 + MACD > 0) ──
+        # ── 롱 진입 (BB 하단 + 4h MACD > 0) ──
         if near_bb_lower:
-            if self._check_long_entry(srsi_golden, srsi_bottom, macd_golden, k_now, m_now):
+            if self._check_long_entry(srsi_golden, srsi_bottom, macd_golden, k_now, macd_4h_value):
                 return
 
-        # ── 숏 진입 (BB 상단 + MACD < 0) ──
+        # ── 숏 진입 (BB 상단 + 4h MACD < 0) ──
         if near_bb_upper:
-            if self._check_short_entry(srsi_death, srsi_top, macd_death, k_now, m_now):
+            if self._check_short_entry(srsi_death, srsi_top, macd_death, k_now, macd_4h_value):
                 return
 
         # ── 대기 신호 타임아웃 ──
@@ -360,12 +373,12 @@ class ScalpEngine:
 
     def _check_long_entry(self, srsi_golden: bool, srsi_bottom: bool,
                           macd_golden: bool, k_now: float,
-                          macd_value: float) -> bool:
-        """롱 진입 조건 체크 (BB 하단 구간에서만 호출됨). 진입 시 True."""
+                          macd_4h: float) -> bool:
+        """롱 진입 조건 체크 (BB 하단 + 4h MACD 방향). 진입 시 True."""
         exhausted = k_now > 70
 
-        # Jay 심화: MACD < 0 이면 롱 금지 (0선 방향 필터)
-        if macd_value < 0:
+        # Jay 심화: 4시간 MACD < 0 이면 롱 금지 (큰 방향 역행 차단)
+        if macd_4h < 0:
             return False
 
         # 동시 크로스
@@ -390,12 +403,12 @@ class ScalpEngine:
 
     def _check_short_entry(self, srsi_death: bool, srsi_top: bool,
                            macd_death: bool, k_now: float,
-                           macd_value: float) -> bool:
-        """숏 진입 조건 체크 (BB 상단 구간에서만 호출됨). 진입 시 True."""
+                           macd_4h: float) -> bool:
+        """숏 진입 조건 체크 (BB 상단 + 4h MACD 방향). 진입 시 True."""
         exhausted = k_now < 30
 
-        # Jay 심화: MACD > 0 이면 숏 금지 (0선 방향 필터)
-        if macd_value > 0:
+        # Jay 심화: 4시간 MACD > 0 이면 숏 금지 (큰 방향 역행 차단)
+        if macd_4h > 0:
             return False
 
         if srsi_death and srsi_top and macd_death and not exhausted:
