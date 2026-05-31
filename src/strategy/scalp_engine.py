@@ -252,9 +252,10 @@ class ScalpEngine:
         near_bb_lower = bb_position < mid_low      # 하단 구간 (롱 타점)
         near_bb_upper = bb_position > mid_high     # 상단 구간 (숏 타점)
 
+        macd_zone = "롱OK" if m_now >= 0 else "숏OK"
         logger.info(
             f"[SCALP] 지표 | K={k_now:.1f} D={d_now:.1f} "
-            f"MACD={m_now:.1f} Sig={s_now:.1f} | "
+            f"MACD={m_now:.1f} Sig={s_now:.1f} [{macd_zone}] | "
             f"BB={bb_position:.0f}% (${self._bb_lower:,.0f}-${self._bb_upper:,.0f}) | "
             f"pos={self.state.position} pending={self.state.pending_signal}"
         )
@@ -310,14 +311,14 @@ class ScalpEngine:
             await save_scalp_state(self.redis, self.state)
             return
 
-        # ── 롱 진입 (BB 하단 근처에서만) ──
+        # ── 롱 진입 (BB 하단 + MACD > 0) ──
         if near_bb_lower:
-            if self._check_long_entry(srsi_golden, srsi_bottom, macd_golden, k_now):
+            if self._check_long_entry(srsi_golden, srsi_bottom, macd_golden, k_now, m_now):
                 return
 
-        # ── 숏 진입 (BB 상단 근처에서만) ──
+        # ── 숏 진입 (BB 상단 + MACD < 0) ──
         if near_bb_upper:
-            if self._check_short_entry(srsi_death, srsi_top, macd_death, k_now):
+            if self._check_short_entry(srsi_death, srsi_top, macd_death, k_now, m_now):
                 return
 
         # ── 대기 신호 타임아웃 ──
@@ -358,9 +359,14 @@ class ScalpEngine:
                 logger.info("[SCALP] MACD 숏 크로스 감지 → StochRSI 대기")
 
     def _check_long_entry(self, srsi_golden: bool, srsi_bottom: bool,
-                          macd_golden: bool, k_now: float) -> bool:
+                          macd_golden: bool, k_now: float,
+                          macd_value: float) -> bool:
         """롱 진입 조건 체크 (BB 하단 구간에서만 호출됨). 진입 시 True."""
         exhausted = k_now > 70
+
+        # Jay 심화: MACD < 0 이면 롱 금지 (0선 방향 필터)
+        if macd_value < 0:
+            return False
 
         # 동시 크로스
         if srsi_golden and srsi_bottom and macd_golden and not exhausted:
@@ -383,9 +389,14 @@ class ScalpEngine:
         return False
 
     def _check_short_entry(self, srsi_death: bool, srsi_top: bool,
-                           macd_death: bool, k_now: float) -> bool:
+                           macd_death: bool, k_now: float,
+                           macd_value: float) -> bool:
         """숏 진입 조건 체크 (BB 상단 구간에서만 호출됨). 진입 시 True."""
         exhausted = k_now < 30
+
+        # Jay 심화: MACD > 0 이면 숏 금지 (0선 방향 필터)
+        if macd_value > 0:
+            return False
 
         if srsi_death and srsi_top and macd_death and not exhausted:
             asyncio.create_task(self._open_position("short"))
