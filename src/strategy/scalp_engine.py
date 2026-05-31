@@ -293,22 +293,29 @@ class ScalpEngine:
             if time.time() - self.state.last_trade_time < self.cooldown_sec:
                 return
 
-        # BB 중간 매매 금지
+        # ── 신호 등록 (BB 위치 무관 — 크로스는 어디서든 감지) ──
+        # pending_signal 등록만 하고, 실제 진입은 BB 구간에서만
+        self._register_pending_signals(
+            srsi_golden, srsi_bottom, srsi_death, srsi_top,
+            macd_golden, macd_death
+        )
+
+        # BB 중간 매매 금지 (진입만 차단, 신호 등록은 위에서 완료)
         if in_bb_middle:
-            # 대기 신호도 BB 중간이면 진입 안 함 (등록만 유지)
             if self.state.pending_signal:
                 self.state.signal_candle_count += 1
                 if self.state.signal_candle_count > self.signal_timeout:
+                    logger.info(f"[SCALP] 대기 신호 타임아웃: {self.state.pending_signal}")
                     self.state.pending_signal = None
             await save_scalp_state(self.redis, self.state)
             return
 
-        # ── 롱 신호 (BB 하단 근처에서만) ──
+        # ── 롱 진입 (BB 하단 근처에서만) ──
         if near_bb_lower:
             if self._check_long_entry(srsi_golden, srsi_bottom, macd_golden, k_now):
                 return
 
-        # ── 숏 신호 (BB 상단 근처에서만) ──
+        # ── 숏 진입 (BB 상단 근처에서만) ──
         if near_bb_upper:
             if self._check_short_entry(srsi_death, srsi_top, macd_death, k_now):
                 return
@@ -322,10 +329,37 @@ class ScalpEngine:
 
         await save_scalp_state(self.redis, self.state)
 
+    def _register_pending_signals(self, srsi_golden, srsi_bottom,
+                                   srsi_death, srsi_top,
+                                   macd_golden, macd_death):
+        """신호 등록 — BB 위치 무관. 크로스가 어디서 발생하든 감지."""
+        # 롱 대기 등록
+        if srsi_golden and srsi_bottom and not macd_golden:
+            self.state.pending_signal = "long_wait_macd"
+            self.state.signal_candle_count = 0
+            logger.info("[SCALP] StochRSI 롱 크로스 감지 → MACD 대기")
+
+        if macd_golden and not (srsi_golden and srsi_bottom):
+            if not self.state.pending_signal or "long" in (self.state.pending_signal or ""):
+                self.state.pending_signal = "long_wait_srsi"
+                self.state.signal_candle_count = 0
+                logger.info("[SCALP] MACD 롱 크로스 감지 → StochRSI 대기")
+
+        # 숏 대기 등록
+        if srsi_death and srsi_top and not macd_death:
+            self.state.pending_signal = "short_wait_macd"
+            self.state.signal_candle_count = 0
+            logger.info("[SCALP] StochRSI 숏 크로스 감지 → MACD 대기")
+
+        if macd_death and not (srsi_death and srsi_top):
+            if not self.state.pending_signal or "short" in (self.state.pending_signal or ""):
+                self.state.pending_signal = "short_wait_srsi"
+                self.state.signal_candle_count = 0
+                logger.info("[SCALP] MACD 숏 크로스 감지 → StochRSI 대기")
+
     def _check_long_entry(self, srsi_golden: bool, srsi_bottom: bool,
                           macd_golden: bool, k_now: float) -> bool:
-        """롱 진입 조건 체크. 진입 시 True 반환."""
-        # 소진 필터: K가 이미 70+ 이면 스킵
+        """롱 진입 조건 체크 (BB 하단 구간에서만 호출됨). 진입 시 True."""
         exhausted = k_now > 70
 
         # 동시 크로스
@@ -333,38 +367,24 @@ class ScalpEngine:
             asyncio.create_task(self._open_position("long"))
             return True
 
-        # StochRSI 먼저 → MACD 대기 중 → MACD 크로스
+        # 대기 중 → 두 번째 조건 충족
         if (self.state.pending_signal == "long_wait_macd"
                 and macd_golden and not exhausted):
             self.state.pending_signal = None
             asyncio.create_task(self._open_position("long"))
             return True
 
-        # MACD 먼저 → StochRSI 대기 중 → StochRSI 크로스
         if (self.state.pending_signal == "long_wait_srsi"
                 and srsi_golden and srsi_bottom and not exhausted):
             self.state.pending_signal = None
             asyncio.create_task(self._open_position("long"))
             return True
 
-        # 대기 신호 등록
-        if srsi_golden and srsi_bottom and not macd_golden:
-            self.state.pending_signal = "long_wait_macd"
-            self.state.signal_candle_count = 0
-            logger.info("[SCALP] StochRSI 롱 크로스 감지 → MACD 대기")
-
-        if macd_golden and not (srsi_golden and srsi_bottom):
-            # 기존 숏 대기가 있으면 덮어쓰지 않음
-            if not self.state.pending_signal or "long" in (self.state.pending_signal or ""):
-                self.state.pending_signal = "long_wait_srsi"
-                self.state.signal_candle_count = 0
-                logger.info("[SCALP] MACD 롱 크로스 감지 → StochRSI 대기")
-
         return False
 
     def _check_short_entry(self, srsi_death: bool, srsi_top: bool,
                            macd_death: bool, k_now: float) -> bool:
-        """숏 진입 조건 체크. 진입 시 True 반환."""
+        """숏 진입 조건 체크 (BB 상단 구간에서만 호출됨). 진입 시 True."""
         exhausted = k_now < 30
 
         if srsi_death and srsi_top and macd_death and not exhausted:
@@ -382,17 +402,6 @@ class ScalpEngine:
             self.state.pending_signal = None
             asyncio.create_task(self._open_position("short"))
             return True
-
-        if srsi_death and srsi_top and not macd_death:
-            self.state.pending_signal = "short_wait_macd"
-            self.state.signal_candle_count = 0
-            logger.info("[SCALP] StochRSI 숏 크로스 감지 → MACD 대기")
-
-        if macd_death and not (srsi_death and srsi_top):
-            if not self.state.pending_signal or "short" in (self.state.pending_signal or ""):
-                self.state.pending_signal = "short_wait_srsi"
-                self.state.signal_candle_count = 0
-                logger.info("[SCALP] MACD 숏 크로스 감지 → StochRSI 대기")
 
         return False
 
