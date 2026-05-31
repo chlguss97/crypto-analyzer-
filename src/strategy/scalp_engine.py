@@ -374,12 +374,12 @@ class ScalpEngine:
     def _check_long_entry(self, srsi_golden: bool, srsi_bottom: bool,
                           macd_golden: bool, k_now: float,
                           macd_4h: float) -> bool:
-        """롱 진입 조건 체크 (BB 하단 + 4h MACD 방향). 진입 시 True."""
+        """롱 진입 조건 체크 (BB 하단). 진입 시 True."""
         exhausted = k_now > 70
 
-        # Jay 심화: 4시간 MACD < 0 이면 롱 금지 (큰 방향 역행 차단)
+        # 4h MACD 역행 시 로그만 (차단 안 함 — Jay: "빨리 먹고 나오면 됨")
         if macd_4h < 0:
-            return False
+            logger.info(f"[SCALP] 4h MACD 역행 롱 ({macd_4h:.0f}) — 주의")
 
         # 동시 크로스
         if srsi_golden and srsi_bottom and macd_golden and not exhausted:
@@ -404,12 +404,12 @@ class ScalpEngine:
     def _check_short_entry(self, srsi_death: bool, srsi_top: bool,
                            macd_death: bool, k_now: float,
                            macd_4h: float) -> bool:
-        """숏 진입 조건 체크 (BB 상단 + 4h MACD 방향). 진입 시 True."""
+        """숏 진입 조건 체크 (BB 상단). 진입 시 True."""
         exhausted = k_now < 30
 
-        # Jay 심화: 4시간 MACD > 0 이면 숏 금지 (큰 방향 역행 차단)
+        # 4h MACD 역행 시 로그만 (차단 안 함)
         if macd_4h > 0:
-            return False
+            logger.info(f"[SCALP] 4h MACD 역행 숏 ({macd_4h:.0f}) — 주의")
 
         if srsi_death and srsi_top and macd_death and not exhausted:
             asyncio.create_task(self._open_position("short"))

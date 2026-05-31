@@ -19,8 +19,8 @@ scalp:
   stoch_rsi_period: 14
   stoch_rsi_k: 3
   stoch_rsi_d: 3
-  stoch_rsi_ob: 80              # 과매수 기준
-  stoch_rsi_os: 20              # 과매도 기준
+  stoch_rsi_ob: 75              # 과매수 기준
+  stoch_rsi_os: 25              # 과매도 기준
 
   # MACD (Jay: fast=8)
   macd_fast: 8
@@ -30,7 +30,7 @@ scalp:
   # 볼린저밴드 (타점 + SL)
   bb_period: 20                 # Jay "20이평" 기준
   bb_std: 2.0                   # 표준편차
-  bb_mid_avoid_pct: 20          # BB 중간 ±10% 구간 매매 금지 (40~60%)
+  bb_mid_avoid_pct: 10          # BB 중간 ±5% 구간 매매 금지 (45~55%)
 
   # SL — BB 밴드 이탈 (primary) + ATR fallback
   sl_atr_mult: 1.0              # ATR × 배수 (BB 없을 때 fallback)
