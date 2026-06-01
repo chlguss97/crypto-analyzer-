@@ -54,8 +54,10 @@ class ScalpEngine:
         self.srsi_period = cfg.get("stoch_rsi_period", 14)
         self.srsi_k_smooth = cfg.get("stoch_rsi_k", 3)
         self.srsi_d_smooth = cfg.get("stoch_rsi_d", 3)
-        self.srsi_ob = cfg.get("stoch_rsi_ob", 80)
-        self.srsi_os = cfg.get("stoch_rsi_os", 20)
+        self.srsi_ob = cfg.get("stoch_rsi_ob", 60)       # 진입: K>60 데크
+        self.srsi_os = cfg.get("stoch_rsi_os", 40)       # 진입: K<40 골크
+        self.srsi_exit_ob = cfg.get("stoch_rsi_exit_ob", 80)  # 청산: K>80
+        self.srsi_exit_os = cfg.get("stoch_rsi_exit_os", 20)  # 청산: K<20
 
         # MACD (Jay: fast=8)
         self.macd_fast = cfg.get("macd_fast", 8)
@@ -244,8 +246,13 @@ class ScalpEngine:
         macd_golden = (m_prev <= s_prev) and (m_now > s_now)
         macd_death = (m_prev >= s_prev) and (m_now < s_now)
 
-        srsi_bottom = k_now < self.srsi_os  # < 20
-        srsi_top = k_now > self.srsi_ob     # > 80
+        # 진입 기준 (40/60)
+        srsi_bottom = k_now < self.srsi_os  # < 40
+        srsi_top = k_now > self.srsi_ob     # > 60
+
+        # 청산 기준 (20/80) — Jay: "스톡 도착하면 끝"
+        srsi_exit_top = k_now > self.srsi_exit_ob    # > 80
+        srsi_exit_bottom = k_now < self.srsi_exit_os  # < 20
 
         # BB 위치 판단
         bb_range = self._bb_upper - self._bb_lower
@@ -288,12 +295,12 @@ class ScalpEngine:
             "macd_gc": macd_golden, "macd_dc": macd_death,
         })
 
-        # ── 청산 체크 (진입보다 우선) ──
-        if self.state.position == "long" and srsi_top:
+        # ── 청산 체크 (진입보다 우선) — 80/20 기준 ──
+        if self.state.position == "long" and srsi_exit_top:
             await self._close_position("stoch_rsi_top")
             return
 
-        if self.state.position == "short" and srsi_bottom:
+        if self.state.position == "short" and srsi_exit_bottom:
             await self._close_position("stoch_rsi_bottom")
             return
 

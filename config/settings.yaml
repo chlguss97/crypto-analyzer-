@@ -19,8 +19,10 @@ scalp:
   stoch_rsi_period: 14
   stoch_rsi_k: 3
   stoch_rsi_d: 3
-  stoch_rsi_ob: 60              # 과매수 기준 (상반부)
-  stoch_rsi_os: 40              # 과매도 기준 (하반부)
+  stoch_rsi_ob: 60              # 진입: 숏 크로스 기준 (상반부)
+  stoch_rsi_os: 40              # 진입: 롱 크로스 기준 (하반부)
+  stoch_rsi_exit_ob: 80         # 청산: 롱 익절 (K>80 도달)
+  stoch_rsi_exit_os: 20         # 청산: 숏 익절 (K<20 도달)
 
   # MACD (Jay: fast=8)
   macd_fast: 8
