@@ -19,8 +19,8 @@ scalp:
   stoch_rsi_period: 14
   stoch_rsi_k: 3
   stoch_rsi_d: 3
-  stoch_rsi_ob: 75              # 과매수 기준
-  stoch_rsi_os: 25              # 과매도 기준
+  stoch_rsi_ob: 60              # 과매수 기준 (상반부)
+  stoch_rsi_os: 40              # 과매도 기준 (하반부)
 
   # MACD (Jay: fast=8)
   macd_fast: 8
